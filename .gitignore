@@ -54,3 +54,15 @@ crashlytics-build.properties
 
 # Photon (contains API keys)
 Assets/Photon/PhotonUnityNetworking/Resources/PhotonServerSettings.asset
+
+# Photon SDK Demos (not used in project)
+Assets/Photon/PhotonUnityNetworking/Demos/
+Assets/Photon/PhotonChat/Demos/
+Assets/Photon/PhotonRealtime/Demos/
+
+# Large source files
+*.psd
+
+# Internal docs (not for repo)
+DEBUG_LOG_AUDIT.md
+doudizhutower_optimized.md
