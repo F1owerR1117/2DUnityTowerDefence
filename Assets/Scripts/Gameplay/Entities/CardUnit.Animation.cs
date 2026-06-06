@@ -1,0 +1,333 @@
+using UnityEngine;
+
+namespace DoudizhuTower.Gameplay.Entities
+{
+    /// <summary>
+    /// CardUnit 动画模块（partial class）。
+    /// 负责动画状态机控制、对象池管理、Gizmos 可视化。
+    /// </summary>
+    public partial class CardUnit
+    {
+        // ─── 动画驱动攻击状态 ─────────────────────────────
+        private int _currentAnimState = -1;
+
+        /// <summary>
+        /// 更新动画状态（由子类 Update 循环调用）
+        /// 状态值：0=Idle, 1=Walk, 2=Attack
+        /// </summary>
+        protected void UpdateAnimatorState(int state)
+        {
+            if (_isDying) return; // 死亡动画期间禁止一切状态切换
+            if (state == _currentAnimState) return; // 状态未变，不重复设置
+            _currentAnimState = state;
+
+            // 优先使用 SimpleAnimator，否则使用 Animator
+            if (_simpleAnimator != null)
+            {
+                // SimpleAnimator 会自动处理动画切换
+                // 这里只需要确保 Animator 参数被设置
+                var anim = _simpleAnimator.Animator;
+                if (anim != null && anim.isActiveAndEnabled)
+                {
+                    anim.SetInteger("State", state);
+                }
+                else
+                {
+                    // SimpleAnimator 的 Animator 未就绪，尝试使用 CardUnit 的 _animator
+                    if (_animator != null && _animator.isActiveAndEnabled)
+                        _animator.SetInteger("State", state);
+                }
+            }
+            else if (_animator != null && _animator.isActiveAndEnabled)
+            {
+                _animator.SetInteger("State", state);
+            }
+            else
+            {
+                // 尝试重新获取 Animator
+                _animator = GetComponentInChildren<Animator>();
+                if (_animator != null && _animator.isActiveAndEnabled)
+                    _animator.SetInteger("State", state);
+            }
+        }
+
+        /// <summary>触发一次性动画（冲锋、震波、溅射等）</summary>
+        public void TriggerAnim(string name)
+        {
+            if (_isDying && name != "Death") return; // 死亡动画期间只允许死亡动画
+            if (_simpleAnimator != null)
+                _simpleAnimator.Trigger(name);
+            else if (_animator != null && _animator.isActiveAndEnabled)
+                _animator.SetTrigger(name);
+        }
+
+        /// <summary>
+        /// Animation Event 回调：召唤帧触发。
+        /// 由 UnitPassives 注册，在召唤动画的指定帧调用。
+        /// </summary>
+        public event System.Action OnSummonFrame;
+
+        /// <summary>
+        /// Animation Event 入口：召唤帧触发。
+        /// 在召唤动画的指定帧添加 Animation Event，Function 填 "OnSummonFrame"。
+        /// </summary>
+        public void OnSummonFrameEvent() => OnSummonFrame?.Invoke();
+
+        /// <summary>
+        /// 播放死亡动画，动画播完后回调 onComplete。
+        /// 如果未配置死亡动画，立即回调。
+        /// </summary>
+        public System.Collections.IEnumerator PlayDeathAnimCoroutine(System.Action onComplete)
+        {
+            TriggerAnim("Death");
+
+            float duration = 0.5f;
+            if (_simpleAnimator != null && _simpleAnimator.deathClip != null)
+                duration = _simpleAnimator.deathClip.length;
+
+            yield return new WaitForSeconds(duration);
+            onComplete?.Invoke();
+        }
+
+        /// <summary>设置持续动画状态（减速光环、盾墙等开关型效果）</summary>
+        public void SetAnimBool(string name, bool value)
+        {
+            if (_simpleAnimator != null)
+                _simpleAnimator.SetBool(name, value);
+            else if (_animator != null && _animator.isActiveAndEnabled)
+                _animator.SetBool(name, value);
+        }
+
+        // ─── 动画驱动攻击 ──────────────────────────
+
+        /// <summary>获取当前 Animator 组件引用</summary>
+        private Animator GetAnimator()
+        {
+            if (_simpleAnimator != null)
+            {
+                var anim = _simpleAnimator.Animator;
+                if (anim != null && anim.isActiveAndEnabled) return anim;
+            }
+            if (_animator != null && _animator.isActiveAndEnabled) return _animator;
+            _animator = GetComponentInChildren<Animator>();
+            return _animator;
+        }
+
+        /// <summary>安全设置 Animator 播放速度</summary>
+        private void SetAnimSpeed(float speed)
+        {
+            var anim = GetAnimator();
+            if (anim != null) anim.speed = speed;
+        }
+
+        /// <summary>获取攻击动画剪辑时长（秒），无法获取时返回 0</summary>
+        private float GetAttackClipLength()
+        {
+            if (_simpleAnimator != null && _simpleAnimator.attackClip != null)
+                return _simpleAnimator.attackClip.length;
+            return 0f;
+        }
+
+        /// <summary>获取攻击动画打击帧的 normalizedTime（从 Animation Event 读取，缓存）</summary>
+        private float GetHitNormalizedTime()
+        {
+            if (_cachedHitNormalizedTime > 0f) return _cachedHitNormalizedTime;
+            if (_simpleAnimator != null && _simpleAnimator.attackClip != null)
+            {
+                var clip = _simpleAnimator.attackClip;
+                foreach (var evt in clip.events)
+                {
+                    if (evt.functionName == "OnAttackHitFrame")
+                    {
+                        _cachedHitNormalizedTime = clip.length > 0f ? evt.time / clip.length : 0.3f;
+                        return _cachedHitNormalizedTime;
+                    }
+                }
+            }
+            _cachedHitNormalizedTime = 0.3f;
+            return _cachedHitNormalizedTime;
+        }
+
+        /// <summary>攻击动画是否已播放完毕（normalizedTime >= 1）</summary>
+        private bool IsAttackAnimDone()
+        {
+            var anim = GetAnimator();
+            if (anim == null) return true;
+            var info = anim.GetCurrentAnimatorStateInfo(0);
+            return info.normalizedTime >= 1f;
+        }
+
+        // ─── 视野裁剪：摄像机外禁用动画 ─────────
+        private void OnBecameVisible()
+        {
+            if (_simpleAnimator != null) _simpleAnimator.enabled = true;
+            else if (_animator != null) _animator.enabled = true;
+        }
+        private void OnBecameInvisible()
+        {
+            if (_simpleAnimator != null) _simpleAnimator.enabled = false;
+            else if (_animator != null) _animator.enabled = false;
+        }
+
+        // ─── 对象池 ───────────────────────────────────
+
+        private void OnDrawGizmos()
+        {
+            // 碰撞箱轮廓（青色）+ 攻击范围圆（红色）
+            // 统一使用 bounds（世界空间），与实际碰撞检测一致
+            Collider2D col = _collider != null ? _collider : GetComponentInChildren<Collider2D>();
+            if (col == null) return;
+
+            Bounds bounds = col.bounds;
+            Vector3 center = bounds.center;
+            Vector3 worldSize = bounds.size;
+
+            // 碰撞箱轮廓（世界空间尺寸）
+            Gizmos.color = new Color(0f, 1f, 1f, 0.3f);
+            Gizmos.DrawWireCube(center, worldSize);
+
+            // 攻击范围 = 碰撞箱形状向外膨胀 Range 距离（与 GetUnitEdgeDistance 边缘判定一致）
+            Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.5f);
+            if (col is BoxCollider2D)
+            {
+                // 画膨胀矩形：4 条边 + 4 个角的圆弧
+                float hx = worldSize.x / 2f + _range;
+                float hy = worldSize.y / 2f + _range;
+                Vector3 tl = center + new Vector3(-hx, hy, 0);
+                Vector3 tr = center + new Vector3(hx, hy, 0);
+                Vector3 bl = center + new Vector3(-hx, -hy, 0);
+                Vector3 br = center + new Vector3(hx, -hy, 0);
+                Gizmos.DrawLine(tl, tr);
+                Gizmos.DrawLine(tr, br);
+                Gizmos.DrawLine(br, bl);
+                Gizmos.DrawLine(bl, tl);
+                // 4 个角的圆弧（每角 3 段近似）
+                float r = _range;
+                DrawArc(center + new Vector3(worldSize.x / 2f, worldSize.y / 2f, 0), r, 0f, 90f);
+                DrawArc(center + new Vector3(-worldSize.x / 2f, worldSize.y / 2f, 0), r, 90f, 180f);
+                DrawArc(center + new Vector3(-worldSize.x / 2f, -worldSize.y / 2f, 0), r, 180f, 270f);
+                DrawArc(center + new Vector3(worldSize.x / 2f, -worldSize.y / 2f, 0), r, 270f, 360f);
+            }
+            else
+            {
+                float colExtent = Mathf.Max(worldSize.x, worldSize.y) / 2f;
+                Gizmos.DrawWireSphere(center, _range + colExtent);
+            }
+        }
+
+        /// <summary>在 Gizmos 中画圆弧（角度范围 startDeg → endDeg，6 段近似）</summary>
+        private static void DrawArc(Vector3 center, float radius, float startDeg, float endDeg)
+        {
+            const int segments = 6;
+            float step = (endDeg - startDeg) / segments;
+            Vector3 prev = center + new Vector3(
+                Mathf.Cos(startDeg * Mathf.Deg2Rad), Mathf.Sin(startDeg * Mathf.Deg2Rad), 0) * radius;
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = (startDeg + step * i) * Mathf.Deg2Rad;
+                Vector3 next = center + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0) * radius;
+                Gizmos.DrawLine(prev, next);
+                prev = next;
+            }
+        }
+
+        /// <summary>
+        /// 从对象池取出时调用（重置状态）
+        /// </summary>
+        public virtual void OnPoolSpawn()
+        {
+            gameObject.SetActive(true);
+            IsTauntSource = false;
+            TauntRadius = 0f;
+            ShieldBlocks = 0;
+            DamageAbsorbRemaining = 0f;
+            StunTimer = 0f;
+            DamageReduction = 0f;
+            ShareRedirected = false;
+            TearStacks = 0;
+            TearTimer = 0f;
+            SlowRestoreTimer = 0f;
+            _needsFirstFrameSearch = true;
+            _currentAnimState = -1;
+            _bonusDamage = 0f;
+            OriginalMoveSpeed = 0f;
+            _buffs.Clear();
+            _hasBaseStats = false;
+
+            // 重置 Stats 中的移速到预制体默认值
+            if (_moveSpeed > 0f)
+            {
+                var s = Stats;
+                s.MoveSpeed = _moveSpeed;
+                Stats = s;
+            }
+
+            // 重新订阅 UnitPassives 的事件（OnPoolDespawn 中已清除）
+            var passives = GetComponentInChildren<UnitPassives>();
+            if (passives != null) passives.ResubscribeEvents();
+        }
+
+        /// <summary>
+        /// 回池时调用（禁用并重置）
+        /// </summary>
+        public virtual void OnPoolDespawn()
+        {
+            // 清除每次 Spawn 周期订阅的事件，防止对象池复用后 lambda 累积
+            ClearSpawnEvents();
+
+            Target = null;
+            _enemyUnits = null;
+            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
+            _isAttacking = false;
+            _attackTarget = null;
+            _hitCountDealt = 0;
+            _animDone = false;
+            _projectileSpawned = false;
+            _justFinishedAttack = false;
+            _cachedHitNormalizedTime = -1f;
+            SetAnimSpeed(1f);
+            _pathDistance = 0f;
+            FollowPath = null;
+            TearStacks = 0;
+            TearTimer = 0f;
+            SlowRestoreTimer = 0f;
+            _bonusDamage = 0f;
+            OriginalMoveSpeed = 0f;
+            StunTimer = 0f;
+            DamageReduction = 0f;
+            ShieldBlocks = 0;
+            DamageAbsorbRemaining = 0f;
+            ShareRedirected = false;
+            OverrideFindTarget = null;
+            OverrideAttackRange = null;
+            _buffs.Clear();
+            _hasBaseStats = false;
+
+            // 重置 Stats 中的移速到预制体默认值
+            if (_moveSpeed > 0f)
+            {
+                var s = Stats;
+                s.MoveSpeed = _moveSpeed;
+                Stats = s;
+            }
+
+            gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 清除每次 Spawn 周期订阅的事件。
+        /// OnDeathEvent / OnHPChanged / OnDied 由 UnitPassives/Audio 在 Awake 中订阅，
+        /// 不在此清除（UnitPassives 会在 OnPoolSpawn 中重新订阅 OnAttackEvent）。
+        /// </summary>
+        private void ClearSpawnEvents()
+        {
+            OnAttackEvent = null;
+            OnTakeDamageEvent = null;
+            OnDamageCalculated = null;
+            OnKillEvent = null;
+            OnSummonFrame = null;
+            OnDestroyed = null;
+            Summoner = null;
+        }
+    }
+}

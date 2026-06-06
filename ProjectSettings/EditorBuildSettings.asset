@@ -1,0 +1,42 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1045 &1
+EditorBuildSettings:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/MainMenu.unity
+    guid: 4718f43abd70e0f45a992fc224a9f9eb
+  - enabled: 1
+    path: Assets/Scenes/DoudizhuTower_Game.unity
+    guid: c5b8b220370a07e43ab00247d62f2246
+  - enabled: 1
+    path: Assets/Scenes/UI_Scene.unity
+    guid: 6e50d5d879a949f419a382b9fdeb1c71
+  - enabled: 1
+    path: Assets/Scenes/Bidding.unity
+    guid: 774cda66d0117434bb06e0e91d9985b4
+  - enabled: 1
+    path: Assets/Scenes/OnlineLobby.unity
+    guid: bf6950b2fd1f0b54d9474c633a442fb4
+  - enabled: 1
+    path: Assets/Scenes/LevelSelect.unity
+    guid: b8a419bd810c866498e6b5d07b375331
+  - enabled: 1
+    path: Assets/Scenes/Level_1.unity
+    guid: be9f476b6d05f9446be6bec778088f31
+  - enabled: 1
+    path: Assets/Scenes/Level_2.unity
+    guid: 15180ca44600b964bb6bf785adf0765b
+  - enabled: 1
+    path: Assets/Scenes/Level_3.unity
+    guid: 8fc01fd96f2487544b557bd5d0f26fb3
+  - enabled: 1
+    path: Assets/Scenes/Level_4.unity
+    guid: 9ac81b60a8370db458c3c1504e4daa6d
+  - enabled: 1
+    path: Assets/Scenes/Level_5.unity
+    guid: bbfff18ebaaefe244a84b66c1f6b6474
+  m_configObjects: {}
+  m_UseUCBPForAssetBundles: 0
