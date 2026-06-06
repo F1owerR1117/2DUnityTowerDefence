@@ -100,6 +100,7 @@
 - Photon 实现: `PhotonService`
 - 管理器: `NetworkManager`（单例，DontDestroyOnLoad）
 - 房间创建/加入/匹配/准备/开始
+- 断线自动重连: 超时 30 秒 + 应用失焦/暂停恢复时自动重连，支持房间恢复
 
 ---
 
@@ -230,3 +231,10 @@ Assets/
 ### Photon 连接失败
 
 确保 VPN 全局模式开启（Photon 使用 UDP，不走 HTTP 代理）。或注册中国区 App ID。
+
+### Photon 断线重连
+
+项目已内置断线自动重连机制：
+- 断线超时设为 30 秒（默认约 10 秒）
+- 应用失焦/暂停恢复时自动重连（`ReconnectAndRejoin` 恢复房间，`ConnectUsingSettings` 恢复大厅）
+- 如果仍然频繁断线，检查 VPN 稳定性或增大 `DisconnectTimeout`
