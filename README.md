@@ -8,8 +8,6 @@
 - **语言**: C#
 - **分辨率**: 1920 x 1080
 - **架构文档**: `ARCHITECTURE.md`
-- **策划文档**: `doudizhutower_optimized.md`
-
 ---
 
 ## 快速开始
