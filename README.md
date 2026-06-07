@@ -8,6 +8,7 @@
 - **语言**: C#
 - **分辨率**: 1920 x 1080
 - **架构文档**: `ARCHITECTURE.md`
+
 ---
 
 ## 快速开始
@@ -16,32 +17,47 @@
 
 用 Unity 2023.2 打开项目文件夹。
 
-### 2. 场景列表
+### 2. 联机配置
+
+项目使用 Photon PUN 2 进行联机。需要自行注册 App ID：
+
+1. 复制 `Assets/Photon/PhotonUnityNetworking/Resources/PhotonServerSettings.asset.example`
+2. 重命名为 `PhotonServerSettings.asset`
+3. 将 `AppIdRealtime` 替换为你的 Photon App ID
+
+### 3. 场景列表
 
 | 场景 | 路径 | 说明 |
 |---|---|---|
 | MainMenu | `Assets/Scenes/MainMenu.unity` | 主菜单 |
 | LevelSelect | `Assets/Scenes/LevelSelect.unity` | 关卡选择 |
+| Level_1 ~ Level_5 | `Assets/Scenes/Level_*.unity` | 5 个关卡场景 |
 | Bidding | `Assets/Scenes/Bidding.unity` | 叫分期 |
 | OnlineLobby | `Assets/Scenes/OnlineLobby.unity` | 联机大厅 |
 | DoudizhuTower_Game | `Assets/Scenes/DoudizhuTower_Game.unity` | 游戏主场景 |
 | UI_Scene | `Assets/Scenes/UI_Scene.unity` | UI 场景（自动加载） |
 
-### 3. Build Settings 注册顺序
+### 4. Build Settings 注册顺序
 
 ```
-0: MainMenu
-1: LevelSelect
-2: Bidding
-3: OnlineLobby
-4: DoudizhuTower_Game
+0:  MainMenu
+1:  DoudizhuTower_Game
+2:  UI_Scene
+3:  Bidding
+4:  OnlineLobby
+5:  LevelSelect
+6:  Level_1
+7:  Level_2
+8:  Level_3
+9:  Level_4
+10: Level_5
 ```
 
-### 4. 游戏流程
+### 5. 游戏流程
 
 ```
 主菜单
-├── 单人模式 → 关卡选择 → 游戏场景
+├── 单人模式 → 关卡选择（5 关）→ 叫分场景 → 游戏场景
 ├── 对战模式 → 联机大厅 → 叫分场景 → 游戏场景
 ├── 商店（未实现）
 ├── 图鉴（未实现）
@@ -108,24 +124,24 @@
 Assets/
 ├── Animations/          # 动画控制器
 ├── AnotherPhoto/        # 第三方美术资源
-├── Config/              # ScriptableObject 配置表
-│   ├── BiddingConfig.cs     # 叫分配置
-│   ├── EconomyConfig.cs     # 经济配置
-│   └── HeroConfig.cs        # 英雄配置
-├── Editor/              # 编辑器工具
-│   ├── UnitPassivesGizmosOverlay.cs   # 被动范围可视化
-│   ├── UnitPassivesEditorWindow.cs    # 被动技能调试窗口
-│   ├── AudioClipTrimmer.cs            # 音频剪辑工具
-│   └── ...
 ├── Prefabs/             # 预制体
 │   ├── Army/ArmyPrefabs/      # 兵种预制体
 │   ├── Buildings/             # 建筑预制体
 │   ├── BulletAndHitEffect/    # 投射物和特效
+│   ├── CardImage/             # 卡牌图片
+│   ├── Maps/                  # 地图资源
+│   ├── Material/              # 材质
+│   ├── Music/                 # 音频资源
 │   └── UI/UIPrefabs/          # UI 预制体
 ├── Resources/Config/    # ScriptableObject 资产
-├── Scenes/              # 场景文件
+├── Scenes/              # 场景文件（11 个）
 ├── Scripts/             # C# 源码
-│   ├── Config/              # 配置表脚本
+│   ├── Config/              # ScriptableObject 配置表
+│   │   ├── BiddingConfig.cs     # 叫分配置
+│   │   ├── CardSpriteDB.cs      # 卡牌精灵图数据库
+│   │   ├── EconomyConfig.cs     # 经济配置
+│   │   ├── HeroConfig.cs        # 英雄配置
+│   │   └── LevelConfig.cs       # 关卡配置
 │   ├── Core/                # 纯逻辑层（零 Unity 依赖）
 │   │   ├── Battle/          # SoldierStats, HeroType
 │   │   ├── Card/            # Card, CardDeck, CardHand, CardTypeDetector
@@ -136,10 +152,12 @@ Assets/
 │   │   ├── Network/         # INetworkService, PhotonService, NetworkManager
 │   │   └── Systems/         # GameBootstrapper, GameStateMachine, SaveSystem
 │   └── UI/                  # 界面层
-│       ├── Battlefield/     # DomainUIController, LaunchTubeUI
-│       ├── Floating/        # DamageFloatText
-│       ├── HUD/             # GameTimerUI, CardCounterUI
+│       ├── Battlefield/     # DomainUIController, LaunchTubeUI, TempSlotUI
+│       ├── Bidding/         # BiddingManager, BiddingSceneBootstrap
+│       ├── Components/      # ButtonEffect, CoolDownEffect
+│       ├── Floating/        # DamageFloatText, FloatingTextPool
 │       ├── Hand/            # HandArea, CardWidget, SelectionValidator
+│       ├── HUD/             # GameTimerUI, CardCounterUI
 │       ├── LevelSelect/     # LevelSelectController, LevelCard
 │       ├── Online/          # OnlineLobbyController
 │       ├── Panels/          # VictoryPanel, PauseMenu, UnitInfoPanel
@@ -166,6 +184,8 @@ Assets/
 | `BiddingManager` | 叫分期控制器 |
 | `LevelSelectController` | 关卡选择轮播 |
 | `OnlineLobbyController` | 联机大厅 UI |
+| `DamageQueue` | 伤害批量结算队列 |
+| `BuildingAI` | 建筑 AI（出牌/摸牌/经济） |
 
 ---
 
@@ -183,7 +203,7 @@ Assets/
 
 ## 添加新关卡
 
-1. `Assets/Config/` 右键 → `Create` → `DoudizhuTower` → `LevelConfig`
+1. `Assets/Scripts/Config/` 右键 → `Create` → `DoudizhuTower` → `LevelConfig`
 2. 填写 `levelName`、`description`、`difficulty`、`sceneName`、`sortOrder`
 3. 选中 LevelSelect 场景中的 `LevelSelectController` → 把新资产拖入 `Level Configs` 数组
 
@@ -207,8 +227,8 @@ Assets/
 | 商店系统 | 按钮已预留，逻辑未实现 |
 | 图鉴/索引系统 | 按钮已预留，逻辑未实现 |
 | BuildingAI 路线压力检测 | `CountEnemiesOn()` 返回 0 |
-| 联机完整同步 | Phase 2 代码完成，未测试 |
-| 教程关卡（12 关） | 未实现 |
+| 联机出牌/兵种/经济同步 | 网络层已实现，游戏逻辑同步未实现 |
+| 教程关卡 | 未实现 |
 
 ---
 
