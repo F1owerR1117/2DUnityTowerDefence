@@ -63,6 +63,9 @@ Assets/Photon/PhotonRealtime/Demos/
 # Large source files
 *.psd
 
+# Large font assets (exceeds GitHub 100MB limit)
+Assets/Prefabs/Army/ArmyPrefabs/SOURCEHANSANSSC-REGULAR-2 SDF.asset
+
 # Internal docs (not for repo)
 DEBUG_LOG_AUDIT.md
 doudizhutower_optimized.md

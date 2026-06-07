@@ -243,6 +243,7 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         public void OnAttackHitFrame()
         {
+            if (_isDying) return;
             if (_isRanged && _projectilePrefab != null)
             {
                 if (_projectileSpawned) return;
@@ -412,6 +413,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         public virtual void Die()
         {
+            _isDying = true;
+
             if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             _isAttacking = false;
             _attackTarget = null;
@@ -420,6 +423,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _projectileSpawned = false;
             _justFinishedAttack = false;
             SetAnimSpeed(1f);
+
+            // 清除召唤帧事件，防止死亡后仍触发生效
+            OnSummonFrame = null;
 
             // UnitAudio 会监听 OnDeathEvent 来播放死亡音效
             OnDeathEvent?.Invoke();

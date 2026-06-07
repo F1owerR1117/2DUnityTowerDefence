@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using DoudizhuTower.Config;
 using DoudizhuTower.Gameplay.Network;
 using DoudizhuTower.Gameplay.Systems;
@@ -15,17 +16,32 @@ namespace DoudizhuTower.UI.Bidding
     /// </summary>
     public class NetworkBiddingManager : MonoBehaviour
     {
-        [Header("UI 引用（与 BiddingManager 共用同一套 UI）")]
+        [Header("计时与结果")]
         [SerializeField] private TextMeshProUGUI timerText;
         [SerializeField] private TextMeshProUGUI resultText;
-        [SerializeField] private TextMeshProUGUI[] playerLabels;
-        [SerializeField] private TextMeshProUGUI[] bidDisplays;
+        [SerializeField] private GameObject resultPanel;
+        [SerializeField] private Button confirmButton;
+
+        [Header("玩家面板 — 自己（中间）")]
+        [SerializeField] private TextMeshProUGUI playerLabelMe;
+        [SerializeField] private TextMeshProUGUI bidDisplayMe;
+        [SerializeField] private Image roleIconMe;
+
+        [Header("玩家面板 — 左边")]
+        [SerializeField] private TextMeshProUGUI playerLabelLeft;
+        [SerializeField] private TextMeshProUGUI bidDisplayLeft;
+        [SerializeField] private Image roleIconLeft;
+
+        [Header("玩家面板 — 右边")]
+        [SerializeField] private TextMeshProUGUI playerLabelRight;
+        [SerializeField] private TextMeshProUGUI bidDisplayRight;
+        [SerializeField] private Image roleIconRight;
+
+        [Header("叫分按钮")]
         [SerializeField] private Button bid1Button;
         [SerializeField] private Button bid2Button;
         [SerializeField] private Button bid3Button;
         [SerializeField] private Button passButton;
-        [SerializeField] private GameObject resultPanel;
-        [SerializeField] private Button confirmButton;
 
         [Header("配置")]
         [SerializeField] private BiddingConfig biddingConfig;
@@ -40,6 +56,15 @@ namespace DoudizhuTower.UI.Bidding
         private bool _biddingEnded;
         private float _timer;
         private bool _initialized;
+
+        // 左右两侧对应的网络槽位（-1 = 未分配）
+        private int _leftSlot = -1;
+        private int _rightSlot = -1;
+
+        // AI 槽位
+        private HashSet<int> _aiSlots = new HashSet<int>();
+        private float _aiDelay;
+        private const float AI_DELAY_SECONDS = 1.2f;
 
         private void Start()
         {
@@ -59,6 +84,12 @@ namespace DoudizhuTower.UI.Bidding
             _actorNumbers = _net.GetPlayerActorNumbers();
             _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, _actorNumbers);
 
+            // 加载 AI 槽位
+            _aiSlots = new HashSet<int>(GameSession.AISlots);
+
+            // 分配左右槽位
+            AssignSideSlots();
+
             float duration = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
             _timer = duration;
             _currentTurnSlot = 0;
@@ -66,26 +97,23 @@ namespace DoudizhuTower.UI.Bidding
             if (resultPanel != null) resultPanel.SetActive(false);
             if (confirmButton != null) confirmButton.onClick.AddListener(OnConfirm);
 
-            // 按钮绑定
             if (bid1Button != null) bid1Button.onClick.AddListener(() => OnBid(1));
             if (bid2Button != null) bid2Button.onClick.AddListener(() => OnBid(2));
             if (bid3Button != null) bid3Button.onClick.AddListener(() => OnBid(3));
             if (passButton != null) passButton.onClick.AddListener(() => OnBid(0));
 
-            // 显示玩家名
+            // 隐藏角色图标
+            SetRoleIconsActive(false);
+
             SetPlayerLabels();
 
-            // 订阅网络事件
             _net.OnCustomEvent += OnNetworkEvent;
             _net.OnPlayerLeft += OnPlayerLeft;
 
             _initialized = true;
 
-            // Master 初始化第一轮
             if (_net.IsMasterClient)
-            {
                 _net.SendToAll(NetworkProtocol.BID_TURN, new object[] { 0 });
-            }
 
             UpdateBidButtons();
             UpdateTurnDisplay();
@@ -113,10 +141,21 @@ namespace DoudizhuTower.UI.Bidding
                 timerText.text = $"{sec}s";
             }
 
-            // Master 负责超时判定
             if (_timer <= 0f && _net.IsMasterClient)
             {
                 MasterEndBidding();
+                return;
+            }
+
+            // AI 叫分（仅 Master 执行，带延迟）
+            if (_net.IsMasterClient && _aiSlots.Contains(_currentTurnSlot))
+            {
+                _aiDelay -= Time.deltaTime;
+                if (_aiDelay <= 0f)
+                {
+                    int bid = AIDecideBid();
+                    _net.SendToAll(NetworkProtocol.BID_ACTION, new object[] { _currentTurnSlot, bid });
+                }
             }
         }
 
@@ -154,28 +193,24 @@ namespace DoudizhuTower.UI.Bidding
         {
             _currentTurnSlot = (int)data[0];
             _timer = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
+            _aiDelay = AI_DELAY_SECONDS;
             UpdateBidButtons();
             UpdateTurnDisplay();
         }
 
-        // Master 收到叫分请求，校验后广播
         private void HandleBidActionOnMaster(object[] data, int senderActor)
         {
             int senderSlot = NetworkProtocol.GetPlayerSlot(senderActor, _actorNumbers);
             if (senderSlot != _currentTurnSlot) return;
 
             int bid = (int)data[0];
-
-            // 校验叫分合法性
             int maxBid = biddingConfig != null ? biddingConfig.maxBid : 3;
             if (bid < 0 || bid > maxBid) return;
             if (bid > 0 && bid <= _highestBid) return;
 
-            // 广播给所有客户端
             _net.SendToAll(NetworkProtocol.BID_ACTION, new object[] { senderSlot, bid });
         }
 
-        // 所有客户端处理叫分广播
         private void HandleBidActionBroadcast(object[] data)
         {
             int slot = (int)data[0];
@@ -183,13 +218,13 @@ namespace DoudizhuTower.UI.Bidding
             ProcessBid(slot, bid);
         }
 
-        // Master 处理叫分并推进轮次
         private void ProcessBid(int slot, int bid)
         {
             _bids[slot] = bid;
 
-            if (bidDisplays != null && slot < bidDisplays.Length && bidDisplays[slot] != null)
-                bidDisplays[slot].text = bid > 0 ? $"{bid} 分" : "不叫";
+            var bidText = GetBidDisplayForSlot(slot);
+            if (bidText != null)
+                bidText.text = bid > 0 ? $"{bid} 分" : "不叫";
 
             if (bid > _highestBid)
             {
@@ -199,14 +234,12 @@ namespace DoudizhuTower.UI.Bidding
 
             int maxBid = biddingConfig != null ? biddingConfig.maxBid : 3;
 
-            // 叫了最高分直接结束
             if (bid == maxBid && _net.IsMasterClient)
             {
                 MasterEndBidding();
                 return;
             }
 
-            // Master 推进轮次
             if (_net.IsMasterClient)
             {
                 int nextTurn = _currentTurnSlot + 1;
@@ -240,14 +273,12 @@ namespace DoudizhuTower.UI.Bidding
             }
             else
             {
-                // 无人叫分，随机指定地主
                 landlordSlot = UnityEngine.Random.Range(0, 3);
                 multiplier = 1f;
             }
 
-            // 构建基地映射：地主→基地索引2(LandLord)，农民→基地索引0,1(FarmerA/FarmerB)
             int[] baseMapping = new int[3];
-            baseMapping[landlordSlot] = 2; // LandLord base index
+            baseMapping[landlordSlot] = 2;
             int farmerIdx = 0;
             for (int i = 0; i < 3; i++)
             {
@@ -266,7 +297,7 @@ namespace DoudizhuTower.UI.Bidding
 
         private void HandleBidResult(object[] data)
         {
-            if (_biddingEnded && _highestBidder >= 0) return; // 已经处理过
+            if (_biddingEnded && _highestBidder >= 0) return;
             _biddingEnded = true;
 
             int landlordSlot = (int)data[0];
@@ -276,7 +307,6 @@ namespace DoudizhuTower.UI.Bidding
 
             bool localIsLandlord = (landlordSlot == _mySlot);
 
-            // 设置 GameSession 联机数据
             GameSession.IsNetworkMode = true;
             GameSession.NetworkSeed = seed;
             GameSession.SetResultNetwork(_mySlot, baseMapping, multiplier);
@@ -284,12 +314,11 @@ namespace DoudizhuTower.UI.Bidding
 
             SetButtonsInteractable(false);
             ShowResult(localIsLandlord, multiplier);
+            ShowRoleIcons(landlordSlot);
 
             Debug.Log($"[NetworkBidding] 结果: 地主槽位={landlordSlot}, 本机={_mySlot}, " +
                       $"本机是地主={localIsLandlord}, 倍数={multiplier}, seed={seed}");
         }
-
-        // ─── 确认后跳转 ───
 
         private void OnConfirm()
         {
@@ -297,14 +326,14 @@ namespace DoudizhuTower.UI.Bidding
                 _net.LoadScene(SceneLoader.GAME_SCENE);
         }
 
-        // ─── 玩家断线 ───
-
         private void OnPlayerLeft(string playerName)
         {
             if (_biddingEnded) return;
 
-            // 人数不足，取消叫分
-            if (_net.CurrentPlayerCount < 3)
+            int realPlayerCount = _net.CurrentPlayerCount;
+            int totalSlots = realPlayerCount + _aiSlots.Count;
+
+            if (totalSlots < 3)
             {
                 _biddingEnded = true;
                 SetButtonsInteractable(false);
@@ -315,19 +344,73 @@ namespace DoudizhuTower.UI.Bidding
             }
         }
 
+        // ─── 槽位分配 ───
+
+        private void AssignSideSlots()
+        {
+            int side = 0;
+            for (int i = 0; i < 3; i++)
+            {
+                if (i == _mySlot) continue;
+                if (side == 0) _leftSlot = i;
+                else _rightSlot = i;
+                side++;
+            }
+        }
+
         // ─── UI 更新 ───
+
+        private TextMeshProUGUI GetLabelForSlot(int slot)
+        {
+            if (slot == _mySlot) return playerLabelMe;
+            if (slot == _leftSlot) return playerLabelLeft;
+            if (slot == _rightSlot) return playerLabelRight;
+            return null;
+        }
+
+        private TextMeshProUGUI GetBidDisplayForSlot(int slot)
+        {
+            if (slot == _mySlot) return bidDisplayMe;
+            if (slot == _leftSlot) return bidDisplayLeft;
+            if (slot == _rightSlot) return bidDisplayRight;
+            return null;
+        }
+
+        private Image GetRoleIconForSlot(int slot)
+        {
+            if (slot == _mySlot) return roleIconMe;
+            if (slot == _leftSlot) return roleIconLeft;
+            if (slot == _rightSlot) return roleIconRight;
+            return null;
+        }
 
         private void SetPlayerLabels()
         {
-            if (playerLabels == null || _net == null) return;
+            if (_net == null) return;
             string[] names = _net.GetPlayerNames();
-            for (int i = 0; i < playerLabels.Length; i++)
+
+            if (playerLabelMe != null)
             {
-                if (playerLabels[i] == null) continue;
-                if (i < names.Length)
-                    playerLabels[i].text = i == _mySlot ? $"{names[i]}（你）" : names[i];
+                if (_aiSlots.Contains(_mySlot))
+                    playerLabelMe.text = "AI（你）";
                 else
-                    playerLabels[i].text = "等待中...";
+                    playerLabelMe.text = _mySlot < names.Length ? $"{names[_mySlot]}（你）" : "你";
+            }
+
+            if (playerLabelLeft != null && _leftSlot >= 0)
+            {
+                if (_aiSlots.Contains(_leftSlot))
+                    playerLabelLeft.text = $"<color=#FFD700>AI-{_leftSlot + 1}</color>";
+                else
+                    playerLabelLeft.text = _leftSlot < names.Length ? names[_leftSlot] : "等待中...";
+            }
+
+            if (playerLabelRight != null && _rightSlot >= 0)
+            {
+                if (_aiSlots.Contains(_rightSlot))
+                    playerLabelRight.text = $"<color=#FFD700>AI-{_rightSlot + 1}</color>";
+                else
+                    playerLabelRight.text = _rightSlot < names.Length ? names[_rightSlot] : "等待中...";
             }
         }
 
@@ -339,7 +422,7 @@ namespace DoudizhuTower.UI.Bidding
                 return;
             }
 
-            bool isMyTurn = _currentTurnSlot == _mySlot;
+            bool isMyTurn = _currentTurnSlot == _mySlot && !_aiSlots.Contains(_currentTurnSlot);
             int maxBid = biddingConfig != null ? biddingConfig.maxBid : 3;
 
             if (bid1Button != null) bid1Button.interactable = isMyTurn && _highestBid < 1 && maxBid >= 1;
@@ -358,13 +441,41 @@ namespace DoudizhuTower.UI.Bidding
 
         private void UpdateTurnDisplay()
         {
-            if (playerLabels == null) return;
-            for (int i = 0; i < playerLabels.Length; i++)
+            var labels = new[] {
+                GetLabelForSlot(0),
+                GetLabelForSlot(1),
+                GetLabelForSlot(2)
+            };
+
+            for (int i = 0; i < labels.Length; i++)
             {
-                if (playerLabels[i] == null) continue;
-                playerLabels[i].fontStyle = i == _currentTurnSlot
-                    ? FontStyles.Bold
-                    : FontStyles.Normal;
+                if (labels[i] != null)
+                    labels[i].fontStyle = i == _currentTurnSlot
+                        ? FontStyles.Bold
+                        : FontStyles.Normal;
+            }
+        }
+
+        private void SetRoleIconsActive(bool active)
+        {
+            if (roleIconMe != null) roleIconMe.gameObject.SetActive(active);
+            if (roleIconLeft != null) roleIconLeft.gameObject.SetActive(active);
+            if (roleIconRight != null) roleIconRight.gameObject.SetActive(active);
+        }
+
+        private void ShowRoleIcons(int landlordSlot)
+        {
+            var icons = new[] {
+                GetRoleIconForSlot(0),
+                GetRoleIconForSlot(1),
+                GetRoleIconForSlot(2)
+            };
+
+            for (int i = 0; i < icons.Length; i++)
+            {
+                if (icons[i] == null) continue;
+                icons[i].gameObject.SetActive(true);
+                icons[i].color = (i == landlordSlot) ? Color.red : Color.green;
             }
         }
 
@@ -376,6 +487,35 @@ namespace DoudizhuTower.UI.Bidding
                 string role = localIsLandlord ? "地主" : "农民";
                 resultText.text = $"你是 {role}\n叫分倍数: x{multiplier:F0}";
             }
+        }
+
+        // ─── AI 叫分逻辑 ───
+
+        private int AIDecideBid()
+        {
+            int minBid = _highestBid > 0 ? _highestBid + 1 : 1;
+            int maxBid = biddingConfig != null ? biddingConfig.maxBid : 3;
+
+            if (minBid > maxBid) return 0;
+
+            float passChance = biddingConfig != null ? biddingConfig.aiPassChance : 0.6f;
+            if (UnityEngine.Random.value < passChance) return 0;
+
+            float w1 = biddingConfig != null ? biddingConfig.aiBid1Weight : 0.5f;
+            float w2 = biddingConfig != null ? biddingConfig.aiBid2Weight : 0.3f;
+            float w3 = biddingConfig != null ? biddingConfig.aiBid3Weight : 0.2f;
+
+            float total = 0f;
+            if (minBid <= 1) total += w1;
+            if (minBid <= 2) total += w2;
+            if (minBid <= 3) total += w3;
+
+            if (total <= 0f) return 0;
+
+            float roll = UnityEngine.Random.value * total;
+            if (minBid <= 1) { roll -= w1; if (roll <= 0) return 1; }
+            if (minBid <= 2) { roll -= w2; if (roll <= 0) return 2; }
+            return maxBid;
         }
     }
 }

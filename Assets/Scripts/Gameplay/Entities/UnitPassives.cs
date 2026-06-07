@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using DoudizhuTower.Core.Battle;
 using UnityEngine;
@@ -39,6 +40,10 @@ namespace DoudizhuTower.Gameplay.Entities
         public float chargeCooldown = 6f;
         [Tooltip("冲锋期间的移动速度倍率")]
         public float chargeSpeedMultiplier = 1.3f;
+        [Tooltip("冲锋期间覆盖高度标签（留空=不覆盖）")]
+        public UnitHeight chargeHeightOverride = 0;
+        [Tooltip("冲锋期间可被哪些高度阻挡（留空=与覆盖高度相同）")]
+        public UnitHeight chargeBlockableByHeight = 0;
 
         [Header("君王光环")]
         [Tooltip("启用后每隔数秒震退周围敌军")]
@@ -199,6 +204,9 @@ namespace DoudizhuTower.Gameplay.Entities
                 _isCharged = true;
                 _originalSpeed = _owner.Stats.MoveSpeed;
                 ApplyChargeSpeed(true);
+                if (chargeHeightOverride != 0)
+                    _owner.SetHeightOverride(chargeHeightOverride, chargeBlockableByHeight);
+                _unitAudio?.PlayCharge();
             }
             if (enableTaunt)
             {
@@ -242,9 +250,16 @@ namespace DoudizhuTower.Gameplay.Entities
             if (enableCavalryChase)
                 _owner.OverrideFindTarget = FindCavalryChaseTarget;
 
-            // 冲锋动画状态同步（Animator 已就绪）
+            // 冲锋动画状态同步（Animator 已就绪）+ 高度覆盖恢复
             if (enableCharge)
+            {
                 _owner.SetAnimBool("Charge", _isCharged);
+                if (_isCharged && chargeHeightOverride != 0)
+                    _owner.SetHeightOverride(chargeHeightOverride, chargeBlockableByHeight);
+            }
+
+            // 生成特效和音效
+            _unitVFX?.PlaySpawn();
         }
 
         private void OnDestroy()
@@ -446,12 +461,30 @@ namespace DoudizhuTower.Gameplay.Entities
                 {
                     var enemy = _overlapBuffer[i].GetComponentInParent<CardUnit>();
                     if (enemy == null || !enemy.IsAlive || enemy._isBuilding || enemy.IsLandlord == _owner.IsLandlord) continue;
-                    // B8: 安全防御——零向量时使用随机方向避免 NaN
                     Vector2 pushDir = enemy.VisualCenter - _owner.VisualCenter;
                     if (pushDir.sqrMagnitude < 0.001f)
                         pushDir = Random.insideUnitCircle.normalized;
-                    enemy.transform.position += (Vector3)(pushDir.normalized * kingPushDistance);
+                    StartCoroutine(KnockbackCoroutine(enemy, pushDir.normalized));
                 }
+            }
+        }
+
+        private IEnumerator KnockbackCoroutine(CardUnit target, Vector2 direction)
+        {
+            float duration = 0.2f;
+            float elapsed = 0f;
+            Vector3 startPos = target.transform.position;
+            Vector3 endPos = startPos + (Vector3)(direction * kingPushDistance);
+
+            while (elapsed < duration)
+            {
+                if (target == null || !target.IsAlive) yield break;
+                elapsed += Time.deltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                // 缓动曲线：快起慢停
+                float eased = 1f - (1f - t) * (1f - t);
+                target.transform.position = Vector3.Lerp(startPos, endPos, eased);
+                yield return null;
             }
         }
 
@@ -486,6 +519,8 @@ namespace DoudizhuTower.Gameplay.Entities
             _chargeTimer = 0f;
             ApplyChargeSpeed(true);
             _owner.SetAnimBool("Charge", true);
+            if (chargeHeightOverride != 0)
+                _owner.SetHeightOverride(chargeHeightOverride, chargeBlockableByHeight);
             _unitAudio?.PlayCharge();
         }
 
@@ -494,6 +529,7 @@ namespace DoudizhuTower.Gameplay.Entities
             _isCharged = false;
             ApplyChargeSpeed(false);
             _owner.SetAnimBool("Charge", false);
+            _owner.ClearHeightOverride();
         }
 
         private void ApplyCharge(CardUnit target)

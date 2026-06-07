@@ -85,6 +85,11 @@ namespace DoudizhuTower.Gameplay.Network
 
         public void CreateRoom(string roomCode, int maxPlayers)
         {
+            if (!PhotonNetwork.IsConnectedAndReady)
+            {
+                Debug.LogWarning("[Photon] CreateRoom 失败：客户端未就绪");
+                return;
+            }
             var options = new RoomOptions
             {
                 MaxPlayers = (byte)maxPlayers,
@@ -96,11 +101,21 @@ namespace DoudizhuTower.Gameplay.Network
 
         public void JoinRoom(string roomCode)
         {
+            if (!PhotonNetwork.IsConnectedAndReady)
+            {
+                Debug.LogWarning("[Photon] JoinRoom 失败：客户端未就绪");
+                return;
+            }
             PhotonNetwork.JoinRoom(roomCode);
         }
 
         public void JoinRandomRoom()
         {
+            if (!PhotonNetwork.IsConnectedAndReady)
+            {
+                Debug.LogWarning("[Photon] JoinRandomRoom 失败：客户端未就绪");
+                return;
+            }
             PhotonNetwork.JoinRandomRoom();
         }
 
@@ -223,6 +238,11 @@ namespace DoudizhuTower.Gameplay.Network
         {
             Debug.Log($"[Photon] 已连接到服务器，区域: {PhotonNetwork.CloudRegion}");
             OnServerConnected?.Invoke();
+        }
+
+        public override void OnJoinedLobby()
+        {
+            Debug.Log("[Photon] 已进入大厅");
         }
 
         public override void OnDisconnected(DisconnectCause cause)

@@ -54,7 +54,7 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>触发一次性动画（冲锋、震波、溅射等）</summary>
         public void TriggerAnim(string name)
         {
-            if (_isDying && name != "Death") return; // 死亡动画期间只允许死亡动画
+            if (_isDying && name != "Death" && name != "DeathExplosion" && name != "Burn") return;
             if (_simpleAnimator != null)
                 _simpleAnimator.Trigger(name);
             else if (_animator != null && _animator.isActiveAndEnabled)
@@ -79,11 +79,12 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         public System.Collections.IEnumerator PlayDeathAnimCoroutine(System.Action onComplete)
         {
-            TriggerAnim("Death");
+            // 只在配置了死亡动画时才触发 Death，避免与 DeathExplosion/Burn 竞争
+            bool hasDeathClip = _simpleAnimator != null && _simpleAnimator.deathClip != null;
+            if (hasDeathClip)
+                TriggerAnim("Death");
 
-            float duration = 0.5f;
-            if (_simpleAnimator != null && _simpleAnimator.deathClip != null)
-                duration = _simpleAnimator.deathClip.length;
+            float duration = hasDeathClip ? _simpleAnimator.deathClip.length : 0f;
 
             yield return new WaitForSeconds(duration);
             onComplete?.Invoke();
@@ -278,6 +279,8 @@ namespace DoudizhuTower.Gameplay.Entities
             Target = null;
             _enemyUnits = null;
             if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
+            _isDying = false;
+            ClearHeightOverride();
             _isAttacking = false;
             _attackTarget = null;
             _hitCountDealt = 0;

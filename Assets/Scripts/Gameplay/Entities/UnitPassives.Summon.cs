@@ -77,7 +77,8 @@ namespace DoudizhuTower.Gameplay.Entities
             _owner.OnSummonFrame -= OnSummonFrameHandler;
             _isSummoning = false;
             _owner.SetAnimSpeedPublic(1f);
-            SpawnSummon(_summonPosition);
+            if (_owner.IsAlive)
+                SpawnSummon(_summonPosition);
         }
 
         /// <summary>取消召唤（被眩晕打断时）</summary>

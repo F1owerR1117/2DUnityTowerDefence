@@ -13,17 +13,32 @@ namespace DoudizhuTower.UI.Bidding
     /// </summary>
     public class BiddingManager : MonoBehaviour
     {
-        [Header("UI 引用")]
+        [Header("计时与结果")]
         [SerializeField] private TextMeshProUGUI timerText;
         [SerializeField] private TextMeshProUGUI resultText;
-        [SerializeField] private TextMeshProUGUI[] playerLabels;
-        [SerializeField] private TextMeshProUGUI[] bidDisplays;
+        [SerializeField] private GameObject resultPanel;
+        [SerializeField] private Button confirmButton;
+
+        [Header("玩家面板 — 自己（中间）")]
+        [SerializeField] private TextMeshProUGUI playerLabelMe;
+        [SerializeField] private TextMeshProUGUI bidDisplayMe;
+        [SerializeField] private Image roleIconMe;
+
+        [Header("玩家面板 — AI-1（左边）")]
+        [SerializeField] private TextMeshProUGUI playerLabelAI1;
+        [SerializeField] private TextMeshProUGUI bidDisplayAI1;
+        [SerializeField] private Image roleIconAI1;
+
+        [Header("玩家面板 — AI-2（右边）")]
+        [SerializeField] private TextMeshProUGUI playerLabelAI2;
+        [SerializeField] private TextMeshProUGUI bidDisplayAI2;
+        [SerializeField] private Image roleIconAI2;
+
+        [Header("叫分按钮")]
         [SerializeField] private Button bid1Button;
         [SerializeField] private Button bid2Button;
         [SerializeField] private Button bid3Button;
         [SerializeField] private Button passButton;
-        [SerializeField] private GameObject resultPanel;
-        [SerializeField] private Button confirmButton;
 
         [Header("配置")]
         [SerializeField] private BiddingConfig biddingConfig;
@@ -36,9 +51,25 @@ namespace DoudizhuTower.UI.Bidding
         private bool _biddingEnded;
         private float _timer;
 
+        // AI 延迟
+        private float _aiDelay;
+        private const float AI_DELAY_SECONDS = 1.2f;
+
+        // 玩家标签和叫分显示的快捷访问（按逻辑索引：0=Me, 1=AI1, 2=AI2）
+        private TextMeshProUGUI[] _labels;
+        private TextMeshProUGUI[] _bidTexts;
+        private Image[] _roleIcons;
+
         private void Start()
         {
-            // 无配置时使用默认值
+            // 联机模式下由 BiddingSceneBootstrap 禁用本组件，跳过初始化
+            if (!gameObject.activeInHierarchy) return;
+
+            // 构建快捷数组
+            _labels = new[] { playerLabelMe, playerLabelAI1, playerLabelAI2 };
+            _bidTexts = new[] { bidDisplayMe, bidDisplayAI1, bidDisplayAI2 };
+            _roleIcons = new[] { roleIconMe, roleIconAI1, roleIconAI2 };
+
             float duration = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
 
             GameSession.Reset();
@@ -47,6 +78,9 @@ namespace DoudizhuTower.UI.Bidding
 
             if (resultPanel != null) resultPanel.SetActive(false);
             if (confirmButton != null) confirmButton.onClick.AddListener(OnConfirm);
+
+            // 隐藏角色图标
+            SetRoleIconsActive(false);
 
             SetPlayerLabels();
             UpdateBidButtons();
@@ -71,7 +105,11 @@ namespace DoudizhuTower.UI.Bidding
             }
 
             if (_currentTurn > 0)
-                ProcessAITurn();
+            {
+                _aiDelay -= Time.deltaTime;
+                if (_aiDelay <= 0f)
+                    ProcessAITurn();
+            }
         }
 
         #region 玩家叫分
@@ -108,12 +146,10 @@ namespace DoudizhuTower.UI.Bidding
             float passChance = biddingConfig != null ? biddingConfig.aiPassChance : 0.6f;
             if (Random.value < passChance) return 0;
 
-            // 按权重选择叫分
             float w1 = biddingConfig != null ? biddingConfig.aiBid1Weight : 0.5f;
             float w2 = biddingConfig != null ? biddingConfig.aiBid2Weight : 0.3f;
             float w3 = biddingConfig != null ? biddingConfig.aiBid3Weight : 0.2f;
 
-            // 过滤掉低于 minBid 的选项
             float total = 0f;
             if (minBid <= 1) total += w1;
             if (minBid <= 2) total += w2;
@@ -133,10 +169,11 @@ namespace DoudizhuTower.UI.Bidding
 
         private void ProcessBid(int playerIndex, int bid)
         {
+            if (_bidTexts == null) return;
             _bids[playerIndex] = bid;
 
-            if (bidDisplays != null && playerIndex < bidDisplays.Length && bidDisplays[playerIndex] != null)
-                bidDisplays[playerIndex].text = bid > 0 ? $"{bid} 分" : "不叫";
+            if (_bidTexts[playerIndex] != null)
+                _bidTexts[playerIndex].text = bid > 0 ? $"{bid} 分" : "不叫";
 
             if (bid > _highestBid)
             {
@@ -152,6 +189,7 @@ namespace DoudizhuTower.UI.Bidding
             }
 
             _currentTurn++;
+            _aiDelay = AI_DELAY_SECONDS;
             if (_currentTurn >= 3)
             {
                 if (_highestBidder >= 0)
@@ -189,7 +227,7 @@ namespace DoudizhuTower.UI.Bidding
                 if (randomAssign)
                     _highestBidder = Random.Range(0, 3);
                 else
-                    _highestBidder = 0; // 默认玩家当地主
+                    _highestBidder = 0;
 
                 playerIsLandlord = (_highestBidder == 0);
                 multiplier = 1f;
@@ -200,6 +238,7 @@ namespace DoudizhuTower.UI.Bidding
             GameSession.SetResult(playerIsLandlord, multiplier, landlordIndex, farmerIndices);
 
             ShowResult(playerIsLandlord, multiplier);
+            ShowRoleIcons();
         }
 
         private void ShowResult(bool playerIsLandlord, float multiplier)
@@ -223,12 +262,11 @@ namespace DoudizhuTower.UI.Bidding
 
         private void SetPlayerLabels()
         {
-            if (playerLabels == null) return;
             string[] names = { "你", "AI-1", "AI-2" };
-            for (int i = 0; i < playerLabels.Length && i < names.Length; i++)
+            for (int i = 0; i < _labels.Length; i++)
             {
-                if (playerLabels[i] != null)
-                    playerLabels[i].text = names[i];
+                if (_labels[i] != null)
+                    _labels[i].text = names[i];
             }
         }
 
@@ -257,13 +295,33 @@ namespace DoudizhuTower.UI.Bidding
 
         private void UpdateTurnDisplay()
         {
-            if (playerLabels == null) return;
-            for (int i = 0; i < playerLabels.Length; i++)
+            for (int i = 0; i < _labels.Length; i++)
             {
-                if (playerLabels[i] != null)
-                    playerLabels[i].fontStyle = i == _currentTurn
+                if (_labels[i] != null)
+                    _labels[i].fontStyle = i == _currentTurn
                         ? FontStyles.Bold
                         : FontStyles.Normal;
+            }
+        }
+
+        private void SetRoleIconsActive(bool active)
+        {
+            for (int i = 0; i < _roleIcons.Length; i++)
+            {
+                if (_roleIcons[i] != null)
+                    _roleIcons[i].gameObject.SetActive(active);
+            }
+        }
+
+        private void ShowRoleIcons()
+        {
+            for (int i = 0; i < _roleIcons.Length; i++)
+            {
+                if (_roleIcons[i] == null) continue;
+                _roleIcons[i].gameObject.SetActive(true);
+                // 地主用红色，农民用绿色（颜色可自行调整）
+                bool isLandlord = (i == _highestBidder);
+                _roleIcons[i].color = isLandlord ? Color.red : Color.green;
             }
         }
 

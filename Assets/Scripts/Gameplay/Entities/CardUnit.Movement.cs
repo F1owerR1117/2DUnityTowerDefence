@@ -211,7 +211,7 @@ namespace DoudizhuTower.Gameplay.Entities
             {
                 var other = _blockBuffer[i].GetComponentInParent<CardUnit>();
                 if (other != null && other != this && other.IsAlive && other.IsLandlord != this.IsLandlord
-                    && other.CanBlockHeight(this.UnitHeight))
+                    && other.CanBlockHeight(this.BlockableByHeight))
                     return true;
             }
             return false;

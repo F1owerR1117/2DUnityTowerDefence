@@ -413,7 +413,7 @@ MonoBehaviour:
   enableSniper: 0
   sniperRangeBonus: 0
   sniperHpThreshold: 0.5
-  enableSwarm: 1
+  enableSwarm: 0
   swarmRadius: 1.59
   swarmDamagePct: 0.5
   enableCharge: 0

@@ -25,6 +25,7 @@ namespace DoudizhuTower.UI.Panels
         [SerializeField] private TextMeshProUGUI settlementText;
 
         [Header("按钮 — 单人")]
+        [SerializeField] private Button nextLevelButton;
         [SerializeField] private Button restartButton;
         [SerializeField] private Button returnToMenuButton;
 
@@ -32,6 +33,7 @@ namespace DoudizhuTower.UI.Panels
         [SerializeField] private Button returnToRoomButton;
         [SerializeField] private Button returnToMenuButtonMp;
 
+        public event Action OnNextLevelRequested;
         public event Action OnRestartRequested;
         public event Action OnReturnToMenuRequested;
         public event Action OnReturnToRoomRequested;
@@ -57,6 +59,7 @@ namespace DoudizhuTower.UI.Panels
 
         private void Start()
         {
+            if (nextLevelButton != null) nextLevelButton.onClick.AddListener(RequestNextLevel);
             if (restartButton != null) restartButton.onClick.AddListener(RequestRestart);
             if (returnToMenuButton != null) returnToMenuButton.onClick.AddListener(RequestReturnToMenu);
             if (returnToRoomButton != null) returnToRoomButton.onClick.AddListener(RequestReturnToRoom);
@@ -85,6 +88,7 @@ namespace DoudizhuTower.UI.Panels
             if (multiplayerArea != null) multiplayerArea.SetActive(isMultiplayer);
 
             // 切换按钮组
+            if (nextLevelButton != null) nextLevelButton.gameObject.SetActive(!isMultiplayer && playerWon && SceneLoader.HasNextLevel);
             if (restartButton != null) restartButton.gameObject.SetActive(!isMultiplayer);
             if (returnToMenuButton != null) returnToMenuButton.gameObject.SetActive(!isMultiplayer);
             if (returnToRoomButton != null) returnToRoomButton.gameObject.SetActive(isMultiplayer);
@@ -148,8 +152,14 @@ namespace DoudizhuTower.UI.Panels
             return !SaveSystem.Data.HasFirstWin;
         }
 
+        private void RequestNextLevel()
+        {
+            OnNextLevelRequested?.Invoke();
+        }
+
         private void RequestRestart()
         {
+            GameSession.Reset();
             OnRestartRequested?.Invoke();
         }
 

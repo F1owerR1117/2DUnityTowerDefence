@@ -67,6 +67,9 @@ namespace DoudizhuTower.UI.LevelSelect
             var sorted = new List<LevelConfig>(levelConfigs);
             sorted.Sort((a, b) => a.sortOrder.CompareTo(b.sortOrder));
 
+            // 注册关卡场景名列表供 SceneLoader 使用
+            SceneLoader.LevelSceneNames = sorted.ConvertAll(c => c.sceneName).ToArray();
+
             foreach (var config in sorted)
             {
                 var go = Instantiate(cardPrefab, container);
@@ -171,7 +174,9 @@ namespace DoudizhuTower.UI.LevelSelect
         private void EnterLevel(LevelConfig config)
         {
             if (config == null) return;
-            Debug.Log($"[LevelSelect] 进入关卡: {config.levelName}");
+            int index = _cards.FindIndex(c => c.Config == config);
+            SceneLoader.SetCurrentLevel(index);
+            Debug.Log($"[LevelSelect] 进入关卡: {config.levelName} (索引 {index})");
             SceneLoader.LoadScene(config.sceneName);
         }
 

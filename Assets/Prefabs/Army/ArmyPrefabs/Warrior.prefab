@@ -232,7 +232,7 @@ MonoBehaviour:
   _atk: 10
   _attackInterval: 1
   _moveSpeed: 15
-  _range: 15
+  _range: 90
   _hitCount: 1
 --- !u!114 &3611508788853003874
 MonoBehaviour:
@@ -256,6 +256,7 @@ MonoBehaviour:
   chargeMultiplier: 2.5
   chargeCooldown: 6
   chargeSpeedMultiplier: 1.3
+  chargeHeightOverride: 0
   enableKingAura: 0
   kingInterval: 5
   kingRadius: 3
@@ -356,6 +357,10 @@ MonoBehaviour:
   burnDuration: 3
   summonVFX: {fileID: 0}
   summonDuration: 1
+  spawnVFX: {fileID: 0}
+  spawnDuration: 0.75
+  spawnSound: {fileID: 0}
+  spawnSoundVolume: 0.8
   shieldVFX: {fileID: 0}
   tauntAuraVFX: {fileID: 0}
   tearVFX: {fileID: 0}

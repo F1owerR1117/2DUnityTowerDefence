@@ -16,6 +16,13 @@ namespace DoudizhuTower.Gameplay.Systems
         public const string BIDDING_SCENE = "Bidding";
         public const string GAME_SCENE = "DoudizhuTower_Game";
 
+        // ── 关卡跟踪 ──
+        public static int CurrentLevelIndex { get; private set; } = -1;
+        public static string[] LevelSceneNames { get; set; } = System.Array.Empty<string>();
+        public static bool HasNextLevel => CurrentLevelIndex >= 0 && CurrentLevelIndex + 1 < LevelSceneNames.Length;
+
+        public static void SetCurrentLevel(int index) => CurrentLevelIndex = index;
+
         public static void LoadMainMenu()
         {
             Time.timeScale = 1f;
@@ -87,6 +94,20 @@ namespace DoudizhuTower.Gameplay.Systems
         {
             Time.timeScale = 1f;
             LoadSceneWithFade(SceneManager.GetActiveScene().name);
+        }
+
+        public static void LoadNextLevel()
+        {
+            int next = CurrentLevelIndex + 1;
+            if (next < LevelSceneNames.Length)
+            {
+                CurrentLevelIndex = next;
+                LoadScene(LevelSceneNames[next]);
+            }
+            else
+            {
+                LoadLevelSelect();
+            }
         }
 
         public static void QuitGame()

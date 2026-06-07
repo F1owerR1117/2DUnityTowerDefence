@@ -59,6 +59,16 @@ namespace DoudizhuTower.Gameplay.Entities
         [Tooltip("召唤特效持续时间（秒）")]
         [SerializeField] private float summonDuration = 1f;
 
+        [Header("-- 生成特效 --")]
+        [Tooltip("生成特效（留空则不播放）")]
+        [SerializeField] private GameObject spawnVFX;
+        [Tooltip("生成特效持续时间（秒）")]
+        [SerializeField] private float spawnDuration = 0.75f;
+        [Tooltip("生成音效（留空则不播放）")]
+        [SerializeField] private AudioClip spawnSound;
+        [Tooltip("生成音效音量")]
+        [SerializeField] private float spawnSoundVolume = 0.8f;
+
         [Header("-- 状态特效 --")]
         [Tooltip("护盾特效（留空则不播放）")]
         [SerializeField] private GameObject shieldVFX;
@@ -204,6 +214,16 @@ namespace DoudizhuTower.Gameplay.Entities
         public void PlaySummon(Vector3 position)
         {
             VFXManager.Instance?.SpawnVFX(summonVFX, position, null, summonDuration);
+        }
+
+        /// <summary>
+        /// 播放生成特效和音效。在兵种从对象池生成时调用。
+        /// </summary>
+        public void PlaySpawn()
+        {
+            VFXManager.Instance?.SpawnVFX(spawnVFX, _unit.VisualCenter, null, spawnDuration);
+            if (spawnSound != null)
+                AudioManager.Instance?.PlayCombatLow(spawnSound, spawnSoundVolume);
         }
 
         #endregion

@@ -46,6 +46,11 @@ namespace DoudizhuTower.Gameplay.Entities
         [SerializeField] private UnitHeight _canAttackHeight = UnitHeight.Ground | UnitHeight.Air;
         [Tooltip("本兵种可阻挡的高度（多选，默认与可攻击高度一致）")]
         [SerializeField] private UnitHeight _canBlockHeight = UnitHeight.Ground | UnitHeight.Air;
+
+        // 运行时高度覆盖
+        private bool _heightOverridden;
+        private UnitHeight _originalUnitHeight;
+        private UnitHeight _blockableByHeight;
         [Header("索敌范围")]
         [Tooltip("索敌检测范围（0 = 使用攻击范围）。点杀等特化索敌使用此值扩展搜索。")]
         [SerializeField] private float _detectionRange;
@@ -229,8 +234,37 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>索敌检测范围。0 时使用攻击范围，大于 0 时用于点杀等特化索敌。</summary>
         public float DetectionRange => _detectionRange > 0f ? _detectionRange : Stats.Range;
 
-        /// <summary>本兵种的高度标签</summary>
+        /// <summary>本兵种的高度标签（含运行时覆盖）</summary>
         public UnitHeight UnitHeight => _unitHeight;
+
+        /// <summary>本兵种可被哪些高度阻挡（含运行时覆盖，默认等于 UnitHeight）</summary>
+        public UnitHeight BlockableByHeight => _heightOverridden ? _blockableByHeight : _unitHeight;
+
+        /// <summary>
+        /// 临时覆盖高度标签（如冲锋时视为空中单位）。
+        /// </summary>
+        /// <param name="height">新的高度标签（影响攻击/索敌判定）</param>
+        /// <param name="blockableBy">可被哪些高度阻挡（影响阻挡判定，0 = 使用 height）</param>
+        public void SetHeightOverride(UnitHeight height, UnitHeight blockableBy = 0)
+        {
+            if (!_heightOverridden)
+            {
+                _originalUnitHeight = _unitHeight;
+                _heightOverridden = true;
+            }
+            _unitHeight = height;
+            _blockableByHeight = blockableBy != 0 ? blockableBy : height;
+        }
+
+        /// <summary>恢复原始高度标签</summary>
+        public void ClearHeightOverride()
+        {
+            if (_heightOverridden)
+            {
+                _unitHeight = _originalUnitHeight;
+                _heightOverridden = false;
+            }
+        }
 
         /// <summary>本兵种是否可攻击指定高度的目标</summary>
         public bool CanAttackHeight(UnitHeight targetHeight) => (_canAttackHeight & targetHeight) != 0;

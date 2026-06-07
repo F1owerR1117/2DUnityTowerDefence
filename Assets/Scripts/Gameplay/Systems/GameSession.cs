@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Systems
@@ -25,6 +26,12 @@ namespace DoudizhuTower.Gameplay.Systems
 
         /// <summary>联机模式下共享的牌组 RNG 种子，保证所有客户端抽牌一致</summary>
         public static int NetworkSeed;
+
+        /// <summary>联机模式下 AI 槽位集合（slot index → 是否为 AI）</summary>
+        public static HashSet<int> AISlots = new HashSet<int>();
+
+        /// <summary>判断指定槽位是否为 AI</summary>
+        public static bool IsAISlot(int slot) => AISlots.Contains(slot);
 
         /// <summary>
         /// 玩家 ID → 基地索引映射（长度 3）。
@@ -77,6 +84,7 @@ namespace DoudizhuTower.Gameplay.Systems
             _localPlayerIsLandlord = false;
             IsNetworkMode = false;
             NetworkSeed = 0;
+            AISlots = new HashSet<int>();
         }
 
         /// <summary>

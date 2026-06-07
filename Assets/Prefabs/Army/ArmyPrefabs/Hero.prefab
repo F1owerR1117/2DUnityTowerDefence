@@ -135,6 +135,7 @@ MonoBehaviour:
   _unitHeight: 1
   _canAttackHeight: 1
   _canBlockHeight: 1
+  _detectionRange: 0
   _isBuilding: 0
   _regenPerSecond: 0
   _isBoss: 0
@@ -165,9 +166,11 @@ MonoBehaviour:
   swarmRadius: 2
   swarmDamagePct: 0.5
   enableCharge: 1
-  chargeMultiplier: 4
-  chargeCooldown: 1.6
+  chargeMultiplier: 10
+  chargeCooldown: 0.5
   chargeSpeedMultiplier: 2
+  chargeHeightOverride: 2
+  chargeBlockableByHeight: 2
   enableKingAura: 0
   kingInterval: 5
   kingRadius: 3
@@ -204,6 +207,11 @@ MonoBehaviour:
   splashDamagePct: 0.5
   enableCavalryChase: 0
   cavalryChaseRangeThreshold: 8
+  enableSummoner: 0
+  summonPrefab: {fileID: 0}
+  summonInterval: 8
+  maxSummons: 5
+  summonOnKill: 1
 --- !u!114 &7196836441064280725
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -228,6 +236,7 @@ MonoBehaviour:
   kingAuraClip: {fileID: 0}
   deathExplosionClip: {fileID: 0}
   burnClip: {fileID: 0}
+  summonClip: {fileID: 0}
   tauntClip: {fileID: 0}
   shieldWallClip: {fileID: 0}
   volumeScale: 1
@@ -260,6 +269,12 @@ MonoBehaviour:
   deathExplosionDuration: 1
   burnVFX: {fileID: 0}
   burnDuration: 3
+  summonVFX: {fileID: 0}
+  summonDuration: 1
+  spawnVFX: {fileID: 0}
+  spawnDuration: 0.75
+  spawnSound: {fileID: 0}
+  spawnSoundVolume: 0.8
   shieldVFX: {fileID: 0}
   tauntAuraVFX: {fileID: 0}
   tearVFX: {fileID: 0}
@@ -423,6 +438,7 @@ MonoBehaviour:
   kingAuraClip: {fileID: 0}
   deathExplosionClip: {fileID: 0}
   burnClip: {fileID: 0}
+  summonClip: {fileID: 0}
   tauntClip: {fileID: 0}
   shieldWallClip: {fileID: 0}
   baseController: {fileID: 9100000, guid: d056614372407404cb2a24991b8fe59c, type: 2}

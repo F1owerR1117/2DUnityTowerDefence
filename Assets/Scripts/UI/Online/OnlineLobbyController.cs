@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DoudizhuTower.Gameplay.Network;
 using DoudizhuTower.Gameplay.Systems;
 using TMPro;
@@ -32,6 +33,10 @@ namespace DoudizhuTower.UI.Online
         [SerializeField] private Button leaveRoomButton;
         [SerializeField] private TextMeshProUGUI roomStatusText;
 
+        [Header("AI 与踢人")]
+        [SerializeField] private Button addAIButton;
+        [SerializeField] private Button[] kickButtons; // 每个玩家槽位旁的踢出按钮
+
         [Header("匹配面板")]
         [SerializeField] private TextMeshProUGUI matchmakingStatusText;
         [SerializeField] private TextMeshProUGUI matchmakingTimerText;
@@ -40,8 +45,12 @@ namespace DoudizhuTower.UI.Online
         private INetworkService _net;
         private bool _isReady;
         private bool _isMatching;
+        private bool _isInLobby;
         private float _matchTimeout;
         private const float MATCH_TIMEOUT = 30f;
+
+        private HashSet<int> _aiSlots = new HashSet<int>();
+        private int _mySlot;
 
         private void Start()
         {
@@ -65,6 +74,18 @@ namespace DoudizhuTower.UI.Online
             if (readyButton != null) readyButton.onClick.AddListener(OnToggleReady);
             if (startGameButton != null) startGameButton.onClick.AddListener(OnStartGame);
             if (leaveRoomButton != null) leaveRoomButton.onClick.AddListener(OnLeaveRoom);
+            if (addAIButton != null) addAIButton.onClick.AddListener(OnAddAI);
+
+            // 踢出按钮
+            if (kickButtons != null)
+            {
+                for (int i = 0; i < kickButtons.Length; i++)
+                {
+                    int slot = i; // 闭包捕获
+                    if (kickButtons[i] != null)
+                        kickButtons[i].onClick.AddListener(() => OnKickPlayer(slot));
+                }
+            }
 
             // 匹配按钮
             if (cancelMatchButton != null) cancelMatchButton.onClick.AddListener(OnCancelMatch);
@@ -79,6 +100,7 @@ namespace DoudizhuTower.UI.Online
                 _net.OnPlayerLeft += OnPlayerLeft;
                 _net.OnAllPlayersReady += OnAllPlayersReady;
                 _net.OnConnectionLost += OnConnectionLost;
+                _net.OnCustomEvent += OnCustomEvent;
 
                 // 连接服务器
                 _net.Connect();
@@ -100,11 +122,19 @@ namespace DoudizhuTower.UI.Online
                 _net.OnPlayerLeft -= OnPlayerLeft;
                 _net.OnAllPlayersReady -= OnAllPlayersReady;
                 _net.OnConnectionLost -= OnConnectionLost;
+                _net.OnCustomEvent -= OnCustomEvent;
             }
         }
 
         private void Update()
         {
+            // 持续检测连接就绪状态（OnConnectedToMaster 可能在客户端未完全就绪时触发）
+            if (!_isInLobby && _net != null && _net.IsConnected && !_net.IsInRoom)
+            {
+                _isInLobby = true;
+                UpdateLobbyButtons();
+            }
+
             if (!_isMatching) return;
 
             _matchTimeout -= Time.deltaTime;
@@ -115,12 +145,15 @@ namespace DoudizhuTower.UI.Online
             }
 
             if (_net != null && matchmakingStatusText != null)
-                matchmakingStatusText.text = $"正在匹配... ({_net.CurrentPlayerCount}/3)";
+            {
+                int count = _net.IsInRoom ? _net.CurrentPlayerCount : 1;
+                matchmakingStatusText.text = $"正在匹配... ({count}/3)";
+            }
 
             if (_matchTimeout <= 0f)
             {
                 _isMatching = false;
-                if (_net != null) _net.LeaveRoom();
+                if (_net != null && _net.IsInRoom) _net.LeaveRoom();
                 ShowLobby();
                 Debug.Log("[OnlineLobby] 匹配超时");
             }
@@ -149,6 +182,8 @@ namespace DoudizhuTower.UI.Online
             _matchTimeout = MATCH_TIMEOUT;
             if (matchmakingStatusText != null)
                 matchmakingStatusText.text = "正在匹配... (1/3)";
+            if (matchmakingTimerText != null)
+                matchmakingTimerText.text = $"{MATCH_TIMEOUT}s";
         }
 
         private void SetPanelActive(GameObject activePanel)
@@ -164,10 +199,9 @@ namespace DoudizhuTower.UI.Online
 
         private void UpdateLobbyButtons()
         {
-            bool connected = _net != null && _net.IsConnected;
-            if (soloQueueButton != null) soloQueueButton.interactable = connected;
-            if (createRoomButton != null) createRoomButton.interactable = connected;
-            if (joinRoomButton != null) joinRoomButton.interactable = connected;
+            if (soloQueueButton != null) soloQueueButton.interactable = _isInLobby;
+            if (createRoomButton != null) createRoomButton.interactable = _isInLobby;
+            if (joinRoomButton != null) joinRoomButton.interactable = _isInLobby;
         }
 
         private void OnSoloQueue()
@@ -202,6 +236,7 @@ namespace DoudizhuTower.UI.Online
                 _net.LeaveRoom();
             if (_net != null)
                 _net.Disconnect();
+            _isInLobby = false;
             SceneLoader.LoadMainMenu();
         }
 
@@ -214,14 +249,36 @@ namespace DoudizhuTower.UI.Online
             if (_net == null) return;
 
             string[] names = _net.GetPlayerNames();
+            int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
 
             for (int i = 0; i < playerSlots.Length; i++)
             {
                 if (playerSlots[i] == null) continue;
-                if (i < names.Length)
+                if (_aiSlots.Contains(i))
+                    playerSlots[i].text = $"<color=#FFD700>AI-{i + 1}</color>";
+                else if (i < names.Length)
                     playerSlots[i].text = names[i];
                 else
                     playerSlots[i].text = "<color=#888888>等待中...</color>";
+            }
+
+            // 踢出按钮：仅房主可见，不能踢自己，可踢真人和 AI
+            if (kickButtons != null)
+            {
+                for (int i = 0; i < kickButtons.Length; i++)
+                {
+                    if (kickButtons[i] == null) continue;
+                    bool hasTarget = _aiSlots.Contains(i) || i < names.Length;
+                    bool canKick = _net.IsMasterClient && i != _mySlot && hasTarget;
+                    kickButtons[i].gameObject.SetActive(canKick);
+                }
+            }
+
+            // 添加 AI 按钮：仅房主可见，人数 + AI < 3 时可点击
+            if (addAIButton != null)
+            {
+                addAIButton.gameObject.SetActive(_net.IsMasterClient);
+                addAIButton.interactable = totalCount < 3;
             }
 
             if (roomCodeText != null)
@@ -234,12 +291,12 @@ namespace DoudizhuTower.UI.Online
             }
 
             if (startGameButton != null)
-                startGameButton.interactable = _net.IsMasterClient && _net.CurrentPlayerCount >= 3;
+                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3;
 
             if (roomStatusText != null)
             {
-                if (_net.CurrentPlayerCount < 3)
-                    roomStatusText.text = $"等待玩家加入... ({_net.CurrentPlayerCount}/3)";
+                if (totalCount < 3)
+                    roomStatusText.text = $"等待玩家加入... ({totalCount}/3)";
                 else
                     roomStatusText.text = "所有人已就绪，可以开始";
             }
@@ -256,10 +313,12 @@ namespace DoudizhuTower.UI.Online
         private void OnStartGame()
         {
             if (_net == null || !_net.IsMasterClient) return;
-            if (_net.CurrentPlayerCount < 3) return;
+            int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
+            if (totalCount < 3) return;
 
             // 房主同步跳转到叫分场景
             GameSession.Reset();
+            GameSession.AISlots = new HashSet<int>(_aiSlots);
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }
 
@@ -268,6 +327,7 @@ namespace DoudizhuTower.UI.Online
             if (_net != null && _net.IsInRoom)
                 _net.LeaveRoom();
             _isReady = false;
+            _aiSlots.Clear();
             ShowLobby();
         }
 
@@ -289,6 +349,7 @@ namespace DoudizhuTower.UI.Online
 
         private void OnServerConnected()
         {
+            _isInLobby = true;
             UpdateLobbyButtons();
             Debug.Log("[OnlineLobby] 已连接到服务器");
         }
@@ -296,6 +357,7 @@ namespace DoudizhuTower.UI.Online
         private void OnConnectionLost()
         {
             _isMatching = false;
+            _isInLobby = false;
             ShowLobby();
             Debug.Log("[OnlineLobby] 已断开连接");
         }
@@ -303,6 +365,15 @@ namespace DoudizhuTower.UI.Online
         private void OnRoomJoinSuccess(string roomName)
         {
             _isMatching = false;
+            _isInLobby = false;
+
+            // 计算本机槽位
+            if (_net != null)
+            {
+                var actors = _net.GetPlayerActorNumbers();
+                _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, actors);
+            }
+
             if (roomCodeText != null)
                 roomCodeText.text = $"房间号: {roomName}";
             ShowRoom();
@@ -310,6 +381,15 @@ namespace DoudizhuTower.UI.Online
 
         private void OnRoomJoinError(string message)
         {
+            if (_isMatching)
+            {
+                // 匹配失败（无可用房间），自动创建房间等待别人加入
+                Debug.Log("[OnlineLobby] 未找到可用房间，自动创建房间等待匹配");
+                string code = GenerateRoomCode();
+                _net.CreateRoom(code, 3);
+                return;
+            }
+
             _isMatching = false;
             ShowLobby();
             Debug.LogWarning($"[OnlineLobby] 加入房间失败: {message}");
@@ -328,6 +408,103 @@ namespace DoudizhuTower.UI.Online
         private void OnAllPlayersReady()
         {
             UpdateRoomUI();
+        }
+
+        #endregion
+
+        #region AI 与踢人
+
+        private void OnAddAI()
+        {
+            if (_net == null || !_net.IsMasterClient) return;
+            int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
+            if (totalCount >= 3) return;
+
+            // 找到第一个空槽位
+            int targetSlot = -1;
+            string[] names = _net.GetPlayerNames();
+            for (int i = 0; i < 3; i++)
+            {
+                if (i >= names.Length && !_aiSlots.Contains(i))
+                {
+                    targetSlot = i;
+                    break;
+                }
+            }
+
+            if (targetSlot < 0)
+            {
+                // 无空槽位，找一个 AI 还没占的槽位
+                for (int i = 0; i < 3; i++)
+                {
+                    if (!_aiSlots.Contains(i) && i < names.Length)
+                    {
+                        // 这个槽位有真人，跳过
+                        continue;
+                    }
+                    if (!_aiSlots.Contains(i))
+                    {
+                        targetSlot = i;
+                        break;
+                    }
+                }
+            }
+
+            if (targetSlot < 0) return;
+
+            _net.SendToAll(NetworkProtocol.ADD_AI, targetSlot);
+            ApplyAddAI(targetSlot);
+        }
+
+        private void ApplyAddAI(int slot)
+        {
+            _aiSlots.Add(slot);
+            UpdateRoomUI();
+            Debug.Log($"[OnlineLobby] 添加 AI 到槽位 {slot}");
+        }
+
+        private void OnKickPlayer(int slot)
+        {
+            if (_net == null || !_net.IsMasterClient) return;
+            if (_aiSlots.Contains(slot))
+            {
+                // 踢 AI
+                _net.SendToAll(NetworkProtocol.REMOVE_AI, slot);
+                ApplyRemoveAI(slot);
+            }
+            else
+            {
+                // 踢真人（发送踢出事件给目标玩家）
+                _net.SendToPlayer(slot, NetworkProtocol.KICK_PLAYER, 0);
+            }
+        }
+
+        private void ApplyRemoveAI(int slot)
+        {
+            _aiSlots.Remove(slot);
+            UpdateRoomUI();
+            Debug.Log($"[OnlineLobby] 移除 AI 槽位 {slot}");
+        }
+
+        private void OnCustomEvent(string key, object value, int senderActor)
+        {
+            switch (key)
+            {
+                case NetworkProtocol.ADD_AI:
+                    ApplyAddAI((int)value);
+                    break;
+                case NetworkProtocol.REMOVE_AI:
+                    ApplyRemoveAI((int)value);
+                    break;
+                case NetworkProtocol.KICK_PLAYER:
+                    // 被踢玩家收到此事件，离开房间
+                    Debug.Log("[OnlineLobby] 你被房主踢出房间");
+                    _aiSlots.Clear();
+                    if (_net != null && _net.IsInRoom)
+                        _net.LeaveRoom();
+                    ShowLobby();
+                    break;
+            }
         }
 
         #endregion

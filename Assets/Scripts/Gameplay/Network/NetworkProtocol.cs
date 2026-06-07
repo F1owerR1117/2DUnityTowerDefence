@@ -37,6 +37,11 @@ namespace DoudizhuTower.Gameplay.Network
         public const string GAME_END = "GAME_END";
         public const string PLAYER_LEFT = "PLAYER_LEFT";
 
+        // 房间管理
+        public const string ADD_AI = "ADD_AI";
+        public const string REMOVE_AI = "REMOVE_AI";
+        public const string KICK_PLAYER = "KICK_PLAYER";
+
         // ─── Card 序列化 ───
 
         public static int[] SerializeCards(Card[] cards)

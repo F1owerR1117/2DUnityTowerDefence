@@ -122,17 +122,17 @@ namespace DoudizhuTower.Gameplay.Systems
             var playerHand = new CardHand(handCapacity);
             _mainDeck.Deal(7, playerHand);
 
-            // 为每个 AI 基地创建独立手牌（联机模式下无 AI，跳过）
+            // 为每个 AI 基地创建独立手牌
             var playerBaseRef = GetPlayerBase();
             var aiHands = new Dictionary<Component, CardHand>();
             if (!_isNetworkMode)
             {
+                // 单机模式：非玩家操控的基地 → AI
                 foreach (var baseBldg in baseBuildings)
                 {
                     if (baseBldg == null) continue;
                     var cu = baseBldg.GetComponent<CardUnit>();
                     if (cu == null) continue;
-                    // 非玩家操控的基地 → AI（通过 playerBaseIndex 精确判断，而非阵营匹配）
                     bool isPlayerBase = (baseBldg == playerBaseRef);
                     if (!isPlayerBase && baseBldg.GetComponent<BuildingAI>() != null)
                     {
@@ -140,6 +140,21 @@ namespace DoudizhuTower.Gameplay.Systems
                         _mainDeck.Deal(7, aiHand);
                         aiHands[baseBldg] = aiHand;
                     }
+                }
+            }
+            else
+            {
+                // 联机模式：为 AI 槽位的基地创建 AI 手牌
+                foreach (var aiSlot in GameSession.AISlots)
+                {
+                    if (aiSlot < 0 || aiSlot >= GameSession.PlayerBaseMapping.Length) continue;
+                    int baseIdx = GameSession.PlayerBaseMapping[aiSlot];
+                    if (baseIdx < 0 || baseIdx >= baseBuildings.Length) continue;
+                    var baseBldg = baseBuildings[baseIdx];
+                    if (baseBldg == null) continue;
+                    var aiHand = new CardHand(17);
+                    _mainDeck.Deal(7, aiHand);
+                    aiHands[baseBldg] = aiHand;
                 }
             }
 
@@ -177,15 +192,12 @@ namespace DoudizhuTower.Gameplay.Systems
                 }
             }
 
-            // ── Step 5a: AI 对手初始化（联机模式跳过）───
-            if (!_isNetworkMode)
+            // ── Step 5a: AI 对手初始化 ───
+            foreach (var kvp in aiHands)
             {
-                foreach (var kvp in aiHands)
-                {
-                    var aiCU = kvp.Key.GetComponent<CardUnit>();
-                    var identity = aiCU != null && aiCU.IsLandlord ? Identity.Landlord : Identity.FarmerA;
-                    InjectBuildingAI(kvp.Key, kvp.Value, econConfig, battleManager, identity);
-                }
+                var aiCU = kvp.Key.GetComponent<CardUnit>();
+                var identity = aiCU != null && aiCU.IsLandlord ? Identity.Landlord : Identity.FarmerA;
+                InjectBuildingAI(kvp.Key, kvp.Value, econConfig, battleManager, identity);
             }
 
             // ── Step 6: 焊接 UI ─────────────────────
@@ -405,7 +417,7 @@ namespace DoudizhuTower.Gameplay.Systems
             if (pauseMenu != null)
             {
                 pauseMenu.OnRestartRequested += SceneLoader.RestartGame;
-                pauseMenu.OnQuitRequested += SceneLoader.QuitGame;
+                pauseMenu.OnQuitRequested += SceneLoader.LoadMainMenu;
                 _wiredPauseMenu = pauseMenu;
             }
 
@@ -428,6 +440,7 @@ namespace DoudizhuTower.Gameplay.Systems
                 _wiredGameEndedHandler = onGameEnded;
                 victoryPanel.OnRestartRequested += SceneLoader.RestartGame;
                 victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
+                victoryPanel.OnNextLevelRequested += SceneLoader.LoadNextLevel;
                 _wiredVictoryPanel = victoryPanel;
             }
 
@@ -532,13 +545,14 @@ namespace DoudizhuTower.Gameplay.Systems
             if (_wiredPauseMenu != null)
             {
                 _wiredPauseMenu.OnRestartRequested -= SceneLoader.RestartGame;
-                _wiredPauseMenu.OnQuitRequested -= SceneLoader.QuitGame;
+                _wiredPauseMenu.OnQuitRequested -= SceneLoader.LoadMainMenu;
                 _wiredPauseMenu = null;
             }
             if (_wiredVictoryPanel != null)
             {
                 _wiredVictoryPanel.OnRestartRequested -= SceneLoader.RestartGame;
                 _wiredVictoryPanel.OnReturnToMenuRequested -= SceneLoader.LoadMainMenu;
+                _wiredVictoryPanel.OnNextLevelRequested -= SceneLoader.LoadNextLevel;
                 _wiredVictoryPanel = null;
             }
             if (_wiredGameEndedHandler != null && battleManager != null)
