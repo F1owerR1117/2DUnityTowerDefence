@@ -126,6 +126,20 @@ namespace DoudizhuTower.Gameplay.Entities
         public virtual float CurrentATK => Stats.ATK; // 阶段一无 buff 修正
         public bool IsLandlord => _isLandlord;
 
+        /// <summary>运行时强制设置阵营（供 GameBootstrapper 纠正预置建筑的 Inspector 默认值）</summary>
+        public void SetLandlord(bool isLandlord) => _isLandlord = isLandlord;
+
+        /// <summary>运行时设置单位 ID（由 BattleManager.RegisterUnit 调用，保证全局唯一）</summary>
+        public void SetUnitId(int id) => _unitId = id;
+
+        /// <summary>治疗（不超过 MaxHP）</summary>
+        public void Heal(float amount)
+        {
+            if (!IsAlive || amount <= 0f) return;
+            _currentHP = Mathf.Min(_currentHP + amount, Stats.HP);
+            OnHPChanged?.Invoke(_unitId, _currentHP);
+        }
+
         // 目标
         public CardUnit Target { get; protected set; }
 
@@ -148,6 +162,9 @@ namespace DoudizhuTower.Gameplay.Entities
 
         /// <summary>剩余伤害吸收量（诱饵护盾/帝王盾），扣到 0 后正常扣血</summary>
         public float DamageAbsorbRemaining { get; set; }
+
+        /// <summary>不可选取状态（BossSkillSystem 施法期间设置，免疫所有伤害）</summary>
+        public bool Invulnerable { get; set; }
 
         /// <summary>眩晕计时器（>0 时无法行动），由骑兵等技能设置</summary>
         public float StunTimer { get; set; }
@@ -325,6 +342,7 @@ namespace DoudizhuTower.Gameplay.Entities
             _animDone = false;
             _hitCountDealt = 0;
             _projectileSpawned = false;
+            _attackStateTimer = 0f;
             if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             SetAnimSpeed(1f);
             UpdateAnimatorState(0); // 回到 Idle
@@ -333,6 +351,7 @@ namespace DoudizhuTower.Gameplay.Entities
         private Coroutine _hitCoroutine;
         private bool _animDone;
         private bool _projectileSpawned;
+        private float _attackStateTimer;
 
         /// <summary>首帧安全阀：出生第一帧强制索敌，跳过移动，防止盲跑</summary>
         private bool _needsFirstFrameSearch;
@@ -407,16 +426,27 @@ namespace DoudizhuTower.Gameplay.Entities
             // 确保预置建筑的 BuildingCollider 不为 null
             if (_collider == null)
                 _collider = GetComponentInChildren<Collider2D>();
+
+            // 兜底修复：Unity 序列化 [Flags] 枚举组合默认值时可能存为 0（Nothing），
+            // 导致单位无法攻击/阻挡任何高度。恢复为合理默认值。
+            if (_unitHeight == 0) _unitHeight = UnitHeight.Ground;
+            if (_canAttackHeight == 0) _canAttackHeight = UnitHeight.Ground | UnitHeight.Air;
+            if (_canBlockHeight == 0) _canBlockHeight = UnitHeight.Ground | UnitHeight.Air;
         }
 
         public virtual void Initialize(int unitId, CardRank rank, Lane lane, bool isLandlord)
         {
+            bool wasInitialized = _initialized;
+            _initialized = true;
             _unitId = unitId;
             _lane = lane;
             _isLandlord = isLandlord;
 
+            if (wasInitialized)
+                Debug.Log($"[CardUnit] {name}(ID={unitId}) 被重复 Initialize，isLandlord={isLandlord}");
+
             _spriteRenderer = GetComponentInChildren<SpriteRenderer>();
-            _animator = GetComponentInChildren<Animator>();
+            _animator = GetComponentInChildren<Animator>(true);
             _simpleAnimator = GetComponentInChildren<SimpleAnimator>();
             _collider = GetComponentInChildren<Collider2D>();
 
@@ -470,6 +500,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
             // 1. 阵营判定 + 基础状态初始化（直接用 Inspector 中的 _isLandlord 字段）
             Initialize(0, CardRank.Three, Lane.None, _isLandlord);
+            Debug.Log($"[CardUnit] {name} Start() 未被 Initialize 预调用，使用 Inspector 值 _isLandlord={_isLandlord}。请检查是否为预置建筑。");
 
             // 2. 血条激活（与 UnitFactory.Spawn 第 70-75 行相同的模式）
             //    血条子物体在预制体中默认 inactive，预置兵种需要在此显式激活并绑定
@@ -596,27 +627,46 @@ namespace DoudizhuTower.Gameplay.Entities
             // ── 攻击中 → 等待动画和伤害都完成 ──
             if (_isAttacking)
             {
-                // 嘲讽可以打断当前攻击
-                var tauntDuringAttack = FindNearestTauntSourceFor(this);
-                if (tauntDuringAttack != null)
+                // 超时安全阀：攻击状态超过 AttackInterval×3 秒未完成 → 强制重置
+                if (_attackStateTimer > Stats.AttackInterval * 3f)
                 {
+                    Debug.LogWarning($"[AttackStuck] {name} 攻击超时重置: hitDealt={_hitCountDealt}/{Stats.HitCount}, animDone={_animDone}, target={_attackTarget != null}");
                     InterruptAttack();
-                    Target = tauntDuringAttack;
                 }
                 else
                 {
-                    if (IsAttackAnimDone()) _animDone = true;
+                    _attackStateTimer += Time.deltaTime;
 
-                    if (_animDone && _hitCountDealt >= Stats.HitCount)
+                    // 嘲讽可以打断当前攻击（仅当嘲讽目标与当前攻击目标不同时才打断）
+                    var tauntDuringAttack = FindNearestTauntSourceFor(this);
+                    if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
                     {
-                        _isAttacking = false;
-                        _attackTarget = null;
-                        SetAnimSpeed(1f);
-                        UpdateAnimatorState(0);
-                        _justFinishedAttack = true;
+                        InterruptAttack();
+                        Target = tauntDuringAttack;
                     }
-                    return;
+                    // 建筑攻击期间目标超出射程 → 中断攻击，防止空挥
+                    else if (_attackTarget == null && CurrentTarget != null
+                        && (CurrentTarget.IsDestroyed || GetEdgeDistance(CurrentTarget) > Stats.Range))
+                    {
+                        InterruptAttack();
+                        CurrentTarget = null;
+                    }
+                    else
+                    {
+                        if (IsAttackAnimDone()) _animDone = true;
+
+                        if (_animDone && _hitCountDealt >= Stats.HitCount)
+                        {
+                            _isAttacking = false;
+                            _attackTarget = null;
+                            _attackStateTimer = 0f;
+                            SetAnimSpeed(1f);
+                            UpdateAnimatorState(0);
+                            _justFinishedAttack = true;
+                        }
+                    }
                 }
+                return;
             }
 
             // ── 攻击刚结束 → 跳过 1 帧让 Animator 回到 Idle，再重新索敌 ──
@@ -694,6 +744,12 @@ namespace DoudizhuTower.Gameplay.Entities
             bool hasTauntTarget = Target != null && Target.IsTauntSource;
             if (!hasTauntTarget && CurrentTarget != null && !CurrentTarget.IsDestroyed)
             {
+                // 防御：若目标建筑是友方则清除（防止因初始化时序导致误锁）
+                if (CurrentTarget is CardUnit targetCU && targetCU.IsLandlord == IsLandlord)
+                {
+                    CurrentTarget = null;
+                    return;
+                }
                 if (GetEdgeDistance(CurrentTarget) <= Stats.Range)
                 {
                     if (!_isAttacking)

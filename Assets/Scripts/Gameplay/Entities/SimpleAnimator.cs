@@ -37,6 +37,16 @@ namespace DoudizhuTower.Gameplay.Entities
         [Tooltip("召唤")]
         public AnimationClip summonClip;
 
+        [Header("-- BOSS 技能动画 --")]
+        [Tooltip("冲刺")]
+        public AnimationClip dashClip;
+        [Tooltip("BOSS 技能 1")]
+        public AnimationClip bossSkill1Clip;
+        [Tooltip("BOSS 技能 2")]
+        public AnimationClip bossSkill2Clip;
+        [Tooltip("BOSS 技能 3")]
+        public AnimationClip bossSkill3Clip;
+
         [Header("-- Bool 特效动画 --")]
         [Tooltip("嘲讽")]
         public AnimationClip tauntClip;
@@ -57,7 +67,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void Awake()
         {
-            _animator = GetComponent<Animator>();
+            _animator = GetComponentInChildren<Animator>(true);
             if (_animator == null)
                 _animator = gameObject.AddComponent<Animator>();
 
@@ -90,6 +100,10 @@ namespace DoudizhuTower.Gameplay.Entities
                 { "deathexplosion", deathExplosionClip },
                 { "burn", burnClip },
                 { "summon", summonClip },
+                { "dash", dashClip },
+                { "bossskill1", bossSkill1Clip },
+                { "bossskill2", bossSkill2Clip },
+                { "bossskill3", bossSkill3Clip },
                 { "taunt", tauntClip },
                 { "shieldwall", shieldWallClip }
             };
@@ -116,7 +130,14 @@ namespace DoudizhuTower.Gameplay.Entities
             }
 
             overrideCtrl.ApplyOverrides(overrides);
+
+            // 替换控制器前断电 Animator，防止重置状态机时越狱到 Attack
+            _animator.enabled = false;
             _animator.runtimeAnimatorController = overrideCtrl;
+            _animator.SetInteger("State", 0);
+            _animator.enabled = true;
+            _animator.Play("Idle", 0, 0f);
+            _animator.Update(0f);
         }
 
         /// <summary>

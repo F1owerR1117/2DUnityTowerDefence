@@ -318,7 +318,29 @@ namespace DoudizhuTower.UI.Online
 
             // 房主同步跳转到叫分场景
             GameSession.Reset();
+
+            // 将 AI 槽位从位置索引转换为 actor-number 排序后的槽位索引
+            // 大厅的 _aiSlots 基于玩家位置（playerSlots 数组索引），
+            // 叫分管理器的槽位基于 actor number 排序后的位置
+            var actorNumbers = _net.GetPlayerActorNumbers();
+            var convertedSlots = new HashSet<int>();
+            string[] names = _net.GetPlayerNames();
+            int realIdx = 0;
+            for (int pos = 0; pos < 3; pos++)
+            {
+                if (_aiSlots.Contains(pos)) continue; // AI 槽位，跳过
+                if (realIdx < names.Length)
+                {
+                    // 这是真人玩家的位置，找到它在 actorNumbers 中的索引
+                    int actorNum = _net.GetPlayerActorNumbers()[realIdx];
+                    int sortedIdx = NetworkProtocol.GetPlayerSlot(actorNum, actorNumbers);
+                    realIdx++;
+                    // 真人玩家的 sortedIdx 不是 AI，不需要转换
+                }
+            }
+            // 直接用位置索引作为 AI 槽位（与叫分管理器的 _currentTurnSlot 一致）
             GameSession.AISlots = new HashSet<int>(_aiSlots);
+
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }
 

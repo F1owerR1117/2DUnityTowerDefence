@@ -64,7 +64,11 @@ namespace DoudizhuTower.Gameplay.Battle
             // 获取 DomainSystem
             _domainSystem = FindFirstObjectByType<DomainSystem>();
 
+            Debug.Log($"[BuildingAI] {name} Initialize: hand={hand.Count}, gold={economy.CurrentGold}, bm={battleManager != null}, enabled={enabled}");
+
         }
+
+        private bool _initLogged;
 
         private void Start()
         {
@@ -73,9 +77,39 @@ namespace DoudizhuTower.Gameplay.Battle
                 Debug.LogError("[BuildingAI] 需要 CardUnit(_isBuilding/_isBoss) 组件");
         }
 
+        private void OnEnable()
+        {
+            Debug.Log($"[BuildingAI] {name} OnEnable");
+        }
+
         private void Update()
         {
-            if (Hand == null || Hand.Count == 0 || Economy == null) return;
+            if (Hand == null || Hand.Count == 0 || Economy == null)
+            {
+                if (!_initLogged)
+                {
+                    _initLogged = true;
+                    Debug.LogWarning($"[BuildingAI] {name} 等待初始化: Hand={Hand != null}(count={Hand?.Count ?? -1}), Economy={Economy != null}, bm={_battleManager != null}, baseCtl={_baseCtl != null}");
+                }
+                // 仍然更新经济和摸牌，即使手牌为空
+                if (Economy != null)
+                    Economy.UpdateEconomy(Time.deltaTime);
+                if (Hand != null && _deck != null)
+                {
+                    _drawTimer += Time.deltaTime;
+                    if (_drawTimer >= _drawInterval)
+                    {
+                        _drawTimer = 0f;
+                        if (!Hand.IsFull)
+                        {
+                            var card = _deck.Draw();
+                            Hand.Add(card);
+                            Debug.Log($"[BuildingAI] {name} 摸牌: hand={Hand.Count}");
+                        }
+                    }
+                }
+                return;
+            }
 
             // 自动摸牌
             _drawTimer += Time.deltaTime;
@@ -130,7 +164,12 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void MakeDecision()
         {
-            if (_battleManager == null || _baseCtl == null) return;
+            if (_battleManager == null || _baseCtl == null)
+            {
+                Debug.LogWarning($"[BuildingAI] {name} MakeDecision 阻止: bm={_battleManager != null}, baseCtl={_baseCtl != null}");
+                return;
+            }
+            Debug.Log($"[BuildingAI] {name} MakeDecision: hand={Hand.Count}, gold={Economy.CurrentGold:F0}");
 
             // ── 领域/反击决策 ──
             if (_domainSystem != null)
@@ -198,7 +237,12 @@ namespace DoudizhuTower.Gameplay.Battle
                 }
             }
 
-            if (playable.Count == 0) { _decisionTimer = 0f; return; }
+            if (playable.Count == 0)
+            {
+                Debug.LogWarning($"[BuildingAI] {name} 无有效牌型: cards={n}, evaluated={totalEvaluated}");
+                _decisionTimer = 0f;
+                return;
+            }
 
             // 地主有待激活领域时，优先选非单张牌型（单张无法开启领域）
             bool preferNonSingle = _isLandlord && _domainSystem != null && _domainSystem.IsDomainPending;
@@ -227,6 +271,7 @@ namespace DoudizhuTower.Gameplay.Battle
                     _deck.Discard(entry.cards);
 
                     var routeGroup = GetComponent<RouteGroup>();
+                    Debug.Log($"[BuildingAI] {name} 出牌: {entry.result.Type}, cost={entry.cost}, route={routeGroup?.CurrentRoute != null}, hand剩余={Hand.Count}");
                     _battleManager.DeployCards(entry.cards, entry.result, routeGroup, _baseCtl);
 
                     // 通知领域系统 AI 出牌（用于触发要不起领域/反制护盾）
@@ -239,6 +284,7 @@ namespace DoudizhuTower.Gameplay.Battle
                     return;
                 }
             }
+            Debug.LogWarning($"[BuildingAI] {name} 所有牌型费用不足: gold={Economy.CurrentGold:F0}, playable={playable.Count}");
             _decisionTimer = 0f;
         }
 

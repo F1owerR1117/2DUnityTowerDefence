@@ -72,6 +72,15 @@ namespace DoudizhuTower.Core.Economy
         }
 
         /// <summary>
+        /// 强制设置金币（联机同步用，跳过校验）
+        /// </summary>
+        public void SetGold(float amount)
+        {
+            CurrentGold = amount;
+            OnGoldChanged?.Invoke(CurrentGold);
+        }
+
+        /// <summary>
         /// 设置回金速度
         /// </summary>
         public void SetIncomeRate(float rate)

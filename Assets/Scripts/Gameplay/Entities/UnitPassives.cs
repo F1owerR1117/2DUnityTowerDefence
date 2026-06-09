@@ -181,7 +181,7 @@ namespace DoudizhuTower.Gameplay.Entities
             if (_owner == null) return;
 
             // 获取 UnitAudio 组件（如果存在）
-            _unitAudio = _owner.GetComponent<UnitAudio>();
+            _unitAudio = _owner.GetComponentInChildren<UnitAudio>();
             // 获取 UnitVFX 组件（如果存在）
             _unitVFX = _owner.GetComponent<UnitVFX>();
 
@@ -691,7 +691,10 @@ namespace DoudizhuTower.Gameplay.Entities
             _owner.TriggerAnim("Splash");
             _unitAudio?.PlaySplash();
 
+            // 从攻击者到目标碰撞箱的最近点作为溅射圆心，避免大型建筑溅射不到边缘单位
             Vector3 center = target.transform.position;
+            if (target.TryGetComponent<Collider2D>(out var col))
+                center = col.ClosestPoint(_owner.transform.position);
 
             // 播放溅射爆炸特效
             _unitVFX?.PlaySplash(center, splashRadius);

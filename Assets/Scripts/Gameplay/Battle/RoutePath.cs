@@ -15,12 +15,16 @@ namespace DoudizhuTower.Gameplay.Battle
         public Color lineColor = Color.green;
         public float waypointSize = 0.3f;
 
+        [Tooltip("启用后路径点坐标在 Awake 时锁定，运行时不受父物体位移影响。若路径点需跟随移动物体（如 BOSS），请取消勾选。")]
+        [SerializeField] private bool _cachePositions = true;
+
         // 运行时缓存的世界坐标，防止父物体移动导致路径漂移
         private Vector3[] _cachedPositions;
 
         private void Awake()
         {
-            CachePositions();
+            if (_cachePositions)
+                CachePositions();
         }
 
         /// <summary>锁定当前路径点的世界坐标，运行时不受父物体位移影响</summary>

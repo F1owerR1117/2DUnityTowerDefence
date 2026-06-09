@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v5.0
+# DoudizhuTower — 架构落地规范 v5.5
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -40,16 +40,18 @@
 | `HandArea` | 手牌 UI | UI/Hand | 持有 CardHand 引用的 MonoBehaviour |
 | `CardTypeDetector` | 牌型检测器 | Core/Card | 核心算法，零 Unity 依赖 |
 | `EconomySystem` | 经济系统(逻辑) | Core/Economy | 纯 C#，零 MonoBehaviour |
-| `EconomyManager` | 经济系统(焊接) | Gameplay/Systems | 桥接 Core → UI 事件 |
+| `EconomyManager` | 经济系统(焊接) | Gameplay/Systems | 桥接 Core → UI 事件 + 骤死期双倍回金 |
 | `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑 |
-| `UnitPassives` | 兵种被动 | Gameplay/Entities | 15 种通用被动，Inspector 勾选启用 |
-| `BurnZone` | 燃烧区域 | Gameplay/Entities | 独立类，UnitPassives 和 BattleManager 共用 |
-| `BattleManager` | 战场管理器 | Gameplay/Battle | 主循环 + 牌型生成 + `TriggerDefeat()` internal（供 GameBootstrapper 计时器回调） |
+| `UnitPassives` | 兵种被动 | Gameplay/Entities | 16 种通用被动（含召唤师），Inspector 勾选启用。溅射以 ClosestPoint 为圆心，召唤物继承召唤师 FollowPath |
+| `BurnZone` | 燃烧区域 | Gameplay/Entities | UnitPassives 内嵌类（`public class BurnZone : MonoBehaviour`），UnitPassives 和 BattleManager 共用 |
+| `BattleManager` | 战场管理器 | Gameplay/Battle | 主循环 + 牌型生成 + 全局唯一 UnitId 分配（`_globalUnitId` + `Dictionary<int, CardUnit>` O(1) 查找）+ `TriggerDefeat()` internal |
 | `SpawnPool` | 出兵池 | Gameplay/Battle | 每基地独立预制体映射（8 组 ×13 槽，含 Tooltip 注释） |
-| `BuildingAI` | 建筑 AI | Gameplay/Battle | 挂载到建筑上独立运行，集成领域决策 + 暂存槽自动取牌 |
-| `Projectile` | 投射物 | Gameplay/Entities | 子弹/箭矢（支持抛物线和爆炸）|
+| `BuildingAI` | 建筑 AI | Gameplay/Battle | 挂载到建筑/BOSS 上独立运行，集成领域决策 + 暂存槽自动取牌，`Update` 在空手牌时仍执行摸牌逻辑 |
+| `Projectile` | 投射物 | Gameplay/Entities | 子弹/箭矢（线性+抛物线弹道，ClosestPoint 边缘命中，`_explosionRadius>0` 时以命中点为圆心范围爆炸，全额伤害）|
 | `IBuildingTarget` | 可攻击目标接口 | Gameplay/Battle | CardUnit(_isBuilding) 实现，兵种攻击目标队列使用 |
-| `FactionTag` | 阵营标签 | Gameplay/Battle | 含 FactionChoice 枚举（Farmer/LandLord）|
+| `Identity` | 阵营身份枚举 | Core/Battle | SoldierStats.cs 内嵌枚举（FarmerA/FarmerB/Landlord），取代原 FactionTag |
+| `UnitHeight` | 单位高度枚举 | Gameplay/Entities | CardUnit.cs 内嵌 `[Flags]` 枚举（Ground/Air），用于高度系统判定（CanAttackHeight/CanBlockHeight） |
+| `DamageType` | 伤害类型枚举 | Core/Battle | SoldierStats.cs 内嵌枚举（Physical/Special/Bomb/Burn/True） |
 | `HeroType` | 英雄类型 | Core/Battle | 战前 5 选 1 |
 | `DamageFloatText` | 伤害飘字 | UI/Floating | 世界空间 TMP 飘字组件 |
 | `FloatingTextPool` | 飘字对象池 | UI/Floating | 自动订阅 BattleManager.OnUnitSpawned |
@@ -60,8 +62,9 @@
 | `DomainSystem` | 领域系统 | Gameplay/Battle | 要不起领域 + 反制护盾 + 炸弹破封 + 封印手牌牌型 |
 | `SealRuleEngine` | 封印规则引擎 | Gameplay/Battle | 判定手牌中可反制指定牌型的卡牌 |
 | `CardTypeCompare` | 牌型比较器 | Gameplay/Battle | HasCounterInHand + CanCounter 两张牌型对比 |
-| `BossController` | BOSS 控制器 | Gameplay/Battle | BOSS 生命周期（定时/建筑摧毁触发），支持召唤师能力 |
-| `UnitAudio` | 兵种音频 | Gameplay/Entities | 订阅 CardUnit 事件，按 Clip 并发限制 + 屏幕可见性裁剪，委托 AudioManager 播放 |
+| `BossController` | BOSS 控制器 | Gameplay/Battle | BOSS 生命周期（OnStart/OnTimer/OnBuildingDestroyed 触发），初始隐藏+Inject 恢复显示，阵营自动纠正，召唤师能力，BuildingAI 保护 |
+| `BossSkillSystem` | BOSS 技能系统 | Gameplay/Entities | HP 阶段/定时/击杀触发，6 种效果（AoeDamage/AoeStun/Heal/Knockback/Buff/Dash），施法不可选取+清除 CC，冲刺用碰撞箱宽度扫描 |
+| `UnitAudio` | 兵种音频 | Gameplay/Entities | 挂载子物体（解耦），`GetComponentInParent<CardUnit>` 获取引用，订阅事件 + 按 Clip 并发限制 + 屏幕可见性裁剪 |
 | `UnitVFX` | 兵种特效 | Gameplay/Entities | 调用 VFXManager 对象池生成粒子特效 |
 | `AudioManager` | 音频管理器 | Gameplay/Systems | 单例，4 通道优先级音效（UI/CombatHigh/Combat/CombatLow）+ BGM，DontDestroyOnLoad |
 | `VFXManager` | 特效管理器 | Gameplay/Systems | 单例粒子特效对象池，DontDestroyOnLoad |
@@ -85,13 +88,16 @@
 | `BiddingManager` | 叫分期控制器 | UI/Bidding | 叫分场景主控：倒计时 + AI 叫分 + 玩家叫分 + 跳转 |
 | `BiddingConfig` | 叫分配置 | Config | ScriptableObject，可配叫分时长/AI 策略/超时处理 |
 | `MainMenuController` | 主菜单控制器 | UI | 单人/对战/商店/图鉴/设置/退出按钮管理 |
-| `LevelConfig` | 关卡配置 | Config | ScriptableObject，存储关卡名称/描述/缩略图/场景名/难度/解锁状态 |
+| `LevelConfig` | 关卡配置 | Config | ScriptableObject，存储关卡名称/描述/缩略图/场景名/难度/解锁状态/排序权重 |
 | `LevelCard` | 关卡卡片 | UI/LevelSelect | 单个关卡卡片组件（缩略图 + 信息 + 动态缩放） |
 | `LevelSelectController` | 关卡选择控制器 | UI/LevelSelect | 轮播式关卡选择（中心最大，两侧缩小，拖拽滑动 + 吸附） |
 | `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API |
 | `PhotonService` | Photon 实现 | Gameplay/Network | 基于 Photon PUN 2 的 INetworkService 实现（含断线自动重连） |
 | `NetworkManager` | 网络管理器 | Gameplay/Network | 单例，持有 INetworkService 引用，DontDestroyOnLoad |
 | `OnlineLobbyController` | 联机大厅控制器 | UI/Online | 联机模式选择（单排/创建房间/加入房间）+ 房间管理 |
+| `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 3 人网络轮流叫分，Master 端轮次管理 + AI 槽位支持 + 断线处理 |
+| `BiddingSceneBootstrap` | 叫分场景引导 | UI/Bidding | 检测联机房间状态，自动切换单机/联机叫分管理器 |
+| `NetworkProtocol` | 网络协议常量 | Gameplay/Network | 事件 Key 定义 + Card/CardTypeResult 序列化 + 玩家槽位工具 |
 
 ## 实施状态总览
 
@@ -101,25 +107,25 @@
 |:---|:---|:---|
 | 领域系统（要不起领域 + 反制护盾） | DomainSystem + SealRuleEngine + CardTypeCompare + DomainUIController | Gameplay/Battle/ + UI/Battlefield/ |
 | 传送飞筒 + 暂存槽 | LaunchTubeUI（拖拽传牌，6s CD） + TempSlotUI（玩家暂存槽/队友只读暂存槽，队友 AI 自动取牌） | UI/Battlefield/ |
-| BOSS 系统 | BossController（OnStart/OnTimer/OnBuildingDestroyed 触发，召唤师能力） | Gameplay/Battle/ |
+| BOSS 系统 | BossController（生命周期+召唤师）+ BossSkillSystem（HP 阶段/定时/击杀触发，6 种效果，冲刺+不可选取+清除 CC）+ 阵营自动纠正+初始隐藏 | Gameplay/Battle/ + Gameplay/Entities/ |
 | 兵种音频系统 | UnitAudio + AudioManager 单例（4 通道优先级音效 + BGM） | Gameplay/Entities/ + Gameplay/Systems/ |
 | 兵种特效系统 | UnitVFX + VFXManager 单例对象池 | Gameplay/Entities/ + Gameplay/Systems/ |
 | 兵种点选系统 | UnitSelector + UnitInfoPanel（世界空间信息面板） | Gameplay/Entities/ + UI/Panels/ |
 | 英雄配置外置 | HeroConfig ScriptableObject 可配参数取代硬编码 HeroStats | Config/ |
 | 按钮音效/特效 | ButtonAudio + ButtonEffect + CoolDownEffect | UI/Audio/ + UI/Components/ |
 | 被动系统重构 | CardTypePassives 删除，全部功能移入 UnitPassives + SpawnPool | UnitPassives.cs |
-| 15 种通用被动 | 嘲讽/点杀/人海/冲锋/光环/盾墙/护盾/减速/眩晕/撕裂/震波/燃烧/溅射/死爆/骑兵追击 | UnitPassives.cs |
-| SpawnPool 预制体数组 | 7 组 ×13 槽（诱饵/骑兵/连对/炸弹/坦克/无人机/轰炸机） | SpawnPool.cs |
+| 16 种通用被动 | 嘲讽/点杀/人海/冲锋/光环/盾墙/护盾/减速/眩晕/撕裂/震波/燃烧/溅射/死爆/骑兵追击/召唤师 | UnitPassives.cs |
+| SpawnPool 预制体数组 | 8 组 ×13 槽（基础/诱饵/骑兵/连对/炸弹/坦克/无人机/轰炸机） | SpawnPool.cs |
 | 四带二无人机 | 按点数区分型号移除，改为对应预制体属性 | SpawnPool.cs |
 | 坦克硬编码 Buff 移除 | BuffBomb/BuffConsecutivePair/BuffFourWithTwoTank 全部删除 | BattleManager.cs |
 | 飞机轰炸重做 | 只轰炸同路线，参数可调，CalcBombType 删除 | BattleManager.cs |
-| 弹型效果 | 从 BattleManager 移入 Projectile 作为子弹通用特效 | Projectile.cs |
+| 弹型效果 | 从 BattleManager 移入 Projectile 作为子弹通用特效（爆炸以命中点为圆心，全额伤害） | Projectile.cs |
 | 英雄独特被动 | 剑圣/铁卫/神射/术士/灵骑全部实现 | BattleManager.cs |
 | 战斗飘字（伤害数字） | DamageFloatText + FloatingTextPool 对象池 | UI/Floating/ |
 | IBuildingTarget 接口 | CardUnit(_isBuilding) 实现，统一攻击目标接口 | Gameplay/Battle/ |
 | 动态基地列表 | 任意数量建筑拖入 baseBuildings 数组 | BattleManager + GameBootstrapper |
-| 阵营系统重构 | FactionTag 使用 Farmer/LandLord 二值枚举 | FactionTag.cs |
-| 弹道边缘瞄准 | Projectile.GetTargetPos() 使用 collider.bounds.center | Projectile.cs |
+| 阵营系统重构 | Identity 枚举（FarmerA/FarmerB/Landlord）定义在 SoldierStats.cs 中 | SoldierStats.cs |
+| 弹道边缘瞄准 | Projectile.GetTargetPos() 使用 Collider2D.ClosestPoint 瞄准碰撞箱边缘 | Projectile.cs |
 | ClosestPoint 索敌 + GetEdgeDistance | 统一边缘距离计算，支持任何形状碰撞箱 | CardUnit.cs |
 | 对象池血条重置 | UnitHealthBar.OnDisable 解绑 + 重置 _initialized | UnitHealthBar.cs |
 | 预置兵种初始化 | CardUnit.Start 自动初始化 + 激活血条 | CardUnit.cs |
@@ -144,8 +150,8 @@
 | B13: 未识别牌型错误日志 | `DeployCards` default 分支输出 `Debug.LogError` 而非静默降级 | BattleManager.cs |
 | B14: GameBootstrapper 空值保护 | `handArea` 为 null 时 `return` 防 NullReferenceException | GameBootstrapper.cs |
 | B15: 初始化扫描条件化 | `Initialize` 中 `FindObjectsByType` 仅在 `usePhysicsPush=true` 时执行 | CardUnit.cs |
-| TryAttack 冷却期防罚站 | `TryAttack` 返回 `bool`，`OnUpdate` Step 1 只在真攻击时站桩 | CardUnit.cs |
-| OnUpdate 冷却期行军 | Step 1 冷却期不 `return`，Step 2 加 `!IsTargetInRange` 防冲突 | CardUnit.cs |
+| TryAttack 冷却期防罚站 | `TryAttack` 通过 `_isAttacking` 标志防止重复攻击，冷却期允许继续行军 | CardUnit.cs |
+| OnUpdate 攻击冷却站桩 | `_isAttacking=true` 时 OnUpdate 顶部直接 `return`（站桩等冷却），嘲讽可打断 | CardUnit.cs |
 | 纯数学步进架构 | 全面移除 Rigidbody2D 依赖，所有移动改为 `transform.position` / `Translate` / `MoveTowards` | CardUnit.cs |
 | 碰撞箱边缘检测统一 | 新增 `GetUnitEdgeDistance(CardUnit)` 统一 unit-to-unit 边缘距离，`bounds.Intersects` + ClosestPoint 退化兜底 | CardUnit.cs |
 | 碰撞箱阻挡系统 | `IsBlockedAt(Vector3)` + `_blockBuffer[32]` + `Physics2D.OverlapBox`，移动前预判敌方碰撞箱重叠即停止 | CardUnit.cs |
@@ -158,7 +164,7 @@
 | UnitAudio 屏幕可见性裁剪 | Viewport 可见性检查，屏幕外兵种不播放攻击/技能音效 | UnitAudio.cs |
 | UnitAudio 配额泄漏修复 | `OnDisable` 取消协程 + 立即归还 `_pendingClips` 配额 | UnitAudio.cs |
 | 领域/反制护盾被破解音效 | `domainBrokenClip` + `counterShieldBrokenClip`，区别于自然过期音效 | AudioManager.cs + DomainSystem.cs |
-| 对局计时器 + 骤死期 | GameStateMachine 自动阶段转换（Playing→SuddenDeath→GameOver）+ GameTimerUI 正计时显示 + OnTimeUp 触发结算 | GameStateMachine.cs + GameTimerUI.cs + GameBootstrapper.cs |
+| 对局计时器 + 骤死期 | GameStateMachine 自动阶段转换（Playing→SuddenDeath→GameOver）+ GameTimerUI 正计时显示 + OnTimeUp 触发结算 + 骤死期双倍回金速度（`EconomyConfig.suddenDeathMultiplier`） | GameStateMachine.cs + GameTimerUI.cs + GameBootstrapper.cs + EconomyManager.cs |
 | 炸弹自动破封领域 | 农民出更大炸弹自动关闭领域（不触发反制护盾），作为反制护盾 CD 时的额外战术 | DomainSystem.cs |
 | 炸弹击破反制护盾 | 地主出更大炸弹击破反制护盾，反制护盾被破解播放 `PlayCounterShieldBroken()` | DomainSystem.cs |
 | 伤害批量结算（方案 C） | `DamageQueue` 静态队列 + `CardUnit.LateUpdate` 帧末结算，消除 Update 执行顺序对战斗结果的影响 | DamageQueue.cs + CardUnit.Combat.cs |
@@ -170,6 +176,9 @@
 | CardUnit 建筑功能 | `_regenPerSecond` 回血 + `MaxHP`/`HPRatio` 属性 + `InitBuildingHP` + 建筑静止逻辑 | CardUnit.cs |
 | 被动系统建筑过滤 | `FindNearestEnemy`/`UpdateKingAura`/`UpdateSlowAura`/`ApplySwarm` 排除 `_isBuilding` 单位 | CardUnit.Combat.cs + UnitPassives.cs |
 | 叫分期系统 | BiddingManager + BiddingConfig + 叫分场景（30s 倒计时 + AI 叫分 + 跳转） | UI/Bidding/ + Config/ |
+| 联机叫分系统 | NetworkBiddingManager（3 人网络轮流叫分 + AI 槽位 + 断线处理）+ BiddingSceneBootstrap（自动切换单机/联机）| UI/Bidding/ |
+| 网络协议层 | NetworkProtocol（事件 Key 常量 + Card/CardTypeResult 序列化 + 玩家槽位工具）| Gameplay/Network/ |
+| 网络接口扩展 | INetworkService 新增：IsInRoom/IsMasterClient/SendToMaster/SendToPlayer/LocalActorNumber/GetPlayerActorNumbers/OnCustomEvent 等 | Gameplay/Network/ |
 | 存档系统 | SaveSystem（PlayerPrefs）存储金币/首次胜利/对局统计 | Gameplay/Systems/ |
 | 完胜判定 | 玩家基地满血 → gameStateCoefficient = 1.5 | GameBootstrapper.cs |
 | 叫分配置外置 | BiddingConfig ScriptableObject（叫分时长/AI 策略/超时处理） | Config/ |
@@ -190,9 +199,28 @@
 | 嘲讽优先级修复 | 嘲讽高于建筑锁定 + 嘲讽可打断攻击 + 被阻挡时降级攻击阻挡者 | CardUnit.cs |
 | 盾墙缓存优化 | _shieldWallUnits 静态列表，Awake 注册 OnDestroy 注销，遍历范围从全部单位缩小到盾墙单位 | UnitPassives.cs |
 | 连对生成修复 | 连对每个对子各生成一个兵种（去重点数） | BattleManager.cs |
-| 召唤物完整生成 | SpawnSummonedUnit 走完整生成流程（对象池/注册/路径/目标/敌方列表） | BattleManager.cs |
+| 召唤物完整生成 | SpawnSummonedUnit 走完整生成流程（对象池/注册/路径/目标/敌方列表），直接继承召唤师 FollowPath | BattleManager.cs |
 | 高度系统修复 | MoveTowardEnemyBase + MoveTowardTarget 添加 CanAttackHeight 检查 | CardUnit.Movement.cs |
 | 阻挡逻辑修复 | IsBlockedAt 从 this.CanBlockHeight 改为 other.CanBlockHeight | CardUnit.Movement.cs |
+| 溅射圆心修复 | EmitSplash 圆心从 target.transform.position 改为 Collider2D.ClosestPoint（攻击者→目标碰撞箱最近点），大型建筑边缘可溅射 | UnitPassives.cs |
+| 召唤物路线修复 | SpawnSummonedUnit 直接继承 summoner.FollowPath，删除 FindBaseFor，修复基地切换分路后召唤物走错路 | BattleManager.Spawning.cs |
+| UnitAudio 解耦 | UnitAudio 移至子物体，`RequireComponent` 移除，`GetComponent` → `GetComponentInParent`，UnitPassives 改用 `GetComponentInChildren` | UnitAudio.cs + UnitPassives.cs |
+| BOSS 阵营自动纠正 | `GameBootstrapper` Step 5b 强制 `SetLandlord(!PlayerIsLandlord)` + 血条颜色刷新，解决 Awake 执行顺序不确定导致的阵营错误 | GameBootstrapper.cs |
+| BOSS 初始隐藏 | `BossController.Awake` 禁用 Renderer/Collider（排除 UnitHealthBar），`Inject` 时恢复，解决 OnStart 触发时序问题 | BossController.cs |
+| BOSS BuildingAI 保护 | `GameBootstrapper` Awake/联机模式中跳过 `_isBoss` 单位的 BuildingAI 禁用，Step 5b 显式启用 BuildingAI 后再 Inject | GameBootstrapper.cs |
+| BuildingAI 空手牌兼容 | `Update` 在 `Hand.Count == 0` 时仍执行摸牌和经济逻辑，不再直接 return，解决 BOSS 空手牌无法出兵 | BuildingAI.cs |
+| 全局唯一 UnitId | `BattleManager` 统一分配 `_globalUnitId`，`RegisterUnit` 调用 `SetUnitId`，`OnUnitDied` 改用 `Dictionary<int, CardUnit>` O(1) 查找，消除场景预置单位与工厂单位 ID 冲突 | BattleManager.cs + CardUnit.cs |
+| RoutePath 缓存开关 | `_cachePositions` Inspector 开关，取消勾选后路径点实时跟随移动物体（如 BOSS），解决 BOSS 召唤兵种在初始位置生成 | RoutePath.cs |
+| UnitHeight 默认值兜底 | `CardUnit.Awake` 检查 `_unitHeight/_canAttackHeight/_canBlockHeight == 0` 时恢复默认值，修复 Unity 序列化 `[Flags]` 枚举组合默认值为 0 的问题 | CardUnit.cs |
+| BuildingAI 启用状态保护 | `GameBootstrapper` Awake 记录 `_buildingAIOriginallyEnabled`，Step 5a 仅恢复原本启用的 BuildingAI，Inspector 未勾选的不会被误启用 | GameBootstrapper.cs |
+| BOSS 技能系统 | `BossSkillSystem` 组件，支持 HP 阶段/定时/击杀触发，6 种效果（AOE 伤害/眩晕/治疗/击退/Buff/冲刺），施法期间不可选取+清除 CC | BossSkillSystem.cs |
+| Invulnerable 状态 | `CardUnit.Invulnerable` 属性，`TakeDamage`/`ApplyDamage` 开头检查，免疫所有伤害 | CardUnit.cs + CardUnit.Combat.cs |
+| Heal 方法 | `CardUnit.Heal(amount)` 治疗方法，不超过 MaxHP | CardUnit.cs |
+| 嘲讽多目标修复 | 攻击中嘲讽打断仅在嘲讽目标变化时生效，防止多个嘲讽光环导致无法攻击 | CardUnit.cs |
+| 攻击超时安全阀 | `_attackStateTimer` 计时，`AttackInterval×3` 秒未完成强制重置，防止攻击状态卡死 | CardUnit.cs |
+| BOSS 技能动画 | SimpleAnimator 新增 dashClip/bossSkill1-3Clip，Animator Controller 新增 Dash/BossSkill1-3 Trigger 状态，更新菜单 `Tools → 更新兵种 Animator Controller` | SimpleAnimator.cs + CardUnit.Animation.cs + CreateUnitAnimatorController.cs |
+| 动画优先级文档 | Any State Trigger 内部顺序：Death > Shockwave > Splash > StunHit > KingAura > DeathExplosion > Burn > Summon > Dash > BossSkill1-3 | ARCHITECTURE.md |
+| 骤死期双倍金币 | `EconomyManager` 订阅 `OnPhaseChanged`，骤死期回金速度 × `suddenDeathMultiplier`，GameOver 恢复基础值 | EconomyManager.cs + GameBootstrapper.cs |
 
 ### P1（仍需实现）
 
@@ -201,7 +229,7 @@
 | BuildingAI 路线压力检测 | §10.2 | `CountEnemiesOn()` 返回 0 |
 | 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
 | 图鉴/索引系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
-| 联机完整同步 | §13 | 网络层已实现（Photon PUN 2），出牌/兵种/经济同步未实现 |
+| 联机出牌/兵种同步 | §13 | 网络层+叫分已实现（Photon PUN 2 + NetworkBiddingManager），出牌/兵种/经济同步未实现 |
 
 ### P2（增强/可视化）
 
@@ -272,7 +300,7 @@ Assets/Scripts/
 │   │   ├── CardTypeResult.cs          # 牌型检测结果（类型 + 主体点数 + 长度 + 挂件）
 │   │   └── CardTypeDetector.cs        # ★ 核心算法：合规牌型判定
 │   ├── Battle/
-│   │   ├── SoldierStats.cs            # §3.1 兵种属性表（struct）+ 枚举（Lane/Identity/DamageType/UnitHeight/WinCondition）
+│   │   ├── SoldierStats.cs            # §3.1 兵种属性表（struct）+ 枚举（Lane/Identity/DamageType）
 │   │   └── HeroType.cs                # 英雄 5 选 1 + HeroStats 属性数据
 │   ├── Economy/
 │   │   ├── EconomySystem.cs           # 金币增减 + 回金速度成长曲线
@@ -283,7 +311,7 @@ Assets/Scripts/
 │   │   ├── GameBootstrapper.cs        # ★ 自底向上装配套管线（12 步初始化）
 │   │   ├── GameStateMachine.cs        # ★ FSM + 自动计时（Playing→SuddenDeath→GameOver，OnTimeUp 事件）
 │   │   ├── TimerQueue.cs              # 全局异步计时器队列
-│   │   ├── EconomyManager.cs          # 焊接 Core.EconomySystem → UI
+│   │   ├── EconomyManager.cs          # 焊接 Core.EconomySystem → UI + 骤死期双倍回金
 │   │   ├── AudioManager.cs            # ★ 单例音频管理器（4 通道优先级音效 + BGM，DontDestroyOnLoad）
 │   │   ├── VFXManager.cs             # ★ 单例粒子特效对象池（DontDestroyOnLoad）
 │   │   ├── UIManager.cs              # ★ 跨场景 UI 管理器（单例，管理 UI_Scene 加载 + PauseMenu/VictoryPanel 引用）
@@ -299,8 +327,8 @@ Assets/Scripts/
 │   │   ├── UnitHealthBar.cs           # §3.A.1 头顶血条（OnDisable 重置 _initialized）
 │   │   ├── UnitPassives.cs            # ★ 16 种通用被动（字段/生命周期/光环/战斗被动）
 │   │   ├── UnitPassives.Summon.cs     #   召唤师被动（定时召唤 + 击杀召唤）
-│   │   ├── SimpleAnimator.cs          # 动画控制器（AnimatorOverrideController，12 种动画）
-│   │   ├── Projectile.cs              # 子弹/投射物（线性+抛物线，bounds.center 瞄准 + ClosestPoint 命中 + 爆炸）
+│   │   ├── SimpleAnimator.cs          # 动画控制器（AnimatorOverrideController，18 种动画含 BOSS 技能）
+│   │   ├── Projectile.cs              # 子弹/投射物（线性+抛物线，ClosestPoint 瞄准/命中 + _explosionRadius 范围爆炸）
 │   │   ├── AttackEventRelay.cs        # 子物体 Animator Event → 父物体 CardUnit.OnAttackHitFrame
 │   │   ├── UnitSelector.cs            # ★ 兵种点选器（Physics2D.OverlapPoint 左键选中/取消）
 │   │   ├── UnitAudio.cs              # ★ 兵种音频组件（优先级通道 + 按 Clip 并发限制 + 屏幕可见性裁剪）
@@ -312,22 +340,22 @@ Assets/Scripts/
 │   │   ├── BattleManager.Heroes.cs    #   英雄生成 + 被动注入 + 灵骑光环
 │   │   ├── DamageQueue.cs             # ★ 伤害批量结算队列（同帧入队，帧末统一结算 HP + 死亡）
 │   │   ├── IBuildingTarget.cs         # 可攻击目标接口（CardUnit _isBuilding 唯一实现）
-│   │   ├── FactionTag.cs              # 阵营标签（FactionChoice: Farmer/LandLord）
-│   │   ├── RoutePath.cs               # 路径定义 + Scene 视图 Gizmo
+│   │   ├── RoutePath.cs               # 路径定义 + Scene 视图 Gizmo + `_cachePositions` 缓存开关
 │   │   ├── RouteGroup.cs              # 路线组
 │   │   ├── SpawnPool.cs               # 出兵池（8 组 ×13 槽预制体映射）
 │   │   ├── BuildingAI.cs              # ★ 建筑 AI（集成 DomainSystem 领域/反制决策 + 暂存槽自动取牌）
 │   │   ├── BossController.cs          # ★ BOSS 控制器（定时/建筑摧毁触发，召唤师能力）
+│   │   ├── BossSkillSystem.cs         # ★ BOSS 技能系统（HP 阶段/定时/击杀触发，6 种效果，冲刺+不可选取+清除 CC）
 │   │   ├── DomainSystem.cs            # ★ 领域系统（字段/属性/事件/初始化/配置）
 │   │   ├── DomainSystem.Gameplay.cs   #   出牌触发 + 计时器 + 激活/关闭 + 手牌封印
 │   │   ├── SealRuleEngine.cs          # 封印规则引擎（判定手牌可反制牌型）
 │   │   ├── CardTypeCompare.cs         # 牌型比较器（HasCounterInHand + CanCounter）
-│   │   ├── MapController.cs           # 地图常量
-│   │   └── WinCondition.cs            # 胜利条件枚举
+│   │   └── MapController.cs           # 地图坐标常量与工具方法（WinCondition 枚举定义在 BattleManager.cs 中）
 │   ├── Network/                        # 联机网络层
 │   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步）
 │   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连）
-│   │   └── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
+│   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
+│   │   └── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -337,11 +365,12 @@ Assets/Scripts/
 │   │   ├── CardWidget.cs              # 单张卡牌 UI 控件（拖拽 + 选中浮动 + 封印锁链 + 拒绝脉冲）
 │   │   └── SelectionValidator.cs      # 选牌校验 + 实时牌型检测（封印牌拒绝）
 │   ├── HUD/
-│   │   ├── BaseHealthBar.cs           # 基地血条（CardUnit(_isBuilding) 读取 Stats）
 │   │   ├── CardCounterUI.cs           # §1.5 记牌器
 │   │   └── GameTimerUI.cs             # ★ 对局计时 UI（正计时显示，骤死期变色）
 │   ├── Bidding/
-│   │   └── BiddingManager.cs          # ★ 叫分期控制器（倒计时 + AI 叫分 + 玩家叫分 + 跳转）
+│   │   ├── BiddingManager.cs          # ★ 叫分期控制器（倒计时 + AI 叫分 + 玩家叫分 + 跳转）
+│   │   ├── NetworkBiddingManager.cs   # ★ 联机叫分控制器（3 人网络轮流叫分 + AI 槽位 + 断线处理）
+│   │   └── BiddingSceneBootstrap.cs   # 叫分场景引导（检测联机状态 → 切换单机/联机管理器）
 │   ├── Battlefield/
 │   │   ├── LaunchTubeUI.cs            # ★ 传送飞筒（农民专属，拖拽传牌，6s CD）
 │   │   ├── TempSlotUI.cs             # ★ 暂存槽（接收飞筒传牌，交互模式/只读模式）
@@ -374,16 +403,16 @@ Assets/Scripts/
 │   ├── LevelConfig.cs                 # ★ 关卡配置（关卡名称/描述/缩略图/场景名/难度）
 │   └── CardSpriteDB.cs                # 卡牌精灵图数据库
 │
-├── Editor/                             # 编辑器工具
-│   ├── CreateUnitAnimatorController.cs # 生成兵种 Animator Controller（12 状态）
-│   ├── ReplaceAllTMPFonts.cs          # 批量替换 TextMeshPro 字体工具
-│   ├── DestroyAllSubMeshUI.cs         # 清理 TMP_SubMeshUI 组件
-│   ├── AudioClipTrimmer.cs            # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
-│   ├── UnitPassivesGizmosOverlay.cs   # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
-│   └── UnitPassivesEditorWindow.cs    # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
-│
 └── Tests/                              # 测试目录
     └── ...
+
+Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
+├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
+├── ReplaceAllTMPFonts.cs              # 批量替换 TextMeshPro 字体工具
+├── DestroyAllSubMeshUI.cs             # 清理 TMP_SubMeshUI 组件
+├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
+├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
+└── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
 ```
 
 ---
@@ -399,8 +428,10 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 |:---|:---|:---|:---|
 | 金币变动 | `OnGoldChanged(float)` | EconomySystem | EconomyManager → GoldDisplay |
 | 回金速度变动 | `OnIncomeChanged(float)` | EconomySystem | EconomyManager → incomeText |
-| 手牌变动 | `OnHandChanged(List<Card>)` | CardHand | HandArea |
+| 手牌变动 | `CardHand.OnHandChanged(List<Card>)` | CardHand | HandArea.RefreshHand |
+| 手牌 UI 变动 | `HandArea.OnHandChanged()` (无参) | HandArea | DomainSystem |
 | 补牌 | `OnCardDrawn(Card)` | CardDeck | — |
+| 弃牌 | `OnDiscarded()` | CardDeck | — |
 | 牌堆刷新 | `OnDeckReshuffled()` | CardDeck | — |
 | 兵种扣血 | `OnHPChanged(int, float)` | CardUnit | UnitHealthBar |
 | 兵种阵亡 | `OnDied(int)` | CardUnit | BattleManager → UnitFactory |
@@ -410,7 +441,7 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 兵种死亡 | `OnDeathEvent()` | CardUnit | UnitPassives（死爆/燃烧）|
 | 兵种击杀 | `OnKillEvent(CardUnit)` | CardUnit | UnitPassives（召唤师击杀召唤）|
 | 召唤帧触发 | `OnSummonFrame()` | CardUnit | UnitPassives（召唤师 Animation Event）|
-| 基地扣血 | `OnHPChanged(float, float)` | CardUnit | BaseHealthBar |
+| 基地扣血 | `OnHPChanged(int, float)` | CardUnit | UnitHealthBar（复用兵种血条组件，与兵种共用同一事件签名） |
 | 基地摧毁 | `OnDestroyed(IBuildingTarget)` | CardUnit | BattleManager |
 | 阶段切换 | `OnPhaseChanged(GamePhase)` | GameStateMachine | GameTimerUI |
 | 时间耗尽 | `OnTimeUp()` | GameStateMachine | GameBootstrapper → BattleManager.TriggerDefeat |
@@ -421,6 +452,10 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 反制护盾解除 | `OnCounterShieldDeactivated()` | DomainSystem | DomainUIController |
 | 飞筒传送 | `OnCardTransmitted(Card)` | LaunchTubeUI | GameBootstrapper（移除手牌 → 队友暂存槽）|
 | 暂存槽清空 | `OnSlotEmptied()` | TempSlotUI | — |
+| 网络自定义事件 | `OnCustomEvent(string, object, int)` | INetworkService | NetworkBiddingManager, OnlineLobbyController |
+| 网络连接断开 | `OnConnectionLost()` | INetworkService | OnlineLobbyController |
+| 网络玩家加入 | `OnPlayerJoined(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
+| 网络玩家离开 | `OnPlayerLeft(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
 
 ### 3.2 订阅者生命周期规则
 
@@ -437,27 +472,39 @@ MonoBehaviour.OnDestroy()  → 确保取消订阅（双重保险）
 
 ## 4. 工业级初始化装配套管线
 
-所有模块在 `GameBootstrapper.Start()` 中**自底向上**完成装配，使用动态基地列表：
+所有模块在 `GameBootstrapper` 中**自底向上**完成装配，使用动态基地列表：
 
+**Awake() 阶段（必须在 Start 之前）：**
 ```
-Step 0:  确保 UI_Scene 已加载
+读取 GameSession.HasResult → 设置 _playerIsLandlord 和 playerBaseIndex
+设置 CardUnit.PlayerIsLandlord（必须在 Awake 中，保证在所有 UnitHealthBar.Start() 之前生效）
+记录 _buildingAIOriginallyEnabled（哪些建筑的 BuildingAI 原本启用）
+禁用所有预置 BuildingAI（跳过 _isBoss 单位），防止阵营纠正前出牌
+```
+
+**Start() 协程阶段：**
+```
+Step 0:  确保 UI_Scene 已加载（UIManager.WaitForReady）
 Step 0b: 加载存档（SaveSystem.Load）
 Step 1:  加载 Config（EconomyConfig, HeroConfig）
 Step 2:  实例化 Core 层（CardDeck, EconomySystem）+ 启用批量伤害结算
-Step 3:  设置玩家阵营 → CardUnit.PlayerIsLandlord
-Step 4:  发初始手牌（baseBuildings 按 FactionTag 自动分配 AI 手牌）
-Step 5:  初始化基地（CardUnit 建筑自动初始化 HP + 注册战场）
-Step 6:  依赖注入焊接（EconomyManager, BattleManager, BossController）
-Step 7:  AI 对手初始化（遍历 baseBuildings，非玩家基地注入 BuildingAI + DomainSystem 引用）
-Step 8:  焊接 UI（HandArea 空值保护 → return, 出牌事件, 摸牌按钮, 自动摸牌定时器, 记牌器）
-Step 8b: 焊接传送飞筒 + 暂存槽（查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线）
-Step 8c: 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
+Step 3:  发初始手牌（玩家手牌 + AI 手牌，单机按基地遍历 / 联机按 AISlots）
+Step 4:  初始化建筑 CardUnit（InitBuildingHP + 注册战场）
+Step 5:  依赖注入焊接（EconomyManager.Initialize(gameStateMachine), BattleManager.Initialize/SetEconomyManager）
+Step 5b: BOSS 控制器注入（FindObjectsByType<BossController> → 纠正阵营 SetLandlord → 刷新血条颜色 → 启用 BuildingAI → boss.Inject(battleManager, deck)）
+Step 5a: AI 对手初始化（遍历 aiHands，非玩家基地注入 BuildingAI + DomainSystem 引用）
+Step 6:  焊接 UI（HandArea 空值保护 → return, 出牌事件, PlayValidator）
+Step 6b: 焊接传送飞筒 + 暂存槽（查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线）+ 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
+Step 7:  基地血条使用 UnitHealthBar（与兵种共用）
+Step 8:  焊接摸牌按钮（自动摸牌定时器 + 手动摸牌按钮，地主 5s/10g，农民 6s/12g）
 Step 9:  暂停菜单事件焊接
 Step 9b: 胜利面板焊接（OnGameEnded → StopTimer → CollectVictoryStats → Show）
+Step 9c: 焊接金币追踪（economyManager.OnGoldEarned → battleManager.TrackGoldEarned）
 Step 9d: 计时器焊接（GameTimerUI ← GameStateMachine, OnTimeUp → TriggerDefeat）
 Step 10: DomainSystem 初始化（DomainUIController 统一管理覆盖层 + 按钮 + 冷却）
-Step 11: 预置兵种终态初始化（血条激活 + 战场注册）
 ```
+
+预置兵种终态初始化由 `CardUnit.Start()` 生命周期方法自动处理（血条激活 + 战场注册），不属于 GameBootstrapper 步骤。
 
 基地选择使用 `Component[] baseBuildings` 数组，玩家通过 `playerFaction`（Farmer/LandLord）和 `playerBaseIndex` 选择操控的基地。
 **B14 安全阀**：`handArea` 未在 Inspector 赋值时直接 `Debug.LogError` + `return`，杜绝 NullReferenceException 崩溃。
@@ -465,12 +512,19 @@ Step 11: 预置兵种终态初始化（血条激活 + 战场注册）
 ### AI 注入管线
 
 ```csharp
-// 遍历 baseBuildings，非玩家阵营自动注入 BuildingAI
+// 遍历 baseBuildings，非玩家操控的基地自动注入 BuildingAI
 foreach (var baseBldg in baseBuildings)
 {
-    var tag = baseBldg.GetComponent<FactionTag>();
-    if (tag != null && tag.IsLandlord != playerIsLandlord)
-        InjectBuildingAI(baseBldg, ...);
+    var cu = baseBldg.GetComponent<CardUnit>();
+    if (cu == null) continue;
+    bool isPlayerBase = (baseBldg == playerBaseRef);
+    if (!isPlayerBase && baseBldg.GetComponent<BuildingAI>() != null)
+    {
+        var aiHand = new CardHand(17);
+        _mainDeck.Deal(7, aiHand);
+        var identity = cu.IsLandlord ? Identity.Landlord : Identity.FarmerA;
+        InjectBuildingAI(baseBldg, aiHand, econConfig, battleManager, identity);
+    }
 }
 ```
 
@@ -558,6 +612,8 @@ fillTransform.localPosition = new Vector3(_initFillLocalX + _halfWorldWidth * (1
 
 所有并发定时器统一由 `TimerQueue` 管理，禁止 `Invoke()` 或 `StartCoroutine()`。
 
+**例外**：`DomainSystem` 使用自身 `Update()` 驱动的 float 计时器（`UpdateDomainTimer`/`UpdateCounterShieldTimer`/`UpdateCooldowns`），因其状态机复杂度不适合 TimerQueue 的回调模式。
+
 ### 全局计时器汇总
 
 | 计时器 | 类型 | 持续时间 | 位置 | 状态 |
@@ -569,7 +625,8 @@ fillTransform.localPosition = new Vector3(_initFillLocalX + _halfWorldWidth * (1
 | AI 经济增长 | 循环 | 60s | BuildingAI.Update() | ✅ 已实现 |
 | 经济成长 | 循环 | 60s | EconomyManager | ✅ 已实现 |
 | 记牌器刷新 | 事件驱动 | — | CardCounterUI.Refresh() | ✅ 已实现 |
-| 叫分期 | 一次性 | 30s | — | ❌ 未实现 |
+| 叫分期（单机） | 一次性 | 30s | BiddingManager | ✅ 已实现 |
+| 叫分期（联机） | 一次性 | 30s（可配） | NetworkBiddingManager | ✅ 已实现 |
 | 要不起领域 | 一次性 | 5s | DomainSystem | ✅ 已实现 |
 | 反制护盾 | 一次性 | 2s | DomainSystem | ✅ 已实现 |
 | 传送飞筒 CD | 一次性 | 6s | LaunchTubeUI | ✅ 已实现 |
@@ -596,6 +653,18 @@ public event Action<GamePhase> OnPhaseChanged;  // 阶段切换
 public event Action OnTimeUp;                    // 骤死期结束
 ```
 
+### 骤死期效果
+
+`EconomyManager` 订阅 `OnPhaseChanged`，进入骤死期时回金速度乘以 `EconomyConfig.suddenDeathMultiplier`（默认 2x），游戏结束时恢复基础值。
+
+```csharp
+// EconomyManager.OnPhaseChanged()
+if (phase == GamePhase.SuddenDeath)
+    _coreEconomy.SetIncomeRate(_baseIncomeRate * config.suddenDeathMultiplier);
+else if (phase == GamePhase.GameOver)
+    _coreEconomy.SetIncomeRate(_baseIncomeRate);
+```
+
 ### TimerQueue 接口
 
 ```csharp
@@ -616,7 +685,7 @@ public void CancelAll();
 ### 🛑 RED-05: 事件注册必须配对（含 OnDisable 重置对象池状态）
 ### 🛑 RED-06: 对象池回收必须重置全部状态（含 UnitHealthBar._initialized、CardUnit._bonusDamage/OriginalMoveSpeed）
 ### 🛑 RED-07: 禁用 `FollowPath = null` 粗暴清路径
-### 🛑 RED-08: `TryAttack` 必须返回 `bool` 表明攻击是否执行；调用方 `OnUpdate` Step 1 只在真正攻击时 `return`（站桩等冷却）；冷却期**不返回**，允许兵种在攻击间隙继续沿路径行军或追击；Step 2 必须加 `!IsTargetInRange` 防止与冷却期的 Step 1 冲突
+### 🛑 RED-08: `TryAttack` 通过 `_isAttacking` 标志防止重复攻击；冷却期内 `_isAttacking=true` 时 OnUpdate 顶部直接 `return`（站桩等冷却），嘲讽可打断当前攻击
 ### 🛑 RED-09: 减速光环保留原始移速：仅当 `OriginalMoveSpeed ≈ 0f` 时保存，多光环不互相覆盖；恢复后清零以便下次捕获
 ### 🛑 RED-10: SpiritRider 光环每秒不可复合叠加：保存盟友原始属性字典，进入范围一次性应用，离开恢复
 ### 🛑 RED-11: 撕裂（Tear）易伤必须在 `CardUnit.TakeDamage()` 扣除血量前调用 `GetTearMultiplier(this)`
@@ -676,7 +745,7 @@ private float GetEdgeDistance(IBuildingTarget target)
 }
 
 // 统一边缘距离计算（单位间，避免 IBuildingTarget 装箱）
-private float GetUnitEdgeDistance(CardUnit other)
+public float GetUnitEdgeDistance(CardUnit other)
 {
     // 1. bounds.Intersects → 返回 0
     // 2. ClosestPoint 退化兜底：查询点在碰撞箱内部时用中心距减双半径
@@ -709,9 +778,8 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
    a. 嘲讽源在范围内 → 锁定嘲讽源
    b. 特化索敌（点杀/骑兵）→ 返回特化目标
    c. 默认索敌 → 本路最近敌人
-4. 有目标且在射程内 → TryAttack()
-   a. 攻击成功 → return（站桩等冷却）
-   b. 冷却中 → **不 return**，fall through 到行军逻辑
+4. _isAttacking=true（攻击冷却中）→ 嘲讽可打断，否则站桩等待动画+伤害完成 → return
+5. 有目标且在射程内 → TryAttack()，设置 _isAttacking=true，return（站桩等冷却）
 5. 有目标但不在射程内 → 追击（同路可追，跨路无视）
 6. 无目标 → 沿路径行军
 7. 路径到达终点 → 直接攻击终点建筑
@@ -748,9 +816,17 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
 | 撕裂 | `enableTear` | `OnAttackEvent` | 为目标叠加 `TearStacks`；`CardUnit.TakeDamage()` 扣除血量前调用 `GetTearMultiplier()` 结算受伤 +5%/层 |
 | 出场震波 | `enableShockwave` | Awake | 出场震退周围敌人 |
 | 死亡燃烧 | `enableBurnOnDeath` | `OnDeathEvent` | 死亡留下火海（BurnZone）持续伤害 |
-| 溅射攻击 | `enableSplash` | `OnAttackEvent` | 攻击时对目标周围造成范围伤害 |
+| 溅射攻击 | `enableSplash` | `OnAttackEvent` | 攻击时以 `Collider2D.ClosestPoint`（攻击者→目标碰撞箱最近点）为圆心扩散范围伤害，支持大型建筑边缘溅射 |
 | 骑兵追击 | `enableCavalryChase` | `OverrideFindTarget` | 优先锁定远程（IsRanged）敌方单位 |
-| 召唤师 | `enableSummoner` | Update 定时 + `OnKillEvent` | 定时召唤（Animation Event 驱动）+ 击杀召唤（从尸体位置立刻生成），召唤物继承召唤师路线/目标，击杀归属到召唤师 |
+| 召唤师 | `enableSummoner` | Update 定时 + `OnKillEvent` | 定时召唤（Animation Event 驱动）+ 击杀召唤（从尸体位置立刻生成），召唤物直接继承召唤师的 `FollowPath`（而非基地 `RouteGroup.CurrentRoute`），击杀归属到召唤师 |
+
+**召唤师可配参数**：`summonPrefab`（召唤物预制体）、`summonInterval`（定时召唤间隔）、`maxSummons`（最大召唤物数量）、`summonOnKill`（击杀时是否额外召唤）
+
+**OverrideFindTarget / OverrideAttackRange 委托**：
+```csharp
+public System.Func<CardUnit, CardUnit> OverrideFindTarget;   // 自定义索敌逻辑
+public System.Func<CardUnit, float> OverrideAttackRange;      // 自定义攻击范围
+```
 
 **性能约束**：所有 Update 循环扫描使用 `Physics2D.OverlapCircleNonAlloc` + 预分配 64 槽缓存。盾墙检测使用静态缓存列表 `_shieldWallUnits`（Awake 注册，OnDestroy 注销），只遍历盾墙单位。所有状态（撕裂层数、减速计时器）存储在 `CardUnit` 实例字段，对象池回收时自动清零。
 
@@ -770,7 +846,7 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
 | 飞机 | 轰炸机预制体（SpawnPool._bomberPrefabs）+ 同路线地毯轰炸 | BattleManager 参数 |
 | 王炸 | 英雄 5 选 1，属性覆盖 | BattleManager |
 
-`CardTypePassives.cs` 已删除，其所有功能已迁移至 `UnitPassives.cs`（14 种通用被动）和 `SpawnPool.cs`（预制体映射）。
+`CardTypePassives.cs` 已删除，其所有功能已迁移至 `UnitPassives.cs`（16 种通用被动）和 `SpawnPool.cs`（预制体映射）。
 
 ### 9.6 兵种对象池
 
@@ -821,7 +897,7 @@ GameBootstrapper 在初始化完成后根据玩家身份自动隐藏不需要的
 | 地主 | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` | `laneArea`（分路系统） |
 | 农民 | `laneArea` | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` |
 
-**实现位置**：`GameBootstrapper.Start()` Step 8c 末尾
+**实现位置**：`GameBootstrapper.Start()` Step 6b 末尾
 
 ```csharp
 if (playerIsLandlord) {
@@ -905,11 +981,12 @@ WASD/方向键 + 鼠标边缘滚动移动，滚轮缩放 orthographicSize，支�
 - 动画：向上浮动 1.5m + 渐隐，1 秒后自动回池
 - Pool 大小：20
 
-### 11.8 基地血条（BaseHealthBar）
+### 11.8 基地血条
 
 - 基地本体是挂载了 `CardUnit(_isBuilding=true)` 的实体（实现 IBuildingTarget）
+- 复用 `UnitHealthBar` 组件（与兵种共用同一血条系统）
 - 血量读取：`CardUnit.Stats.HP` / `CardUnit.MaxHP`
-- 阵营颜色：`FactionTag.AssignedIdentity` 判断敌友
+- 阵营颜色：`Identity` 枚举判断敌友
 
 ### 11.10 对局计时器（GameTimerUI）
 
@@ -976,9 +1053,11 @@ public float GetMaxHealth(bool isPrototype);
 
 ```csharp
 public class HeroConfig : ScriptableObject {
-    // 基础属性 + 觉醒倍率
-    public HeroStats GetBaseStats(HeroType type);
-    public HeroStats GetAwakenedStats(HeroType type);
+    // heroType 存储在 ScriptableObject 自身字段中
+    public HeroType heroType;
+    // 基础属性 + 觉醒倍率（无参数，从自身字段读取 heroType）
+    public HeroStats GetBaseStats();
+    public HeroStats GetAwakenedStats();
     // 可配参数：剑圣触发概率、铁卫减伤比例、术士溅射半径、灵骑光环范围等
 }
 ```
@@ -1036,20 +1115,42 @@ public interface INetworkService
     void JoinRoom(string roomCode);
     void JoinRandomRoom();
     void LeaveRoom();
+    bool IsInRoom { get; }
+    bool IsMasterClient { get; }
+    string CurrentRoomName { get; }
+    int CurrentPlayerCount { get; }
+    int MaxPlayers { get; }
 
-    // 消息
+    // 玩家
+    string LocalPlayerName { get; set; }
+    string[] GetPlayerNames();
+    void SetPlayerReady(bool ready);
+    bool AreAllPlayersReady { get; }
+
+    // 消息同步
     void SendToAll(string key, object value);
+    void SendToMaster(string key, object value);
+    void SendToPlayer(int actorNumber, string key, object value);
     void SetRoomProperty(string key, object value);
+    object GetRoomProperty(string key);
 
-    // 场景
+    // 场景同步
     void LoadScene(string sceneName);
+
+    // 玩家标识
+    int LocalActorNumber { get; }
+    int[] GetPlayerActorNumbers();
 
     // 事件
     event Action OnServerConnected;
+    event Action OnConnectionLost;
+    event Action<string> OnRoomCreateSuccess;
     event Action<string> OnRoomJoinSuccess;
+    event Action<string> OnRoomJoinError;
     event Action<string> OnPlayerJoined;
     event Action<string> OnPlayerLeft;
     event Action OnAllPlayersReady;
+    event Action<string, object, int> OnCustomEvent;
 }
 ```
 
@@ -1076,19 +1177,48 @@ PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocu
 应用重获焦点 → OnApplicationFocus(true) → TryReconnect() → ReconnectAndRejoin / ConnectUsingSettings
 ```
 
-### 13.5 已实现功能
+### 13.5 网络协议层（NetworkProtocol）
+
+`NetworkProtocol` 是纯静态工具类，集中管理所有联机事件的 Key 定义和数据序列化：
+
+```csharp
+public static class NetworkProtocol
+{
+    // 事件 Key（叫分/出牌/抽牌/领域/状态校验/房间管理）
+    public const string BID_TURN, BID_ACTION, BID_RESULT;
+    public const string GAME_INIT, PLAY_CARDS, PLAY_APPROVED, PLAY_REJECTED;
+    public const string DRAW_CARD, DOMAIN_ACTIVATE, COUNTER_ACTIVATE;
+    public const string STATE_CHECKSUM, GAME_END, PLAYER_LEFT;
+    public const string ADD_AI, REMOVE_AI, KICK_PLAYER;
+
+    // 序列化工具
+    public static int[] SerializeCards(Card[] cards);
+    public static Card[] DeserializeCards(int[] indices, CardDeck deck);
+    public static object[] SerializeCardTypeResult(CardTypeResult r);
+    public static CardTypeResult DeserializeCardTypeResult(object[] data);
+
+    // 玩家槽位
+    public static int GetPlayerSlot(int actorNumber, int[] sortedActorNumbers);
+}
+```
+
+**Key 设计原则**：所有 RPC 通信使用 `string Key + object Value` 模式，通过 `OnCustomEvent` 统一分发。
+
+### 13.6 已实现功能
 
 | 功能 | 状态 |
 |---|---|
-| 网络抽象层 | ✅ INetworkService 接口 |
+| 网络抽象层 | ✅ INetworkService 接口（扩展：玩家标识/定向消息/自定义事件） |
 | Photon 实现 | ✅ PhotonService（房间/匹配/RPC/同步） |
 | 网络管理器 | ✅ NetworkManager 单例 |
+| 网络协议层 | ✅ NetworkProtocol（事件 Key + Card/CardTypeResult 序列化） |
 | 联机大厅 UI | ✅ OnlineLobbyController（单排/创建房间/加入房间） |
-| 房间系统 | ✅ 创建/加入/离开/准备 |
+| 房间系统 | ✅ 创建/加入/离开/准备/AI 槽位/踢人 |
+| 联机叫分 | ✅ NetworkBiddingManager（3 人轮流叫分 + AI 槽位 + 断线处理） |
+| 叫分场景引导 | ✅ BiddingSceneBootstrap（自动检测联机状态 → 切换单机/联机管理器） |
 | 断线自动重连 | ✅ PhotonService（超时 30s + 失焦自动重连 + 房间恢复） |
 | 出牌/兵种同步 | ❌ 未实现 |
 | 经济同步 | ❌ 未实现 |
-| 叫分同步 | ❌ 未实现 |
 
 ---
 
@@ -1101,7 +1231,7 @@ PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocu
 | 层 | 参数名 | 类型 | 用途 | 互斥？ |
 |:---|:---|:---|:---|:---|
 | 基础状态 | `State` | int | 0=Idle, 1=Walk, 2=Attack | 是 |
-| 一次性触发 | 各 Trigger 名 | Trigger | 7 种特效（见下表） | 否，叠加触发 |
+| 一次性触发 | 各 Trigger 名 | Trigger | 9 种特效（见下表） | 否，叠加触发 |
 | 持续开关 | 各 Bool 名 | bool | 2 种持续状态（见下表） | 否，开关切换 |
 
 ### 14.2 动画播放优先级
@@ -1118,7 +1248,7 @@ Idle ↔ Walk ↔ Attack（State 参数控制，最低优先级）
 
 ### 14.3 SimpleAnimator 字段配置
 
-SimpleAnimator 组件支持 13 种动画片段配置：
+SimpleAnimator 组件支持 18 种动画片段配置（含 4 种 BOSS 技能）：
 
 **基础动画（3 种）：**
 | 字段 | 说明 | 匹配关键词 |
@@ -1127,17 +1257,22 @@ SimpleAnimator 组件支持 13 种动画片段配置：
 | `walkClip` | 行走动画 | walk |
 | `attackClip` | 攻击动画 | attack |
 
-**Trigger 特效动画（8 种）：**
-| 字段 | 说明 | 匹配关键词 | 对应 UnitPassives 开关 |
+**Trigger 特效动画（13 种）：**
+| 字段 | 说明 | 匹配关键词 | 对应系统 |
 |:---|:---|:---|:---|
-| `chargeClip` | 冲锋 | charge | `enableCharge` |
-| `shockwaveClip` | 震波 | shockwave | `enableShockwave` |
-| `splashClip` | 溅射 | splash | `enableSplash` |
-| `stunHitClip` | 眩晕命中 | stunhit | `enableStunOnHit` |
-| `kingAuraClip` | 君王光环 | kingaura | `enableKingAura` |
-| `deathExplosionClip` | 死亡爆炸 | deathexplosion | `enableDeathExplosion` |
-| `burnClip` | 燃烧 | burn | `enableBurnOnDeath` |
-| `summonClip` | 召唤 | summon | `enableSummoner` |
+| `deathClip` | 死亡 | death | —（始终可用，由 PlayDeathAnimCoroutine 触发） |
+| `chargeClip` | 冲锋 | charge | UnitPassives `enableCharge` |
+| `shockwaveClip` | 震波 | shockwave | UnitPassives `enableShockwave` |
+| `splashClip` | 溅射 | splash | UnitPassives `enableSplash` |
+| `stunHitClip` | 眩晕命中 | stunhit | UnitPassives `enableStunOnHit` |
+| `kingAuraClip` | 君王光环 | kingaura | UnitPassives `enableKingAura` |
+| `deathExplosionClip` | 死亡爆炸 | deathexplosion | UnitPassives `enableDeathExplosion` |
+| `burnClip` | 燃烧 | burn | UnitPassives `enableBurnOnDeath` |
+| `summonClip` | 召唤 | summon | UnitPassives `enableSummoner` |
+| `dashClip` | 冲刺 | dash | BossSkillSystem `animTrigger="Dash"` |
+| `bossSkill1Clip` | BOSS 技能 1 | bossskill1 | BossSkillSystem `animTrigger="BossSkill1"` |
+| `bossSkill2Clip` | BOSS 技能 2 | bossskill2 | BossSkillSystem `animTrigger="BossSkill2"` |
+| `bossSkill3Clip` | BOSS 技能 3 | bossskill3 | BossSkillSystem `animTrigger="BossSkill3"` |
 
 **Bool 特效动画（2 种）：**
 | 字段 | 说明 | 匹配关键词 | 对应 UnitPassives 开关 |
@@ -1147,7 +1282,27 @@ SimpleAnimator 组件支持 13 种动画片段配置：
 
 **匹配规则**：大小写不敏感，文件名包含关键词即可（如 `__idle_placeholder`、`Idle.anim`、`MyIdleClip` 均可匹配）
 
-### 14.4 CardUnit 动画接口
+### 14.4 动画优先级（高 → 低）
+
+| 优先级 | 类型 | 机制 | 说明 |
+|:---|:---|:---|:---|
+| 1 | 死亡保护 | `_isDying=true` 阻止所有新 Trigger | 只允许 Death/DeathExplosion/Burn |
+| 2 | Any State Trigger | 立即打断当前状态 | 互相竞争，按添加顺序决定优先级 |
+| 3 | Bool 持续状态 | Taunt/ShieldWall/Charge 开关切换 | 常驻覆盖基础状态 |
+| 4 | Int 基础状态 | Idle(0)/Walk(1)/Attack(2) | 最低优先级 |
+
+**Any State Trigger 内部顺序**（同时触发时，先添加的优先）：
+```
+Death > Shockwave > Splash > StunHit > KingAura > DeathExplosion > Burn > Summon > Dash > BossSkill1 > BossSkill2 > BossSkill3
+```
+
+**BossSkillSystem 保护机制**：
+- `_isDying=true` → TriggerAnim 只允许 Death/DeathExplosion/Burn
+- `_isCasting=true` → BossSkillSystem 跳过所有触发检查，不启动新技能
+- `StunTimer>0` → Update() 直接 return，技能不启动
+- `Invulnerable` → 只挡伤害，不影响动画
+
+### 14.5 CardUnit 动画接口
 
 ```csharp
 // 基础状态（互斥）
@@ -1170,7 +1325,7 @@ SetAnimBool("Taunt", false);     // 关闭嘲讽
 SetAnimBool("ShieldWall", true); // 开启盾墙
 ```
 
-### 14.5 被动→动画映射
+### 14.6 被动→动画映射
 
 | 被动 | 开关字段 | 触发点 | 动画方法 | 参数类型 | 参数名 |
 |:---|:---|:---|:---|:---|:---|
@@ -1184,13 +1339,19 @@ SetAnimBool("ShieldWall", true); // 开启盾墙
 | 死亡燃烧 | `enableBurnOnDeath` | `EmitBurn()` | `TriggerAnim` | Trigger | Burn |
 | 溅射攻击 | `enableSplash` | `EmitSplash()` | `TriggerAnim` | Trigger | Splash |
 
-### 14.6 Animator Controller 生成
+### 14.7 Animator Controller 生成
 
-使用菜单 `Tools → 创建兵种 Animator Controller` 自动生成，包含：
+使用菜单 `Tools → 创建兵种 Animator Controller`（新建）或 `Tools → 更新兵种 Animator Controller`（重建）生成，包含：
 - 3 个基础状态：Idle、Walk、Attack
-- 7 个 Trigger 特效状态：Charge、Shockwave、Splash、StunHit、KingAura、DeathExplosion、Burn
-- 2 个 Bool 特效状态：Taunt、ShieldWall
+- 13 个 Trigger 特效状态：Death、Shockwave、Splash、StunHit、KingAura、DeathExplosion、Burn、Summon、**Dash、BossSkill1、BossSkill2、BossSkill3**
+- 3 个 Bool 特效状态：Charge、Taunt、ShieldWall
 - 所有 Transition 已配置条件和退出时间
+
+**Boss 技能动画配置流程**：
+1. 运行 `Tools → 更新兵种 Animator Controller`
+2. 在 Boss prefab 的 Visual 子物体上 SimpleAnimator 组件拖入 Clip（dashClip/bossSkill1Clip 等）
+3. 在 BossSkillSystem 的 `animTrigger` 字段填入对应 Trigger 名（"Dash"/"BossSkill1" 等）
+4. 留空 `animTrigger` 则不播放动画，只执行效果
 
 ## 15. 性能约束（联机防御编码协议）
 
@@ -1223,6 +1384,7 @@ SetAnimBool("ShieldWall", true); // 开启盾墙
 | `BombingRunCoroutine` (B11) | `Physics2D.OverlapCircleAll` 每帧分配 | 实例 `_overlapCache[128]` + `OverlapCircleNonAlloc` |
 | `BurnZone.Update` (B10) | `OverlapCircleAll` 每帧分配 | `_burnCache[64]` + `OverlapCircleNonAlloc` + 0.25s Tick 间隔 |
 | `BuildingAI.MakeDecision` (B4) | 全组合枚举 C(20,5)≈38K 次/4s | k 从大到小 + 上限 1000 次评估 |
+| `FindNearestEnemyBuilding` (B16) | `FindObjectsByType<CardUnit>` 在 OnUpdate 中每帧调用 | ❌ 待整改：应改为 `_allUnits` 缓存列表或 OverlapCircle |
 
 ---
 
@@ -1408,20 +1570,29 @@ Idle → Pending（点击按钮）→ Active（出牌触发）→ Cooldown（到
 
 ```
 Assets/Prefabs/
-├── CardImage/
-├── UI/
-│   ├── CardWidget.prefab
-│   └── DamageFloatText.prefab
-├── BitPrefabs/
-│   └── Arrow.prefab
-├── TowerEntities/
-│   └── LandLord.prefab
-├── Entities/
-│   ├── Cavalry.prefab
-│   ├── Heavt Infantry.prefab
-│   ├── Titan.prefab
-│   ├── Archer.prefab
-│   └── Infantry.prefab
+├── Army/ArmyPrefabs/               # 兵种预制体
+│   ├── Warrior.prefab              # 近战战士
+│   ├── Archer.prefab               # 远程弓箭手
+│   ├── Lancer.prefab               # 长枪兵
+│   ├── Hero.prefab                 # 英雄（5 种类型通过 HeroConfig 切换）
+│   ├── King.prefab                 # 君王
+│   ├── CrazyWolf.prefab            # 狼骑兵
+│   ├── Wizard.prefab               # 法师
+│   ├── DeathWizard.prefab          # 暗黑法师
+│   └── Bat.prefab                  # 蝙蝠（飞行单位）
+├── Buildings/TowerEntities/        # 建筑预制体
+│   ├── FarmerA.prefab              # 农民基地
+│   └── LandLord.prefab             # 地主基地
+├── BulletAndHitEffect/             # 弹道特效
+│   ├── Bullet/Arrow.prefab         # 箭矢投射物
+│   └── HitEffects/Bow.prefab       # 弓箭命中特效
+├── UI/UIPrefabs/                   # UI 预制体
+│   ├── GamePrefabs/
+│   │   ├── GameCanvas.prefab       # 主游戏画布
+│   │   ├── CardWidget.prefab       # 卡牌控件
+│   │   ├── DamegeFloatText.prefab  # 伤害飘字（注意：文件名有拼写错误）
+│   │   └── UnitInfoPanel.prefab    # 兵种信息面板
+│   └── LevelCard.prefab            # 关卡选择卡片
 └── VFX/
     └── ...（由 VFXManager 对象池管理）
 ```
@@ -1461,23 +1632,47 @@ SaveSystem.Data.HasFirstWin                     // 是否首次胜利
 
 ---
 
-## 21. 叫分期系统（BiddingManager + BiddingConfig）
+## 21. 叫分期系统（BiddingManager + NetworkBiddingManager + BiddingConfig）
 
 ### 21.1 场景流程
 
 ```
 主菜单 → SceneLoader.LoadBidding() → Bidding 场景
-  → 30s 倒计时 + 玩家/AI 轮流叫分（1/2/3/不叫）
+  → BiddingSceneBootstrap 检测联机状态
+  → 单机: BiddingManager（30s 倒计时 + 玩家/AI 轮流叫分）
+  → 联机: NetworkBiddingManager（3 人网络轮流叫分 + AI 槽位）
   → 结果确定 → GameSession.SetResult() → SceneLoader.LoadGame()
   → GameBootstrapper 读取 GameSession 启动游戏
 ```
 
+**BiddingSceneBootstrap**：挂载到叫分场景，`Awake()` 中检测 `NetworkManager.Instance.IsInRoom`，激活对应的管理器 GameObject。
+
 ### 21.2 叫分规则
 
-- 玩家先叫，AI 轮流响应
+- 玩家先叫，轮流响应（单机=AI，联机=真人+AI 槽位）
 - 叫 3 分直接结束
 - 所有人叫完一轮取最高分
 - 超时无人叫分 → 随机分配（可配置）
+
+### 21.3 联机叫分（NetworkBiddingManager）
+
+**架构**：Master 客户端负责轮次管理和结果判定，所有叫分动作通过 `NetworkProtocol.BID_ACTION` 上报 Master，Master 验证后广播。
+
+```
+玩家点击叫分按钮 → SendToMaster(BID_ACTION, bid)
+  → Master 验证合法性（轮次/分数范围/高于当前最高）
+  → 广播 SendToAll(BID_ACTION, [slot, bid])
+  → 所有客户端 ProcessBid() 更新 UI
+  → Master 判定下一步：继续下一轮 / 结束叫分
+
+AI 槽位（仅 Master 执行）:
+  → Update() 中检测 _aiSlots.Contains(_currentTurnSlot)
+  → 延迟 1.2s 后 AIDecideBid() → SendToAll(BID_ACTION)
+```
+
+**断线处理**：玩家断线时检测 `realPlayerCount + aiSlots.Count < 3`，若不足则取消叫分。
+
+**基地映射**：Master 端 `MasterEndBidding()` 生成 `baseMapping[3]`（地主=2，农民=0/1）+ 随机 seed，通过 `BID_RESULT` 广播。所有客户端调用 `GameSession.SetResultNetwork()` 存储结果。
 
 ### 21.3 BiddingConfig 参数
 
@@ -1511,13 +1706,160 @@ GameSession.SetResult(isLandlord, multiplier, landlordIdx, farmerIndices);
 // 自动构建 PlayerBaseMapping[3]，随机分配农民基地
 GameSession.MyBaseIndex       // 本机玩家操控的基地索引
 GameSession.PlayerIsLandlord  // 本机玩家是否地主
+GameSession.BidMultiplier     // 叫分倍数
+GameSession.HasResult         // 是否有叫分结果（GameBootstrapper.Awake 据此决定是否读取 GameSession）
+GameSession.Reset()           // 清除所有会话数据（调试/重新开始用）
 ```
 
-### 22.2 联机模式（预留）
+### 22.2 联机模式（已实现）
 
 ```csharp
+GameSession.IsNetworkMode = true;              // 标记联机模式
+GameSession.NetworkSeed = seed;                // 同步随机种子（Master 生成）
+GameSession.LocalPlayerId = localId;           // 本机玩家 ID（0/1/2）
 GameSession.SetResultNetwork(localId, baseMapping, multiplier);
 GameSession.SetLocalPlayerIsLandlord(isLandlord);
+GameSession.AISlots                            // AI 槽位 HashSet<int>
+GameSession.IsAISlot(slot)                     // 判断指定槽位是否为 AI
 // localId = 网络分配的玩家 ID（0/1/2）
 // baseMapping = 完整的 [playerId → baseIndex] 映射
+// seed = Environment.TickCount，Master 端生成，通过 BID_RESULT 广播
 ```
+
+**联机初始化流程**：
+```
+NetworkBiddingManager.HandleBidResult()
+  → GameSession.IsNetworkMode = true
+  → GameSession.NetworkSeed = seed
+  → GameSession.SetResultNetwork(_mySlot, baseMapping, multiplier)
+  → GameSession.SetLocalPlayerIsLandlord(localIsLandlord)
+  → Master 点击确认 → LoadScene(GAME_SCENE)
+  → GameBootstrapper 读取 GameSession 启动游戏
+```
+
+---
+
+## 23. BOSS 系统（BossController + BuildingAI）
+
+### 23.1 生命周期
+
+```
+场景加载
+  → BossController.Awake()
+    ├─ _isBoss = true
+    ├─ 缓存 Renderer/Collider（排除 UnitHealthBar）
+    └─ 禁用 Renderer/Collider（初始隐藏）
+  → CardUnit.Start()
+    └─ Initialize(0, Rank.Three, Lane.None, Inspector._isLandlord)
+  → GameBootstrapper.Start() 协程
+    ├─ Awake: 跳过 _isBoss 单位的 BuildingAI 禁用
+    ├─ Step 5b:
+    │   ├─ SetLandlord(!PlayerIsLandlord) 纠正阵营
+    │   ├─ 刷新血条颜色
+    │   ├─ 启用 BuildingAI（确保 enabled=true）
+    │   └─ boss.Inject(battleManager, deck)
+    │       ├─ 恢复 Renderer/Collider
+    │       └─ OnStart → ActivateBoss()
+    │           ├─ BattleManager.ActivateBoss(route)
+    │           └─ RegisterBossAsSummoner()
+    │               └─ BuildingAI.Initialize(hand, economy, ...)
+  → BuildingAI.Update()
+    ├─ 摸牌（每 drawInterval 秒）
+    ├─ 经济增长
+    └─ MakeDecision()（每 decisionInterval 秒）
+        └─ DeployCards() → SpawnPool 出兵
+```
+
+### 23.2 Prefab 结构
+
+```
+BossKing (CardUnit, BossController, BuildingAI, SpawnPool, RouteGroup, UnitPassives, UnitVFX)
+├── Visual (SpriteRenderer, SimpleAnimator, Animator, AttackEventRelay)
+├── HealthBar (UnitHealthBar, SpriteRenderer)
+├── Audio (UnitAudio)  ← 解耦到子物体
+├── KingPoint (Transform, SpawnPool._spawnPoint)
+└── AttackPoint (Transform)
+```
+
+### 23.3 关键配置
+
+| 组件 | 字段 | 说明 |
+|:---|:---|:---|
+| CardUnit | `_isBoss = true` | 标记为 BOSS 单位 |
+| CardUnit | `_isLandlord` | Inspector 值会被 Step 5b 强制纠正 |
+| BossController | `_trigger` | OnStart / OnTimer / OnBuildingDestroyed |
+| BossController | `_bossRoute` | BOSS 行进路线（RoutePath） |
+| BossController | `_enableSummoner` | 启用召唤师能力 |
+| BuildingAI | `decisionInterval` | 出牌判定间隔（秒） |
+| SpawnPool | `_rankPrefabs[13]` | 按点数映射的召唤物预制体 |
+| SpawnPool | `_spawnPoint` | 召唤物生成位置（应为 BOSS 子物体） |
+| RouteGroup | `_routes[]` | 召唤物行进路线 |
+| BossSkillSystem | `skills[]` | BOSS 技能列表（按数组顺序检查触发） |
+
+### 23.4 路径跟随
+
+BOSS 的 RoutePath 需要**取消勾选 `_cachePositions`**，使路径点实时跟随 BOSS 移动。否则召唤物会在初始位置生成。
+
+### 23.5 BossSkillSystem（BOSS 技能系统）
+
+独立组件，挂在 BOSS 根节点上，与 UnitPassives 共存。
+
+**触发条件（SkillTrigger）：**
+
+| 触发类型 | 说明 |
+|---|---|
+| `OnHPThreshold` | HP 降到阈值时触发（只触发一次，不会重复） |
+| `OnTimer` | 按冷却时间循环触发 |
+| `OnKill` | 击杀敌人时触发 |
+
+**效果类型（SkillEffectType）：**
+
+| 效果 | 说明 | 关键参数 |
+|---|---|---|
+| `AoeDamage` | 范围伤害 | effectValue=ATK 倍率, effectRadius=半径 |
+| `AoeStun` | 范围眩晕 | effectValue=眩晕秒数, effectRadius=半径 |
+| `Heal` | 治疗 | effectValue=MaxHP 百分比 |
+| `Knockback` | 范围击退 | effectValue=击退距离, effectRadius=半径 |
+| `Buff` | ATK 增益 | effectValue=倍率 |
+| `Dash` | 冲刺伤害 | dashDistance=距离, dashSpeed=速度, effectValue=ATK 倍率 |
+
+**施法特性：**
+
+| 字段 | 说明 |
+|---|---|
+| `castDuration` | 施法持续时间（0=瞬发） |
+| `invulnerable` | 施法期间不可选取（`CardUnit.Invulnerable = true`） |
+| `clearCC` | 施法时清除眩晕/减速 |
+| `animTrigger` | 施法动画名（多个技能可共用同一个 Trigger，如不同 HP 阶段的 Dash 共用 "Dash" 动画） |
+| `effectDelay` | 施法后多久触发效果 |
+
+**冲刺（Dash）机制：**
+- 方向：朝当前目标 → 路径前进方向 → 默认向右
+- 碰撞检测：使用 Boss 碰撞箱实际宽度扫描路径上的敌人
+- 每个敌人每次冲刺只受一次伤害（`HashSet` 去重）
+
+**生命周期：**
+```
+Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndCast()
+          ↓ 死亡时
+          ForceEndCast() → 清除 Invulnerable
+```
+
+### 23.6 注意事项
+
+- BOSS 不在 `baseBuildings` 的 AI 注入流程中，由 `BossController` 独立管理
+- BOSS 的 BuildingAI 必须在 `Inject` 之前被显式启用（Step 5b 处理）
+- BOSS 死亡后由 `UnitFactory.Despawn` 回收（`SourcePrefab = null` → `Destroy`）
+- BOSS 的 UnitId 由 `BattleManager.RegisterUnit` 统一分配，不使用 `CardUnit.Start` 的默认值
+- `Invulnerable` 状态在 BOSS 死亡时由 `ForceEndCast()` 自动清除，防止残留
+- 嘲讽打断攻击仅在嘲讽目标变化时生效，防止多个嘲讽光环导致攻击卡死
+- 攻击状态超时安全阀：`AttackInterval×3` 秒未完成自动重置
+- 多个 HP 阶段技能可共用同一个 `animTrigger`（如 75%/50%/25% 都填 "Dash"），动画相同但效果参数独立配置
+
+### 23.7 CoolDownEffect 配置要求
+
+`CoolDownEffect` 使用 `Image.fillAmount` 实现圆形冷却进度。冷却遮罩 Image 必须配置为：
+- **Image Type = Filled**
+- **Fill Method = Radial 360**
+
+如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。

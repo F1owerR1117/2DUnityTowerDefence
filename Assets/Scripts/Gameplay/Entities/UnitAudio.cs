@@ -11,7 +11,6 @@ namespace DoudizhuTower.Gameplay.Entities
     /// 使用优先级通道播放，确保 UI 音效不被战斗音效挤掉。
     /// 按 Clip 分组计数，避免单一兵种霸占通道；屏幕外兵种不播放音效。
     /// </summary>
-    [RequireComponent(typeof(CardUnit))]
     public class UnitAudio : MonoBehaviour
     {
         #region 音效配置
@@ -107,7 +106,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void Awake()
         {
-            _unit = GetComponent<CardUnit>();
+            _unit = GetComponentInParent<CardUnit>();
             _mainCam = Camera.main;
         }
 

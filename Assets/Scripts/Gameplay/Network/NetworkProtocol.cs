@@ -37,6 +37,9 @@ namespace DoudizhuTower.Gameplay.Network
         public const string GAME_END = "GAME_END";
         public const string PLAYER_LEFT = "PLAYER_LEFT";
 
+        // 经济同步
+        public const string GOLD_UPDATE = "GOLD_UPDATE";
+
         // 房间管理
         public const string ADD_AI = "ADD_AI";
         public const string REMOVE_AI = "REMOVE_AI";

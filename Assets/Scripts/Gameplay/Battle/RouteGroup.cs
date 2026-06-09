@@ -30,6 +30,13 @@ namespace DoudizhuTower.Gameplay.Battle
             _currentIndex = (_currentIndex - 1 + _routes.Length) % _routes.Length;
         }
 
+        /// <summary>设置路线索引（联机同步用）</summary>
+        public void SetRouteIndex(int index)
+        {
+            if (index >= 0 && index < _routes.Length)
+                _currentIndex = index;
+        }
+
         /// <summary>当前路线名称（用于 UI 显示）</summary>
         public string CurrentRouteName
         {

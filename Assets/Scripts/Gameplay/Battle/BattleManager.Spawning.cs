@@ -304,10 +304,8 @@ namespace DoudizhuTower.Gameplay.Battle
 
             RegisterUnit(unit);
 
-            // 继承召唤师所在基地的路线（而非从召唤师身上取）
-            var summonerBase = FindBaseFor(summoner);
-            var rg = summonerBase?.GetComponent<RouteGroup>();
-            unit.FollowPath = rg?.CurrentRoute;
+            // 直接继承召唤师的路线，避免基地切换分路后召唤物走上错误的路
+            unit.FollowPath = summoner.FollowPath;
             // 从召唤师位置开始，而非路径起点
             unit.SetPositionSynced(new Vector3(position.x, position.y, unit.transform.position.z));
             unit.OnDied -= OnUnitDied; unit.OnDied += OnUnitDied;
@@ -325,20 +323,6 @@ namespace DoudizhuTower.Gameplay.Battle
             if (pool != null && pool.SpawnPoint != null) return pool.SpawnPoint.position;
             if (sourceBase != null) return sourceBase.transform.position;
             return MapController.GetSpawnPosition(lane, false);
-        }
-
-        /// <summary>根据兵种的阵营找到对应的基地</summary>
-        private Component FindBaseFor(CardUnit unit)
-        {
-            if (baseBuildings == null || unit == null) return null;
-            foreach (var b in baseBuildings)
-            {
-                if (b == null) continue;
-                var cu = b.GetComponent<CardUnit>();
-                if (cu != null && cu.IsLandlord == unit.IsLandlord)
-                    return b;
-            }
-            return null;
         }
 
         private void SnapToPathStart(CardUnit unit)

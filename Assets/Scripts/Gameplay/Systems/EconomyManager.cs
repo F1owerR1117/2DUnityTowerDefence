@@ -21,6 +21,8 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private EconomySystem _coreEconomy;
         private TimerQueue _timerQueue;
+        private GameStateMachine _stateMachine;
+        private float _baseIncomeRate;
 
         /// <summary>当前金币（委托给 Core）</summary>
         public float CurrentGold => _coreEconomy?.CurrentGold ?? 0f;
@@ -34,14 +36,20 @@ namespace DoudizhuTower.Gameplay.Systems
         /// <summary>
         /// 由 GameBootstrapper 调用
         /// </summary>
-        public void Initialize(EconomySystem economyLogic, TimerQueue timerQueue)
+        public void Initialize(EconomySystem economyLogic, TimerQueue timerQueue, GameStateMachine stateMachine = null)
         {
             _coreEconomy = economyLogic;
             _timerQueue = timerQueue;
+            _stateMachine = stateMachine;
+            _baseIncomeRate = economyLogic.IncomeRate;
 
             // 焊接事件
             _coreEconomy.OnGoldChanged += UpdateGoldUI;
             _coreEconomy.OnIncomeChanged += UpdateIncomeUI;
+
+            // 订阅骤死期切换
+            if (_stateMachine != null)
+                _stateMachine.OnPhaseChanged += OnPhaseChanged;
 
             // 初始更新
             UpdateGoldUI(_coreEconomy.CurrentGold);
@@ -84,6 +92,14 @@ namespace DoudizhuTower.Gameplay.Systems
         }
 
         /// <summary>
+        /// 强制设置金币（联机同步用）
+        /// </summary>
+        public void SetGold(float amount)
+        {
+            _coreEconomy?.SetGold(amount);
+        }
+
+        /// <summary>
         /// 设置回金速度（暴君超频等）
         /// </summary>
         public void SetIncomeRate(float rate)
@@ -117,6 +133,32 @@ namespace DoudizhuTower.Gameplay.Systems
             });
         }
 
+        private Color _goldTextOriginalColor;
+        private float _goldFlashTimer;
+
+        /// <summary>金币文字闪烁红色（外部调用，如金币不足时）</summary>
+        public void FlashGoldText()
+        {
+            if (goldText == null) return;
+            _goldTextOriginalColor = goldText.color;
+            _goldFlashTimer = 0.5f;
+        }
+
+        private void UpdateGoldFlash()
+        {
+            if (_goldFlashTimer <= 0f) return;
+            _goldFlashTimer -= Time.deltaTime;
+            if (_goldFlashTimer <= 0f)
+            {
+                if (goldText != null)
+                    goldText.color = _goldTextOriginalColor;
+                return;
+            }
+            if (goldText != null)
+                goldText.color = (Mathf.FloorToInt(_goldFlashTimer * 20f) % 2 == 0)
+                    ? Color.red : _goldTextOriginalColor;
+        }
+
         private void UpdateGoldUI(float currentGold)
         {
             if (goldText != null)
@@ -132,6 +174,24 @@ namespace DoudizhuTower.Gameplay.Systems
         private void Update()
         {
             _coreEconomy?.UpdateEconomy(Time.deltaTime);
+            UpdateGoldFlash();
+        }
+
+        private void OnPhaseChanged(GamePhase phase)
+        {
+            if (_coreEconomy == null || config == null) return;
+
+            if (phase == GamePhase.SuddenDeath)
+            {
+                // 骤死期：回金速度乘以倍率
+                _baseIncomeRate = _coreEconomy.IncomeRate;
+                _coreEconomy.SetIncomeRate(_baseIncomeRate * config.suddenDeathMultiplier);
+            }
+            else if (phase == GamePhase.GameOver)
+            {
+                // 游戏结束：恢复基础回金速度（防止重开时残留倍率）
+                _coreEconomy.SetIncomeRate(_baseIncomeRate);
+            }
         }
 
         private void OnDestroy()
@@ -141,6 +201,8 @@ namespace DoudizhuTower.Gameplay.Systems
                 _coreEconomy.OnGoldChanged -= UpdateGoldUI;
                 _coreEconomy.OnIncomeChanged -= UpdateIncomeUI;
             }
+            if (_stateMachine != null)
+                _stateMachine.OnPhaseChanged -= OnPhaseChanged;
         }
     }
 }

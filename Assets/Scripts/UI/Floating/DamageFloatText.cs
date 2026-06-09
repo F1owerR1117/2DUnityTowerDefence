@@ -12,8 +12,13 @@ namespace DoudizhuTower.UI.Floating
     public class DamageFloatText : MonoBehaviour
     {
         [Header("动画参数")]
+        [Tooltip("飘字向上浮动的总高度（世界坐标单位）")]
         [SerializeField] private float floatHeight = 1.5f;
+
+        [Tooltip("动画总时长（秒），从出现到完全消失")]
         [SerializeField] private float duration = 1f;
+
+        [Tooltip("暴击阈值：伤害 ≥ 此值时变红加粗加大")]
         [SerializeField] private float critThreshold = 50f;
 
         private TextMeshPro _text;
@@ -43,16 +48,19 @@ namespace DoudizhuTower.UI.Floating
 
             _text.text = Mathf.RoundToInt(damage).ToString();
 
-            // 颜色规则：大伤害红色加粗，物理白色，特殊紫色，真实伤害橙色
+            // ── 颜色规则 ──
+            // 真实伤害 → 橙色
+            // 特殊伤害 → 紫色
+            // 物理/炸弹/燃烧 → 暴击红色，否则白色
             bool isCrit = damage >= critThreshold;
             _text.color = type switch
             {
-                DamageType.True => new Color(1f, 0.5f, 0f),
-                DamageType.Special => new Color(0.7f, 0.3f, 1f),
-                _ => isCrit ? Color.red : Color.white
+                DamageType.True => new Color(1f, 0.5f, 0f),       // 真实伤害：橙色
+                DamageType.Special => new Color(0.7f, 0.3f, 1f),  // 特殊伤害：紫色
+                _ => isCrit ? Color.red : Color.white              // 其他：暴击红 / 普通白
             };
-            _text.fontStyle = isCrit ? FontStyles.Bold : FontStyles.Normal;
-            _text.fontSize = isCrit ? 120f : 100f;
+            _text.fontStyle = isCrit ? FontStyles.Bold : FontStyles.Normal;  // 暴击加粗
+            _text.fontSize = isCrit ? 120f : 100f;                            // 暴击字号更大
 
             gameObject.SetActive(true);
         }
@@ -60,23 +68,27 @@ namespace DoudizhuTower.UI.Floating
         private void Update()
         {
             _elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(_elapsed / duration);
+            float t = Mathf.Clamp01(_elapsed / duration); // 0→1 归一化进度
 
-            // 向上浮动
+            // ── 向上浮动 ──
+            // 从起始位置线性向上移动 floatHeight 距离
             Vector3 pos = _startPos;
             pos.y += t * floatHeight;
             transform.position = pos;
 
-            // 渐隐（前 20% 不透明，后 80% 逐渐消失）
+            // ── 渐隐 ──
+            // 前 20% 时间：完全不透明（让玩家看清数字）
+            // 后 80% 时间：从不透明渐变到透明
             float alpha = t < 0.2f ? 1f : Mathf.Lerp(1f, 0f, (t - 0.2f) / 0.8f);
             _text.alpha = alpha;
 
+            // ── 动画结束 → 隐藏并回调对象池回收 ──
             if (t >= 1f)
             {
                 var cb = _onComplete;
                 _onComplete = null;
                 gameObject.SetActive(false);
-                cb?.Invoke();
+                cb?.Invoke(); // 通知 FloatingTextPool 回收
             }
         }
     }

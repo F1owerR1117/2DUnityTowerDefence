@@ -21,10 +21,18 @@ namespace DoudizhuTower.UI.Panels
         [Header("设置面板")]
         [SerializeField] private GameObject settingsPanel;
         [SerializeField] private Slider volumeSlider;
+        [SerializeField] private Toggle fullscreenToggle;
         [SerializeField] private Button settingsBackButton;
 
         public static bool IsPaused { get; private set; }
         public static bool IsGameOver { get; set; }
+
+        /// <summary>设置联机模式：隐藏重启按钮</summary>
+        public void SetMultiplayerMode(bool isMultiplayer)
+        {
+            if (restartButton != null)
+                restartButton.gameObject.SetActive(!isMultiplayer);
+        }
 
         public event Action OnRestartRequested;
         public event Action OnQuitRequested;
@@ -62,6 +70,11 @@ namespace DoudizhuTower.UI.Panels
             {
                 volumeSlider.value = AudioListener.volume;
                 volumeSlider.onValueChanged.AddListener(v => AudioListener.volume = v);
+            }
+            if (fullscreenToggle != null)
+            {
+                fullscreenToggle.isOn = Screen.fullScreen;
+                fullscreenToggle.onValueChanged.AddListener(OnFullscreenToggleChanged);
             }
         }
 
@@ -125,6 +138,19 @@ namespace DoudizhuTower.UI.Panels
         private void CloseSettings()
         {
             HidePanel(_settingsCanvasGroup);
+        }
+
+        private void OnFullscreenToggleChanged(bool isFullscreen)
+        {
+            if (isFullscreen)
+            {
+                var maxRes = Screen.currentResolution;
+                Screen.SetResolution(maxRes.width, maxRes.height, FullScreenMode.FullScreenWindow);
+            }
+            else
+            {
+                Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
+            }
         }
 
         private void Quit()

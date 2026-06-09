@@ -98,7 +98,7 @@ namespace DoudizhuTower.Gameplay.Entities
             if (OverrideFindTarget != null) return OverrideFindTarget();
 
             // 3. 默认索敌：用边缘距离替代中心距，大单位不会被漏检
-            float detectRange = Mathf.Max(Stats.Range * 2f, 5f);
+            float detectRange = DetectionRange;
             CardUnit bestSameLane = null;
             float minSame = float.MaxValue;
             CardUnit bestOther = null;
@@ -138,12 +138,14 @@ namespace DoudizhuTower.Gameplay.Entities
             var allTargets = FindObjectsByType<CardUnit>(FindObjectsSortMode.None);
             IBuildingTarget best = null;
             float bestDist = float.MaxValue;
-            float detectRange = Mathf.Max(Stats.Range * 2f, 5f);
+            float detectRange = DetectionRange;
 
             foreach (var unit in allTargets)
             {
                 if (unit == null || !unit._isBuilding || !unit.IsAlive) continue;
                 if (unit.IsLandlord == IsLandlord) continue;
+                // 路线过滤：只检测同路线或无路线的建筑
+                if (_lane != Lane.None && unit.Lane != Lane.None && unit.Lane != _lane) continue;
 
                 float dist = GetEdgeDistance(unit);
                 if (dist <= detectRange && dist < bestDist)
@@ -183,6 +185,7 @@ namespace DoudizhuTower.Gameplay.Entities
             _hitCountDealt = 0;
             _animDone = false;
             _projectileSpawned = false;
+            _attackStateTimer = 0f;
 
             float interval = Stats.AttackInterval;
             float clipLen = GetAttackClipLength();
@@ -244,6 +247,15 @@ namespace DoudizhuTower.Gameplay.Entities
         public void OnAttackHitFrame()
         {
             if (_isDying) return;
+
+            // ── 真凶抓捕雷达 ──
+            string targetInfo = CurrentTarget is CardUnit cu ? $"{cu.name} (ID:{cu.GetInstanceID()})" : "NULL";
+            float currentDist = CurrentTarget != null ? GetEdgeDistance(CurrentTarget) : -1f;
+            bool isSelf = CurrentTarget is CardUnit tCU && tCU == this;
+            Debug.LogWarning($"[HitFrame_Radar] _isAttacking={_isAttacking} | Target={targetInfo} | Dist={currentDist:F1} | IsSelf={isSelf} | Frame={Time.frameCount}");
+
+            // AI 未授权攻击时，拦截 Animator 残留事件，防止空挥
+            if (!_isAttacking) return;
             if (_isRanged && _projectilePrefab != null)
             {
                 if (_projectileSpawned) return;
@@ -274,10 +286,18 @@ namespace DoudizhuTower.Gameplay.Entities
                 _attackTarget.TakeDamage(totalDmg, DamageType.Physical);
             }
             // 无单位目标（正在攻击建筑）→ 打建筑（需在攻击范围内）
-            else if (_attackTarget == null && CurrentTarget != null && !CurrentTarget.IsDestroyed
-                && GetEdgeDistance(CurrentTarget) <= Stats.Range)
+            else if (_attackTarget == null && CurrentTarget != null && !CurrentTarget.IsDestroyed)
             {
-                CurrentTarget.TakeDamage(totalDmg);
+                // 伤害门禁：防止攻击友方建筑（Animator 残留事件等绕过 AI 决策的情况）
+                if (CurrentTarget is CardUnit targetCU && targetCU.IsLandlord == IsLandlord)
+                {
+                    CurrentTarget = null;
+                    return;
+                }
+                if (GetEdgeDistance(CurrentTarget) <= Stats.Range)
+                {
+                    CurrentTarget.TakeDamage(totalDmg);
+                }
             }
             // 目标已死或不在范围内 → 不造成伤害
         }
@@ -325,6 +345,7 @@ namespace DoudizhuTower.Gameplay.Entities
         public virtual void TakeDamage(float rawDamage, DamageType type)
         {
             if (!IsAlive) return;
+            if (Invulnerable) return;
 
             // 真实伤害：无视屏障、盾墙减免、伤害减免
             if (type == DamageType.True)
@@ -398,6 +419,7 @@ namespace DoudizhuTower.Gameplay.Entities
         public void ApplyDamage(float finalDamage)
         {
             if (!IsAlive) return;
+            if (Invulnerable) return;
 
             _currentHP -= finalDamage;
             OnHPChanged?.Invoke(_unitId, _currentHP);

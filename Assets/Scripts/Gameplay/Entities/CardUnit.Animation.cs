@@ -45,7 +45,7 @@ namespace DoudizhuTower.Gameplay.Entities
             else
             {
                 // 尝试重新获取 Animator
-                _animator = GetComponentInChildren<Animator>();
+                _animator = GetComponentInChildren<Animator>(true);
                 if (_animator != null && _animator.isActiveAndEnabled)
                     _animator.SetInteger("State", state);
             }
@@ -110,7 +110,7 @@ namespace DoudizhuTower.Gameplay.Entities
                 if (anim != null && anim.isActiveAndEnabled) return anim;
             }
             if (_animator != null && _animator.isActiveAndEnabled) return _animator;
-            _animator = GetComponentInChildren<Animator>();
+            _animator = GetComponentInChildren<Animator>(true);
             return _animator;
         }
 
@@ -237,7 +237,40 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         public virtual void OnPoolSpawn()
         {
+            // 1. 先禁用 Animator，防止 SetActive 时从上次状态恢复
+            if (_animator == null) _animator = GetComponentInChildren<Animator>(true);
+            if (_animator != null) _animator.enabled = false;
+
+            // 2. 激活 GameObject
             gameObject.SetActive(true);
+
+            // 3. 重置 Animator：Rebind 清内部状态 + Play 强制回到 Idle
+            if (_animator != null)
+            {
+                _animator.Rebind();
+                _animator.SetInteger("State", 0);
+                _animator.ResetTrigger("Death");
+                _animator.ResetTrigger("Summon");
+                _animator.ResetTrigger("StunHit");
+                _animator.ResetTrigger("Shockwave");
+                _animator.ResetTrigger("DeathExplosion");
+                _animator.ResetTrigger("Burn");
+                _animator.ResetTrigger("Splash");
+                _animator.ResetTrigger("KingAura");
+                _animator.ResetTrigger("Charge");
+                _animator.ResetTrigger("Dash");
+                _animator.ResetTrigger("BossSkill1");
+                _animator.ResetTrigger("BossSkill2");
+                _animator.ResetTrigger("BossSkill3");
+                _animator.SetBool("Charge", false);
+                _animator.SetBool("Taunt", false);
+                _animator.SetBool("ShieldWall", false);
+                // Play 强制跳转到 Entry（Idle），绕过 AnimatorOverrideController 的状态残留
+                _animator.Play(0, 0, 0f);
+                _animator.Update(0f);
+                _animator.enabled = true;
+            }
+
             IsTauntSource = false;
             TauntRadius = 0f;
             ShieldBlocks = 0;
@@ -250,6 +283,8 @@ namespace DoudizhuTower.Gameplay.Entities
             SlowRestoreTimer = 0f;
             _needsFirstFrameSearch = true;
             _currentAnimState = -1;
+            OverrideFindTarget = null;
+            OverrideAttackRange = null;
             _bonusDamage = 0f;
             OriginalMoveSpeed = 0f;
             _buffs.Clear();

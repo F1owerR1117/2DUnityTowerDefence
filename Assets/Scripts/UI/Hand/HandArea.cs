@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using DoudizhuTower.Core.Cards;
@@ -450,6 +451,30 @@ namespace DoudizhuTower.UI.Hand
             if (_validator == null || !_validator.IsValidSelection)
                 return null;
             return _validator.LastValidation;
+        }
+
+        /// <summary>金币不足时的视觉反馈：validationLabel 红色提示 + 已选中牌抖动</summary>
+        public void ShowInsufficientGoldFeedback(float cost, float currentGold)
+        {
+            if (validationLabel != null)
+            {
+                validationLabel.text = $"金币不足！需要 {cost:F0}，当前 {Mathf.FloorToInt(currentGold)}";
+                validationLabel.color = Color.red;
+            }
+
+            foreach (var widget in _cardWidgets)
+            {
+                if (widget != null && _validator.CurrentSelection.Contains(widget.BoundCard))
+                    widget.PulseRejection();
+            }
+
+            StartCoroutine(ResetValidationLabelAfterDelay(2f));
+        }
+
+        private IEnumerator ResetValidationLabelAfterDelay(float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            OnSelectionChanged();
         }
 
         private void OnDestroy()

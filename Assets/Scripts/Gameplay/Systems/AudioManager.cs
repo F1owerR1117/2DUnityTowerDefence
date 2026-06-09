@@ -59,6 +59,9 @@ namespace DoudizhuTower.Gameplay.Systems
         [Tooltip("获得手牌（抽牌）音效")]
         [SerializeField] private AudioClip drawCardClip;
 
+        [Tooltip("金币不足提示音效")]
+        [SerializeField] private AudioClip insufficientGoldClip;
+
         [Header("-- 背景音乐 --")]
         [Tooltip("默认背景音乐（未匹配到场景时的回退）")]
         [SerializeField] private AudioClip bgmClip;
@@ -150,7 +153,9 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            PlayBGMForScene(scene.name);
+            // 仅主场景切换时更新 BGM，additive 加载（如 UI_Scene）不影响
+            if (mode == LoadSceneMode.Single)
+                PlayBGMForScene(scene.name);
         }
 
         private AudioSource CreateSource(string name, int priority, bool loop)
@@ -191,6 +196,11 @@ namespace DoudizhuTower.Gameplay.Systems
         public void PlayDrawCard()
         {
             PlayUI(drawCardClip);
+        }
+
+        public void PlayInsufficientGold()
+        {
+            PlayUI(insufficientGoldClip);
         }
 
         #endregion
@@ -310,9 +320,11 @@ namespace DoudizhuTower.Gameplay.Systems
                     }
                 }
             }
-            // 未匹配到场景，使用默认 BGM
+            // 未匹配到场景，使用默认 BGM；默认 BGM 也未设置则停止播放
             if (bgmClip != null)
                 PlayBGM(bgmClip);
+            else
+                StopBGM();
         }
 
         public void StopBGM()

@@ -16,6 +16,20 @@ namespace DoudizhuTower.Gameplay.Network
         private const string READY_KEY = "ready";
         private const byte CUSTOM_EVENT_CODE = 1;
 
+        private static PhotonService _instance;
+
+        private void Awake()
+        {
+            // 防止重复实例
+            if (_instance != null && _instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+        }
+
         // ─── 连接 ───
 
         public bool IsConnected => PhotonNetwork.IsConnected;
@@ -39,6 +53,11 @@ namespace DoudizhuTower.Gameplay.Network
             {
                 // 增大断线超时，防止应用失焦时被服务端踢出
                 PhotonNetwork.NetworkingClient.LoadBalancingPeer.DisconnectTimeout = 30000;
+
+                // 固定区域：确保所有客户端连接到同一区域，避免房间不可见
+                if (string.IsNullOrEmpty(PhotonNetwork.PhotonServerSettings.AppSettings.FixedRegion))
+                    PhotonNetwork.PhotonServerSettings.AppSettings.FixedRegion = "jp";
+
                 PhotonNetwork.ConnectUsingSettings();
             }
         }
@@ -53,7 +72,7 @@ namespace DoudizhuTower.Gameplay.Network
 
         private void OnApplicationFocus(bool hasFocus)
         {
-            if (hasFocus && !PhotonNetwork.IsConnected && !PhotonNetwork.InRoom)
+            if (hasFocus && !PhotonNetwork.IsConnected)
             {
                 TryReconnect();
             }
@@ -61,7 +80,7 @@ namespace DoudizhuTower.Gameplay.Network
 
         private void OnApplicationPause(bool pauseStatus)
         {
-            if (!pauseStatus && !PhotonNetwork.IsConnected && !PhotonNetwork.InRoom)
+            if (!pauseStatus && !PhotonNetwork.IsConnected)
             {
                 TryReconnect();
             }
@@ -249,6 +268,21 @@ namespace DoudizhuTower.Gameplay.Network
         {
             Debug.LogWarning($"[Photon] 断开连接: {cause}");
             OnConnectionLost?.Invoke();
+
+            // 超时断线（通常因应用失焦）自动尝试重连
+            if (cause == DisconnectCause.ServerTimeout
+                || cause == DisconnectCause.ClientTimeout
+                || cause == DisconnectCause.Exception)
+            {
+                Debug.Log("[Photon] 超时断线，3 秒后尝试自动重连...");
+                StartCoroutine(ReconnectAfterDelay(3f));
+            }
+        }
+
+        private System.Collections.IEnumerator ReconnectAfterDelay(float delay)
+        {
+            yield return new WaitForSecondsRealtime(delay);
+            TryReconnect();
         }
 
         public override void OnCreatedRoom()
@@ -260,6 +294,8 @@ namespace DoudizhuTower.Gameplay.Network
         public override void OnJoinedRoom()
         {
             _shouldRejoinRoom = true;
+            // 启用场景同步：Master 调用 LoadLevel 时自动同步到所有客户端
+            PhotonNetwork.AutomaticallySyncScene = true;
             Debug.Log($"[Photon] 已加入房间: {PhotonNetwork.CurrentRoom.Name} ({PhotonNetwork.CurrentRoom.PlayerCount}/{PhotonNetwork.CurrentRoom.MaxPlayers})");
             OnRoomJoinSuccess?.Invoke(PhotonNetwork.CurrentRoom.Name);
         }

@@ -12,10 +12,28 @@ public static class CreateUnitAnimatorController
 
         if (AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(ctrlPath) != null)
         {
-            Debug.Log("[Animator] UnitBaseController 已存在，跳过创建");
+            Debug.Log("[Animator] UnitBaseController 已存在，跳过创建。使用 Tools → 更新兵种 Animator Controller 添加新状态");
             Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>(ctrlPath);
             return;
         }
+
+        CreateInternal(dir, ctrlPath);
+    }
+
+    [MenuItem("Tools/更新兵种 Animator Controller")]
+    private static void Update()
+    {
+        string dir = "Assets/Animations";
+        string ctrlPath = $"{dir}/UnitBaseController.controller";
+
+        // 删除旧的，重新创建
+        AssetDatabase.DeleteAsset(ctrlPath);
+        CreateInternal(dir, ctrlPath);
+        Debug.Log("[Animator] UnitBaseController 已更新（含 BOSS 技能状态）");
+    }
+
+    private static void CreateInternal(string dir, string ctrlPath)
+    {
 
         if (!AssetDatabase.IsValidFolder(dir))
             AssetDatabase.CreateFolder("Assets", "Animations");
@@ -24,7 +42,8 @@ public static class CreateUnitAnimatorController
 
         // 参数
         ctrl.AddParameter("State", AnimatorControllerParameterType.Int);
-        string[] triggers = { "Death", "Shockwave", "Splash", "StunHit", "KingAura", "DeathExplosion", "Burn", "Summon" };
+        string[] triggers = { "Death", "Shockwave", "Splash", "StunHit", "KingAura", "DeathExplosion", "Burn", "Summon",
+                              "Dash", "BossSkill1", "BossSkill2", "BossSkill3" };
         foreach (var t in triggers)
             ctrl.AddParameter(t, AnimatorControllerParameterType.Trigger);
         string[] bools = { "Charge", "Taunt", "ShieldWall" };

@@ -39,12 +39,24 @@ namespace DoudizhuTower.Gameplay.Battle
         private CardDeck _deck;
         private CardUnit _bossUnit;
         private bool _activated;
+        private Renderer[] _renderers;
+        private Collider2D[] _colliders;
 
-        /// <summary>注入依赖（由 GameBootstrapper 调用）</summary>
+        /// <summary>注入依赖（由 GameBootstrapper 调用）。注入完成即恢复显示。</summary>
         public void Inject(BattleManager battleManager, CardDeck deck)
         {
             _battleManager = battleManager;
             _deck = deck;
+
+            // 依赖注入完成，恢复显示和碰撞
+            if (_renderers != null)
+                foreach (var r in _renderers) if (r != null) r.enabled = true;
+            if (_colliders != null)
+                foreach (var c in _colliders) if (c != null) c.enabled = true;
+
+            // OnStart 模式：注入完成后直接激活，无需等待 Invoke
+            if (_trigger == SpawnTrigger.OnStart)
+                ActivateBoss();
         }
 
         /// <summary>设置触发条件（可覆盖 Inspector 配置）</summary>
@@ -65,18 +77,39 @@ namespace DoudizhuTower.Gameplay.Battle
             }
             // 确保是 BOSS 型单位（独立于 _isBuilding，走 BOSS 专用注册路径）
             _bossUnit._isBoss = true;
+
+            // 初始隐藏：禁用所有渲染和碰撞，激活时恢复
+            // 排除 UnitHealthBar 子物体，保证血条始终可见
+            var allRenderers = GetComponentsInChildren<Renderer>(true);
+            var rendererList = new System.Collections.Generic.List<Renderer>();
+            foreach (var r in allRenderers)
+            {
+                if (r.GetComponentInParent<UnitHealthBar>() == null)
+                {
+                    r.enabled = false;
+                    rendererList.Add(r);
+                }
+            }
+            _renderers = rendererList.ToArray();
+
+            var allColliders = GetComponentsInChildren<Collider2D>(true);
+            var colliderList = new System.Collections.Generic.List<Collider2D>();
+            foreach (var c in allColliders)
+            {
+                if (c.GetComponentInParent<UnitHealthBar>() == null)
+                {
+                    c.enabled = false;
+                    colliderList.Add(c);
+                }
+            }
+            _colliders = colliderList.ToArray();
         }
 
         private void Start()
         {
-            // 按触发模式订阅
+            // 按触发模式订阅（OnStart 已在 Inject() 中处理）
             switch (_trigger)
             {
-                case SpawnTrigger.OnStart:
-                    // 延迟一帧等 BattleManager.Initialize() 完成
-                    Invoke(nameof(ActivateBoss), 0.1f);
-                    break;
-
                 case SpawnTrigger.OnTimer:
                     var timerQueue = FindFirstObjectByType<TimerQueue>();
                     if (timerQueue != null)

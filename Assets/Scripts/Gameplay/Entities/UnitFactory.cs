@@ -45,7 +45,10 @@ namespace DoudizhuTower.Gameplay.Entities
                 unit = pool.Dequeue();
                 if (unit == null)
                 {
+                    // 临时禁用防止 Start() 在 Initialize() 之前执行（用错误的 Inspector _isLandlord 值）
+                    prefab.gameObject.SetActive(false);
                     unit = Instantiate(prefab, position, Quaternion.identity, transform);
+                    prefab.gameObject.SetActive(true);
                 }
                 else
                 {
@@ -55,15 +58,21 @@ namespace DoudizhuTower.Gameplay.Entities
             }
             else
             {
+                // 临时禁用防止 Start() 在 Initialize() 之前执行
+                prefab.gameObject.SetActive(false);
                 unit = Instantiate(prefab, position, Quaternion.identity, transform);
+                prefab.gameObject.SetActive(true);
             }
 
             // 记录来源预制体（回收时查池用）
             unit.SourcePrefab = prefab;
 
-            // 初始化
+            // 初始化（必须在 gameObject.SetActive(true) 之前，确保 Start() 看到 _initialized=true）
             int id = _nextUnitId++;
             unit.Initialize(id, rank, lane, isLandlord);
+
+            // 激活单位（Instantiate 时 prefab 被临时禁用，所以 copy 也是 inactive 的）
+            unit.gameObject.SetActive(true);
 
             // 初始化血条
             var healthBar = unit.GetComponentInChildren<UnitHealthBar>(true);

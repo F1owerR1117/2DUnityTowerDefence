@@ -98,6 +98,8 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private readonly List<CardUnit> _pendingDeaths = new();
         private readonly List<CardUnit> _allUnits = new();
+        private readonly Dictionary<int, CardUnit> _unitById = new();
+        private int _globalUnitId;
         private IBuildingTarget[] _allBuildingTargets;
         private readonly List<CardUnit> _activeBosses = new();
         private readonly Collider2D[] _overlapCache = new Collider2D[128];
@@ -108,14 +110,21 @@ namespace DoudizhuTower.Gameplay.Battle
         {
             if (unit != null && !_allUnits.Contains(unit))
             {
+                int id = _globalUnitId++;
+                unit.SetUnitId(id);
                 _allUnits.Add(unit);
+                _unitById[id] = unit;
                 _unitsSpawnedCount++;
             }
         }
 
         private void UnregisterUnit(CardUnit unit)
         {
-            if (unit != null) _allUnits.Remove(unit);
+            if (unit != null)
+            {
+                _allUnits.Remove(unit);
+                _unitById.Remove(unit.UnitId);
+            }
         }
 
         // ─── 敌方查询 ──────────────────────────────────
@@ -245,7 +254,9 @@ namespace DoudizhuTower.Gameplay.Battle
                 Debug.LogWarning("[BattleManager] BOSS 缺少 RouteGroup 组件，召唤师派兵路线将为空");
 
             var economy = new EconomySystem(initialGold, incomeRate);
-            ai.Initialize(new CardHand(20), economy, this, deck, maxSelection, drawInterval);
+            var hand = new CardHand(20);
+            ai.Initialize(hand, economy, this, deck, maxSelection, drawInterval);
+            Debug.Log($"[BattleManager] RegisterBossAsSummoner: {boss.name}(ID={boss.UnitId}), ai.enabled={ai.enabled}, hand={hand.Count}, gold={economy.CurrentGold}");
         }
 
         private bool HasAliveEnemyBoss(bool playerIsLandlord)
@@ -300,19 +311,15 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void OnUnitDied(int unitId)
         {
-            foreach (var unit in _allUnits)
+            if (!_unitById.TryGetValue(unitId, out var unit) || unit == null) return;
+            _unitsKilledCount++;
+            if (_enableTyrantAura && _economyManager != null
+                && unit.LastAttacker != null
+                && unit.LastAttacker.IsLandlord == CardUnit.PlayerIsLandlord)
             {
-                if (unit == null || unit.UnitId != unitId) continue;
-                _unitsKilledCount++;
-                if (_enableTyrantAura && _economyManager != null
-                    && unit.LastAttacker != null
-                    && unit.LastAttacker.IsLandlord == CardUnit.PlayerIsLandlord)
-                {
-                    _economyManager.AddGold(unit.Stats.ATK * _killGoldBonusPct);
-                }
-                _pendingDeaths.Add(unit);
-                return;
+                _economyManager.AddGold(unit.Stats.ATK * _killGoldBonusPct);
             }
+            _pendingDeaths.Add(unit);
         }
 
         private void CleanupDeadUnits()

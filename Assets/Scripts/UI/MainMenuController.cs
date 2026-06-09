@@ -24,6 +24,7 @@ namespace DoudizhuTower.UI
         [Header("设置面板")]
         [SerializeField] private GameObject settingsPanel;
         [SerializeField] private Slider volumeSlider;
+        [SerializeField] private Toggle fullscreenToggle;
         [SerializeField] private Button settingsBackButton;
 
         private void Start()
@@ -57,6 +58,11 @@ namespace DoudizhuTower.UI
             {
                 volumeSlider.value = AudioListener.volume;
                 volumeSlider.onValueChanged.AddListener(OnVolumeChanged);
+            }
+            if (fullscreenToggle != null)
+            {
+                fullscreenToggle.isOn = Screen.fullScreen;
+                fullscreenToggle.onValueChanged.AddListener(OnFullscreenToggleChanged);
             }
             if (settingsBackButton != null)
                 settingsBackButton.onClick.AddListener(OnSettingsBack);
@@ -105,6 +111,19 @@ namespace DoudizhuTower.UI
         private void OnVolumeChanged(float value)
         {
             AudioListener.volume = value;
+        }
+
+        private void OnFullscreenToggleChanged(bool isFullscreen)
+        {
+            if (isFullscreen)
+            {
+                var maxRes = Screen.currentResolution;
+                Screen.SetResolution(maxRes.width, maxRes.height, FullScreenMode.FullScreenWindow);
+            }
+            else
+            {
+                Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
+            }
         }
     }
 }

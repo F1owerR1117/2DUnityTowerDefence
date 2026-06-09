@@ -81,11 +81,18 @@ namespace DoudizhuTower.UI.Bidding
                 return;
             }
 
-            _actorNumbers = _net.GetPlayerActorNumbers();
+            var realActors = _net.GetPlayerActorNumbers();
+
+            // 确保 _actorNumbers 始终有 3 个元素（AI 槽位用 -1 填充）
+            _actorNumbers = new int[3];
+            for (int i = 0; i < 3; i++)
+                _actorNumbers[i] = i < realActors.Length ? realActors[i] : -1;
+
             _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, _actorNumbers);
 
             // 加载 AI 槽位
             _aiSlots = new HashSet<int>(GameSession.AISlots);
+            Debug.Log($"[NetworkBidding] AI 槽位: [{string.Join(", ", _aiSlots)}], IsMaster={_net.IsMasterClient}, mySlot={_mySlot}, actorNumbers=[{string.Join(", ", _actorNumbers)}]");
 
             // 分配左右槽位
             AssignSideSlots();
@@ -154,7 +161,12 @@ namespace DoudizhuTower.UI.Bidding
                 if (_aiDelay <= 0f)
                 {
                     int bid = AIDecideBid();
-                    _net.SendToAll(NetworkProtocol.BID_ACTION, new object[] { _currentTurnSlot, bid });
+                    Debug.Log($"[NetworkBidding] AI 槽位 {_currentTurnSlot} 叫分: {bid}");
+                    var aiBidData = new object[] { _currentTurnSlot, bid };
+                    _net.SendToAll(NetworkProtocol.BID_ACTION, aiBidData);
+
+                    // Master 不会收到自己的 RaiseEvent，需直接处理
+                    ProcessBid(_currentTurnSlot, bid);
                 }
             }
         }
@@ -209,6 +221,9 @@ namespace DoudizhuTower.UI.Bidding
             if (bid > 0 && bid <= _highestBid) return;
 
             _net.SendToAll(NetworkProtocol.BID_ACTION, new object[] { senderSlot, bid });
+
+            // Master 不会收到自己的 RaiseEvent，需直接处理
+            ProcessBid(senderSlot, bid);
         }
 
         private void HandleBidActionBroadcast(object[] data)
@@ -252,7 +267,12 @@ namespace DoudizhuTower.UI.Bidding
                     }
                     nextTurn = 0;
                 }
-                _net.SendToAll(NetworkProtocol.BID_TURN, new object[] { nextTurn });
+                Debug.Log($"[NetworkBidding] 轮次推进: {_currentTurnSlot} → {nextTurn}, AI槽位=[{string.Join(", ", _aiSlots)}], isAI={_aiSlots.Contains(nextTurn)}");
+                var turnData = new object[] { nextTurn };
+                _net.SendToAll(NetworkProtocol.BID_TURN, turnData);
+
+                // Master 不会收到自己的 RaiseEvent，需直接处理
+                HandleBidTurn(turnData);
             }
         }
 
@@ -260,9 +280,7 @@ namespace DoudizhuTower.UI.Bidding
 
         private void MasterEndBidding()
         {
-            if (_biddingEnded) return;
-            _biddingEnded = true;
-
+            Debug.Log($"[NetworkBidding] MasterEndBidding called, _highestBidder={_highestBidder}, _highestBid={_highestBid}");
             int landlordSlot;
             float multiplier;
 
@@ -277,27 +295,32 @@ namespace DoudizhuTower.UI.Bidding
                 multiplier = 1f;
             }
 
+            // 基地映射约定：baseBuildings[0]=地主基地, [1]=农民A, [2]=农民B
+            // baseMapping[playerSlot] = 该玩家操控的基地索引
             int[] baseMapping = new int[3];
-            baseMapping[landlordSlot] = 2;
-            int farmerIdx = 0;
+            baseMapping[landlordSlot] = 0; // 地主玩家 → 地主基地(索引0)
+            int farmerBaseIdx = 1;
             for (int i = 0; i < 3; i++)
             {
                 if (i == landlordSlot) continue;
-                baseMapping[i] = farmerIdx++;
+                baseMapping[i] = farmerBaseIdx++; // 农民玩家 → 农民基地(索引1,2)
             }
 
             int seed = Environment.TickCount;
 
-            _net.SendToAll(NetworkProtocol.BID_RESULT, new object[] {
-                landlordSlot, baseMapping, multiplier, seed
-            });
+            var resultData = new object[] { landlordSlot, baseMapping, multiplier, seed };
+            _net.SendToAll(NetworkProtocol.BID_RESULT, resultData);
+
+            // Master 不会收到自己的 RaiseEvent，需直接调用
+            HandleBidResult(resultData);
         }
 
         // ─── 处理叫分结果（所有客户端）───
 
         private void HandleBidResult(object[] data)
         {
-            if (_biddingEnded && _highestBidder >= 0) return;
+            Debug.Log($"[NetworkBidding] HandleBidResult called, _biddingEnded={_biddingEnded}");
+            if (_biddingEnded) return;
             _biddingEnded = true;
 
             int landlordSlot = (int)data[0];
@@ -316,14 +339,22 @@ namespace DoudizhuTower.UI.Bidding
             ShowResult(localIsLandlord, multiplier);
             ShowRoleIcons(landlordSlot);
 
+            // 激活确认按钮（场景中可能默认隐藏）
+            if (confirmButton != null)
+            {
+                confirmButton.gameObject.SetActive(true);
+                confirmButton.interactable = true;
+            }
+
             Debug.Log($"[NetworkBidding] 结果: 地主槽位={landlordSlot}, 本机={_mySlot}, " +
                       $"本机是地主={localIsLandlord}, 倍数={multiplier}, seed={seed}");
         }
 
         private void OnConfirm()
         {
-            if (_net.IsMasterClient)
-                _net.LoadScene(SceneLoader.GAME_SCENE);
+            // 所有客户端都可触发场景切换（LoadScene 内部仅 Master 执行 LoadLevel，
+            // AutomaticallySyncScene 会自动同步到其他客户端）
+            _net.LoadScene(SceneLoader.GAME_SCENE);
         }
 
         private void OnPlayerLeft(string playerName)
@@ -481,7 +512,16 @@ namespace DoudizhuTower.UI.Bidding
 
         private void ShowResult(bool localIsLandlord, float multiplier)
         {
-            if (resultPanel != null) resultPanel.SetActive(true);
+            Debug.Log($"[NetworkBidding] ShowResult called: localIsLandlord={localIsLandlord}, multiplier={multiplier}, resultPanel={resultPanel}, resultText={resultText}");
+            if (resultPanel != null)
+            {
+                resultPanel.SetActive(true);
+                Debug.Log($"[NetworkBidding] resultPanel activated: {resultPanel.name}, active={resultPanel.activeSelf}");
+            }
+            else
+            {
+                Debug.LogError("[NetworkBidding] resultPanel is NULL! 请在 Inspector 中赋值");
+            }
             if (resultText != null)
             {
                 string role = localIsLandlord ? "地主" : "农民";
