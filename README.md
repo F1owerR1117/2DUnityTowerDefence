@@ -108,15 +108,22 @@
 - AI 叫分策略（权重可配）
 - 结果写入 `GameSession`，跨场景传递
 
-### 联机系统（Phase 2）
+### 联机系统
 
 - 网络抽象层: `INetworkService` 接口
 - Photon 实现: `PhotonService`
 - 管理器: `NetworkManager`（单例，DontDestroyOnLoad）
+- 联机游戏管理器: `NetworkGameManager`（Master 权威架构）
 - 房间创建/加入/匹配/准备/开始
 - 断线自动重连: 超时 30 秒 + 应用失焦/暂停恢复时自动重连，支持房间恢复
 - AI 玩家: 房主可添加 AI 填充空位，AI 叫分和游戏逻辑由 Master 本地执行
 - 踢出玩家: 房主可踢出指定玩家（含 AI）
+- **出牌/摸牌同步**: Master 验证金币 → 广播执行，远程玩家手牌同步追踪
+- **经济同步**: 每个玩家独立经济追踪，出牌扣费 + 金币广播
+- **领域/反制同步**: pending 状态网络广播，所有客户端同步激活
+- **时间同步**: PhotonNetwork.Time 基准 + 单调性保护，后加入玩家自动校准
+- **胜利同步**: Master 广播赢家阵营，客户端自行判断胜负
+- **断线转 AI**: 保留断线玩家实际金币和剩余手牌
 
 ---
 
@@ -143,7 +150,8 @@ Assets/
 │   │   ├── CardSpriteDB.cs      # 卡牌精灵图数据库
 │   │   ├── EconomyConfig.cs     # 经济配置
 │   │   ├── HeroConfig.cs        # 英雄配置
-│   │   └── LevelConfig.cs       # 关卡配置
+│   │   ├── LevelConfig.cs       # 关卡配置
+│   │   └── UnitStatsConfig.cs   # 兵种数值汇总（CSV 管线中间层）
 │   ├── Core/                # 纯逻辑层（零 Unity 依赖）
 │   │   ├── Battle/          # SoldierStats, HeroType
 │   │   ├── Card/            # Card, CardDeck, CardHand, CardTypeDetector
@@ -188,6 +196,8 @@ Assets/
 | `OnlineLobbyController` | 联机大厅 UI |
 | `DamageQueue` | 伤害批量结算队列 |
 | `BuildingAI` | 建筑 AI（出牌/摸牌/经济） |
+| `NetworkGameManager` | 联机游戏管理器（Master 权威：出牌/摸牌/经济/领域/胜利/时间同步） |
+| `ConfigImportExport` | CSV 配置数据导入导出窗口 |
 
 ---
 
@@ -200,6 +210,7 @@ Assets/
 | 音频剪辑工具 | `Tools > 音频剪辑工具` | 波形可视化 + 裁剪 + 试听 |
 | Animator 生成 | `Tools > 创建兵种 Animator Controller` | 自动生成 12 状态动画控制器 |
 | 字体替换 | `Tools > 替换 All TMP Fonts` | 批量替换场景中 TMP 字体 |
+| 配置数据管理 | `Tools > 配置数据管理` | CSV 双向同步（Units/Heroes/Economy/Bidding/Levels） |
 
 ---
 
@@ -229,12 +240,25 @@ Assets/
 | 商店系统 | 按钮已预留，逻辑未实现 |
 | 图鉴/索引系统 | 按钮已预留，逻辑未实现 |
 | BuildingAI 路线压力检测 | `CountEnemiesOn()` 返回 0 |
-| 联机出牌/兵种/经济同步 | 网络层已实现，游戏逻辑同步未实现 |
 | 教程关卡 | 未实现 |
 
 ---
 
 ## 最近更新
+
+### 2026-06-11
+
+- **CSV 数据管线**: 新增 `CsvIO` + `ConfigImportExport` + `UnitStatsConfig`，支持 Units/Heroes/Economy/Bidding/Levels 五类配置的 CSV 双向同步（`Tools → 配置数据管理`）
+- **联机出牌同步**: 修复非房主玩家无法出牌的 bug（Master 端注册手牌+独立经济追踪）
+- **联机金币同步**: 修复所有客户端被扣金币的 bug（仅本机玩家扣费）；AI 出牌正确扣除金币
+- **联机胜利同步**: 修复胜利条件仅在房主客户端生效的 bug（Master 广播赢家阵营）
+- **联机时间同步**: 修复客户端时间不同步的 bug（PhotonNetwork.Time 基准 + 单调性保护 + 后加入自动校准）
+- **领域/反制同步**: 领域和反制护盾的 pending 状态通过网络广播，所有客户端同步激活
+- **断线转 AI 修复**: 断线玩家保留实际金币和剩余手牌，AI 正确继承
+- **胜利防重入**: `TriggerVictory`/`TriggerDefeat` 添加 `_gameEnded` 标志，防止重复触发
+- **网络事件安全**: 所有网络事件添加 null 检查、数组长度验证、`SafeInt`/`SafeFloat` 安全拆箱
+- **EconomyManager 修复**: `BoostIncomeRate` 使用增量加减防止收入增长丢失；`AddGold` 空引用保护；骤死期不覆盖基础收入率
+- **GameStateMachine**: 移除对 Photon 的直接依赖（时间计算移至 NetworkGameManager）
 
 ### 2026-06-08
 

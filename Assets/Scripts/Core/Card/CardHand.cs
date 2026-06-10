@@ -27,6 +27,7 @@ namespace DoudizhuTower.Core.Cards
         public bool Add(Card card)
         {
             if (IsFull) return false;
+            if (_cards.Contains(card)) return false; // 防止同一张物理牌重复加入
             _cards.Add(card);
             NotifyChanged();
             return true;

@@ -1,0 +1,8 @@
+﻿Parameter,Value,Description
+initialGold,100,初始金币
+farmerBaseIncome,5,农民基础回金速度
+landlordBonusIncome,5,地主额外回金
+incomeStepPerMinute,1,每分钟回金增长
+suddenDeathMultiplier,2,骤死期金币倍率
+baseCostC3,10,3点基础费用
+costGrowthRate,1.17,费用增长率

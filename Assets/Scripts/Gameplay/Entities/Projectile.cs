@@ -28,6 +28,11 @@ namespace DoudizhuTower.Gameplay.Entities
         [SerializeField] private GameObject bulletHitVFX;
         [Tooltip("子弹爆炸特效（留空则不播放）")]
         [SerializeField] private GameObject bulletExplosionVFX;
+        [Tooltip("子弹命中音效（留空则不播放）")]
+        [SerializeField] private AudioClip hitSound;
+        [Tooltip("命中音效音量")]
+        [Range(0f, 1f)]
+        [SerializeField] private float hitSoundVolume = 0.8f;
 
         private CardUnit _target;
         private CardUnit _shooter;
@@ -191,6 +196,10 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             if (_hasHit) return;
             _hasHit = true;
+
+            // 播放命中音效
+            if (hitSound != null)
+                AudioManager.Instance?.PlayCombatLow(hitSound, hitSoundVolume);
 
             // 使用 VFXManager 播放子弹命中特效
             var vfxManager = VFXManager.Instance;

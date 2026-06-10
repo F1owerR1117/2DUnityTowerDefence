@@ -114,6 +114,18 @@ namespace DoudizhuTower.Gameplay.Systems
         // ─── 公共方法 ───
 
         /// <summary>
+        /// 联机模式下同步游戏开始时间（由 NetworkGameManager 调用）。
+        /// 直接设置本地时间轴上的游戏开始时间，NetworkGameManager 已完成网络时间到本地时间的映射。
+        /// </summary>
+        /// <param name="localStartTime">本地 Time.time 坐标系下的游戏开始时间</param>
+        public void SyncGameStartTime(float localStartTime)
+        {
+            GameStartTime = localStartTime;
+            _phaseStartTime = localStartTime;
+            Debug.Log($"[GameStateMachine] 时间同步: localStartTime={localStartTime:F2}");
+        }
+
+        /// <summary>
         /// 切换到目标阶段
         /// </summary>
         public void TransitionTo(GamePhase newPhase)

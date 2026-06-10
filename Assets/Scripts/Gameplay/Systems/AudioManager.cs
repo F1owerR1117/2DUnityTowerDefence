@@ -139,10 +139,8 @@ namespace DoudizhuTower.Gameplay.Systems
                 bgmSource.loop = true;
             }
 
-            if (bgmClip != null)
-            {
-                PlayBGM(bgmClip);
-            }
+            // 播放当前场景的 BGM（首次加载时 OnSceneLoaded 不会触发）
+            PlayBGMForScene(SceneManager.GetActiveScene().name);
         }
 
         private void OnDestroy()

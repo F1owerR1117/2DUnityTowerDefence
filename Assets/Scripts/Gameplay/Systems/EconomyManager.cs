@@ -27,6 +27,9 @@ namespace DoudizhuTower.Gameplay.Systems
         /// <summary>当前金币（委托给 Core）</summary>
         public float CurrentGold => _coreEconomy?.CurrentGold ?? 0f;
 
+        /// <summary>底层纯逻辑经济系统（供 NetworkGameManager 联机校验使用）</summary>
+        public EconomySystem CoreEconomy => _coreEconomy;
+
         /// <summary>每次消耗时触发，参数为消耗金额</summary>
         public event Action<float> OnGoldSpent;
 
@@ -87,7 +90,8 @@ namespace DoudizhuTower.Gameplay.Systems
         /// </summary>
         public void AddGold(float amount)
         {
-            _coreEconomy?.AddGold(amount);
+            if (_coreEconomy == null) return;
+            _coreEconomy.AddGold(amount);
             if (amount > 0f) OnGoldEarned?.Invoke(amount);
         }
 
@@ -108,18 +112,20 @@ namespace DoudizhuTower.Gameplay.Systems
         }
 
         /// <summary>
-        /// 临时提升回金速度（双王炸等 buff）
+        /// 临时提升回金速度（双王炸等 buff）。
+        /// 使用相对倍率，过期时仅移除加成，不影响期间的正常收入增长。
         /// </summary>
         public void BoostIncomeRate(float multiplier, float duration)
         {
             if (_coreEconomy == null) return;
-            float originalRate = _coreEconomy.IncomeRate;
-            _coreEconomy.SetIncomeRate(originalRate * multiplier);
+            float boostFactor = multiplier - 1f; // 额外增加的比例
+            float addedRate = _coreEconomy.IncomeRate * boostFactor;
+            _coreEconomy.SetIncomeRate(_coreEconomy.IncomeRate + addedRate);
 
             _timerQueue?.Schedule(duration, () =>
             {
                 if (_coreEconomy != null)
-                    _coreEconomy.SetIncomeRate(originalRate);
+                    _coreEconomy.SetIncomeRate(_coreEconomy.IncomeRate - addedRate);
             });
         }
 
@@ -183,8 +189,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
             if (phase == GamePhase.SuddenDeath)
             {
-                // 骤死期：回金速度乘以倍率
-                _baseIncomeRate = _coreEconomy.IncomeRate;
+                // 骤死期：回金速度乘以倍率（使用初始化时记录的基础值，不受临时加成影响）
                 _coreEconomy.SetIncomeRate(_baseIncomeRate * config.suddenDeathMultiplier);
             }
             else if (phase == GamePhase.GameOver)

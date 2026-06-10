@@ -1,0 +1,14 @@
+﻿PrefabPath,DisplayName,HP,ATK,AttackInterval,MoveSpeed,Range,HitCount,IsRanged,UnitHeight,DetectionRange,IsBuilding,RegenPerSecond
+Prefabs/Army/ArmyPrefabs/Archer,Archer,100,30,0.5,50,60,1,1,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/Bat,Bat,50,15,0.3,75,15,1,0,Air,50,0,0
+Prefabs/Army/ArmyPrefabs/BossKing,BossKing,10000,75,1,15,100,4,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/CrazyWolf,CrazyWolf,222,20,0.25,80,20,2,1,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/DeathWizard,DeathWizard,300,100,1,40,10,1,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/Hero,Hero,666,55,0.5,50,20,1,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/King,King,1300,150,1.5,40,25,1,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/Lancer,Lancer,100,10,0.25,30,20,1,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/PlaneTest,PlaneTest,1000,100,0.5,50,999,1,1,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/Warrior,Warrior,500,10,1,15,20,1,0,Ground,0,0,0
+Prefabs/Army/ArmyPrefabs/Wizard,Wizard,555,100,1,20,40,1,0,Ground,0,0,0
+Prefabs/Buildings/TowerEntities/FarmerA,FarmerA,2000,0,0,0,0,1,0,"Ground,Air",0,1,0
+Prefabs/Buildings/TowerEntities/LandLord,LandLord,2000,0,0,0,0,1,0,"Ground,Air",0,1,0

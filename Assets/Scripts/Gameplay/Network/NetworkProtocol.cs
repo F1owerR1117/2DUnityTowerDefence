@@ -40,6 +40,13 @@ namespace DoudizhuTower.Gameplay.Network
         // 经济同步
         public const string GOLD_UPDATE = "GOLD_UPDATE";
 
+        // 客户端就绪（非房主报告初始金币给 Master）
+        public const string PLAYER_READY = "PLAYER_READY";
+
+        // 领域/反制 pending 状态同步
+        public const string DOMAIN_PENDING = "DOMAIN_PENDING";
+        public const string COUNTER_PENDING = "COUNTER_PENDING";
+
         // 房间管理
         public const string ADD_AI = "ADD_AI";
         public const string REMOVE_AI = "REMOVE_AI";

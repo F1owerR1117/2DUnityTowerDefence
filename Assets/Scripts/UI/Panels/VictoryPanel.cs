@@ -165,11 +165,13 @@ namespace DoudizhuTower.UI.Panels
 
         private void RequestReturnToMenu()
         {
+            GameSession.Reset();
             OnReturnToMenuRequested?.Invoke();
         }
 
         private void RequestReturnToRoom()
         {
+            GameSession.Reset();
             OnReturnToRoomRequested?.Invoke();
         }
 

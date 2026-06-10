@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v5.5
+# DoudizhuTower — 架构落地规范 v5.7
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -89,6 +89,9 @@
 | `BiddingConfig` | 叫分配置 | Config | ScriptableObject，可配叫分时长/AI 策略/超时处理 |
 | `MainMenuController` | 主菜单控制器 | UI | 单人/对战/商店/图鉴/设置/退出按钮管理 |
 | `LevelConfig` | 关卡配置 | Config | ScriptableObject，存储关卡名称/描述/缩略图/场景名/难度/解锁状态/排序权重 |
+| `UnitStatsConfig` | 兵种数值汇总 | Config | ScriptableObject，CSV 管线中间层，集中管理所有兵种基础属性 |
+| `CsvIO` | CSV 读写工具 | Editor | 支持引号字段、UTF-8 BOM，ReadCsv/WriteCsv |
+| `ConfigImportExport` | 配置导入导出窗口 | Editor | Tools → 配置数据管理，Units/Heroes/Economy/Bidding/Levels 双向同步 |
 | `LevelCard` | 关卡卡片 | UI/LevelSelect | 单个关卡卡片组件（缩略图 + 信息 + 动态缩放） |
 | `LevelSelectController` | 关卡选择控制器 | UI/LevelSelect | 轮播式关卡选择（中心最大，两侧缩小，拖拽滑动 + 吸附） |
 | `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API |
@@ -98,6 +101,7 @@
 | `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 3 人网络轮流叫分，Master 端轮次管理 + AI 槽位支持 + 断线处理 |
 | `BiddingSceneBootstrap` | 叫分场景引导 | UI/Bidding | 检测联机房间状态，自动切换单机/联机叫分管理器 |
 | `NetworkProtocol` | 网络协议常量 | Gameplay/Network | 事件 Key 定义 + Card/CardTypeResult 序列化 + 玩家槽位工具 |
+| `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线同步，挂载到游戏场景 |
 
 ## 实施状态总览
 
@@ -179,9 +183,11 @@
 | 联机叫分系统 | NetworkBiddingManager（3 人网络轮流叫分 + AI 槽位 + 断线处理）+ BiddingSceneBootstrap（自动切换单机/联机）| UI/Bidding/ |
 | 网络协议层 | NetworkProtocol（事件 Key 常量 + Card/CardTypeResult 序列化 + 玩家槽位工具）| Gameplay/Network/ |
 | 网络接口扩展 | INetworkService 新增：IsInRoom/IsMasterClient/SendToMaster/SendToPlayer/LocalActorNumber/GetPlayerActorNumbers/OnCustomEvent 等 | Gameplay/Network/ |
+| 联机游戏管理器 | NetworkGameManager（Master 权威：出牌/摸牌/经济/领域/断线同步） | Gameplay/Network/ |
 | 存档系统 | SaveSystem（PlayerPrefs）存储金币/首次胜利/对局统计 | Gameplay/Systems/ |
 | 完胜判定 | 玩家基地满血 → gameStateCoefficient = 1.5 | GameBootstrapper.cs |
 | 叫分配置外置 | BiddingConfig ScriptableObject（叫分时长/AI 策略/超时处理） | Config/ |
+| CSV 数据管线 | CsvIO + ConfigImportExport + UnitStatsConfig（Units/Heroes/Economy/Bidding/Levels 双向同步） | Editor/ + Config/ |
 | 联机基地映射 | GameSession.PlayerBaseMapping 支持 3 人映射 + 随机分配 | Gameplay/Systems/ |
 | 领域出牌校验 | PlayValidator 拒绝不能管上领域的牌 + _playerClickedCounter 区分玩家/AI | GameBootstrapper.cs + DomainSystem.cs |
 | 主菜单场景 | MainMenuController（单人/对战/商店/图鉴/设置/退出） | UI/ |
@@ -229,7 +235,6 @@
 | BuildingAI 路线压力检测 | §10.2 | `CountEnemiesOn()` 返回 0 |
 | 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
 | 图鉴/索引系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
-| 联机出牌/兵种同步 | §13 | 网络层+叫分已实现（Photon PUN 2 + NetworkBiddingManager），出牌/兵种/经济同步未实现 |
 
 ### P2（增强/可视化）
 
@@ -355,6 +360,7 @@ Assets/Scripts/
 │   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步）
 │   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连）
 │   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
+│   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/领域/断线同步）
 │   │   └── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │
 ├── UI/                                # 界面层（仅作为 View）
@@ -401,10 +407,18 @@ Assets/Scripts/
 │   ├── HeroConfig.cs                  # ★ 英雄配置（可配参数取代硬编码 HeroStats）
 │   ├── BiddingConfig.cs               # ★ 叫分配置（叫分时长/AI 策略/超时处理）
 │   ├── LevelConfig.cs                 # ★ 关卡配置（关卡名称/描述/缩略图/场景名/难度）
+│   ├── UnitStatsConfig.cs             # ★ 兵种数值汇总（CSV 管线中间层，预制体引用+属性）
 │   └── CardSpriteDB.cs                # 卡牌精灵图数据库
 │
 └── Tests/                              # 测试目录
     └── ...
+
+Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线）
+├── Units.csv                          # 兵种数值表
+├── Heroes.csv                         # 英雄配置表
+├── Economy.csv                        # 经济配置表
+├── Bidding.csv                        # 叫分配置表
+└── Levels.csv                         # 关卡配置表
 
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
@@ -412,7 +426,9 @@ Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下�
 ├── DestroyAllSubMeshUI.cs             # 清理 TMP_SubMeshUI 组件
 ├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
 ├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
-└── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
+├── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
+├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
+└── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
 ```
 
 ---
@@ -456,6 +472,11 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 网络连接断开 | `OnConnectionLost()` | INetworkService | OnlineLobbyController |
 | 网络玩家加入 | `OnPlayerJoined(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
 | 网络玩家离开 | `OnPlayerLeft(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
+| 联机出牌请求 | `RequestPlayCards(cards, result, routeGroup)` | HandArea | NetworkGameManager |
+| 联机摸牌请求 | `RequestDrawCard()` | GameBootstrapper | NetworkGameManager |
+| 联机金币同步 | `BroadcastGoldUpdate(slot, gold)` | EconomyManager | NetworkGameManager |
+| 联机领域激活 | `RequestDomainActivate(result)` | DomainSystem | NetworkGameManager |
+| 联机反制激活 | `RequestCounterActivate(result)` | DomainSystem | NetworkGameManager |
 
 ### 3.2 订阅者生命周期规则
 
@@ -707,6 +728,7 @@ public void CancelAll();
 | [5♠, 5♥, 6♦, 6♣, 7♠, 7♥] | Type=ConsecutivePair, MainRank=Seven, Length=3 |
 | [Joker, Joker] | Type=DoubleKingBomb |
 | [3♠, 3♥, 3♦] | Type=Triple, MainRank=Three |
+| [3♠, 4♥, 5♦, 6♣, 7♠, 8♥] | Type=Straight6Plus, MainRank=Eight, Length=6 |
 
 **边界规则**
 - 农民出牌上限 5 张，地主 6 张（`_maxSelection` 参数）
@@ -1084,6 +1106,28 @@ _bomberPrefabs[13]:   飞机轰炸机
 
 所有特殊牌型预制体按点数（3~2）独立配置，不再按分段（5 型）映射。未填槽位自动回退到 `_rankPrefabs[rank]`。
 
+### 12.6 CSV 数据管线
+
+集中管理所有游戏数值，支持 CSV 双向同步。菜单入口：`Tools → 配置数据管理`。
+
+**CSV 文件位置**：`Assets/StreamingData/Config/`
+
+| 文件 | 内容 | 数据来源 |
+|:---|:---|:---|
+| `Units.csv` | 兵种数值（HP/ATK/移速/攻速/射程等） | 各预制体 CardUnit 的 [SerializeField] 字段 |
+| `Heroes.csv` | 英雄配置（基础属性+觉醒倍率+技能参数） | HeroConfig ScriptableObject |
+| `Economy.csv` | 经济参数（初始金币/回金速度/费用公式） | EconomyConfig ScriptableObject |
+| `Bidding.csv` | 叫分参数（时长/AI策略/超时处理） | BiddingConfig ScriptableObject |
+| `Levels.csv` | 关卡配置（名称/场景/难度/解锁状态） | LevelConfig ScriptableObject |
+
+**导入流程**：`CSV → ScriptableObject → Prefab 字段`
+**导出流程**：`Prefab 字段 → ScriptableObject → CSV`
+
+**关键组件**：
+- `CsvIO`（Editor）：CSV 解析/生成，支持引号字段和 UTF-8 BOM
+- `ConfigImportExport`（Editor）：导入导出 Editor 窗口
+- `UnitStatsConfig`（Config）：兵种数值汇总 ScriptableObject，作为 CSV 和预制体的中间层
+
 ---
 
 ## 13. 网络联机系统
@@ -1091,9 +1135,9 @@ _bomberPrefabs[13]:   飞机轰炸机
 ### 13.1 架构
 
 ```
-UI 层（OnlineLobbyController）
+UI 层（OnlineLobbyController / NetworkBiddingManager）
     ↓ 调用接口
-INetworkService（抽象接口）
+INetworkService（抽象接口）← NetworkGameManager（出牌/摸牌/经济/领域同步）
     ↑ 实现
 PhotonService（Photon PUN 2）
     ↑ 持有
@@ -1189,6 +1233,9 @@ public static class NetworkProtocol
     public const string GAME_INIT, PLAY_CARDS, PLAY_APPROVED, PLAY_REJECTED;
     public const string DRAW_CARD, DOMAIN_ACTIVATE, COUNTER_ACTIVATE;
     public const string STATE_CHECKSUM, GAME_END, PLAYER_LEFT;
+    public const string GOLD_UPDATE;
+    public const string PLAYER_READY;
+    public const string DOMAIN_PENDING, COUNTER_PENDING;
     public const string ADD_AI, REMOVE_AI, KICK_PLAYER;
 
     // 序列化工具
@@ -1217,8 +1264,61 @@ public static class NetworkProtocol
 | 联机叫分 | ✅ NetworkBiddingManager（3 人轮流叫分 + AI 槽位 + 断线处理） |
 | 叫分场景引导 | ✅ BiddingSceneBootstrap（自动检测联机状态 → 切换单机/联机管理器） |
 | 断线自动重连 | ✅ PhotonService（超时 30s + 失焦自动重连 + 房间恢复） |
-| 出牌/兵种同步 | ❌ 未实现 |
-| 经济同步 | ❌ 未实现 |
+| 联机游戏管理器 | ✅ NetworkGameManager（Master 权威：出牌/摸牌/经济/领域/断线同步） |
+| 出牌/兵种同步 | ✅ NetworkGameManager（Master 验证金币 + PLAY_APPROVED 广播执行） |
+| 经济同步 | ✅ NetworkGameManager（GOLD_UPDATE 广播 + PLAYER_READY 上报 + Master 独立追踪） |
+| 领域/反制同步 | ✅ DOMAIN_PENDING/COUNTER_PENDING 广播 pending 状态，所有客户端同步 |
+| 时间同步 | ✅ PhotonNetwork.Time 基准 + 单调性保护 + 后加入自动同步 |
+| 胜利同步 | ✅ BroadcastGameEnd 广播赢家阵营 + 客户端自行判断胜负 |
+| 手牌追踪 | ✅ Master 为远程玩家创建同步牌堆 _slotDecks，摸牌/出牌双向同步 |
+| 断线转 AI | ✅ 保留实际金币和剩余手牌，AI 继承断线玩家状态 |
+
+### 13.7 联机游戏管理器（NetworkGameManager）
+
+Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
+
+**核心职责：**
+- **出牌同步**：Client → `SendToMaster(PLAY_CARDS)` → Master 验证金币 → `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
+- **摸牌同步**：Client → `SendToMaster(DRAW_CARD)` → Master 从同步牌堆抽牌 → `SendToAll(DRAW_CARD, [slot, cardIndex])` → 客户端添加手牌
+- **经济同步**：`BroadcastGoldUpdate(slot, gold)` → 所有客户端更新金币显示；`PLAYER_READY` 上报初始金币
+- **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
+- **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
+- **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
+- **断线处理**：`OnPlayerLeft` → 保留断线玩家实际金币 → 转为 AI 控制
+
+**数据流：**
+```
+玩家出牌 → HandArea → NetworkGameManager.RequestPlayCards()
+  ├─ Master: MasterValidateAndPlay() → 验证金币 → SendToAll(PLAY_APPROVED)
+  └─ Client: SendToMaster(PLAY_CARDS) → 等待 PLAY_APPROVED
+
+所有客户端: ExecutePlayApproved()
+  → 扣费(仅本机玩家) → 移除手牌 → DeployCards() → DomainSystem.OnCardPlayed()
+```
+
+**手牌同步机制：**
+- Master 为每个远程玩家创建独立同步牌堆 `_slotDecks[slot]`（与客户端相同种子）
+- 远程玩家摸牌时从各自牌堆抽取（`_slotDecks[slot].Draw()`），保持与客户端一致
+- 远程玩家出牌时从 `_slotHands[slot]` 移除，保持追踪准确
+- 断线转 AI 时继承已追踪的剩余手牌
+
+**断线转 AI 流程：**
+```
+OnPlayerLeft(playerName)
+  → 找到断线槽位（比对 _actorNumbers 与当前连接）
+  → 为该基地添加/启用 BuildingAI
+  → 使用已有 _slotHands[disconnectSlot]（含同步手牌）
+  → 使用已有 _slotEconomies[disconnectSlot]（保留实际金币）
+  → ai.Initialize(hand, economy, ...) + ai.SetNetworkContext(this, slot)
+  → 广播 PLAYER_LEFT
+```
+
+**关键设计**：
+- Master 维护所有槽位的 `_slotHands`、`_slotDecks`、`_slotEconomies`，Client 只维护自己的
+- 出牌验证在 Master 端完成（金币充足），手牌验证仅限 Master 自己的槽位
+- AI 出牌通过 `BroadcastAIPlay()` 由 Master 执行并扣除 AI 金币后广播
+- 所有网络事件使用 `SafeInt`/`SafeFloat`/`SafeArray` 安全拆箱，防止 `InvalidCastException`
+- `OnDestroy` 设置 `_initialized = false` 并清除所有引用，防止 `GameSession.Reset()` 时序问题
 
 ---
 
@@ -1579,7 +1679,9 @@ Assets/Prefabs/
 │   ├── CrazyWolf.prefab            # 狼骑兵
 │   ├── Wizard.prefab               # 法师
 │   ├── DeathWizard.prefab          # 暗黑法师
-│   └── Bat.prefab                  # 蝙蝠（飞行单位）
+│   ├── Bat.prefab                  # 蝙蝠（飞行单位）
+│   ├── BossKing.prefab             # BOSS（BossController + BuildingAI + SpawnPool + BossSkillSystem）
+│   └── PlaneTest.prefab            # 飞机/轰炸机
 ├── Buildings/TowerEntities/        # 建筑预制体
 │   ├── FarmerA.prefab              # 农民基地
 │   └── LandLord.prefab             # 地主基地

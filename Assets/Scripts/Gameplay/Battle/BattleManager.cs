@@ -22,6 +22,9 @@ namespace DoudizhuTower.Gameplay.Battle
         /// <summary>静态实例（供 UnitPassives 等外部组件调用生成方法）</summary>
         public static BattleManager Instance { get; private set; }
 
+        /// <summary>防止胜利/失败重复触发</summary>
+        private bool _gameEnded;
+
         [Header("胜利条件")]
         [SerializeField] private WinCondition _winCondition = WinCondition.DestroyAll;
 
@@ -157,13 +160,9 @@ namespace DoudizhuTower.Gameplay.Battle
             if (unitFactory == null) unitFactory = GameObject.Find("EntityPool")?.GetComponent<UnitFactory>();
             if (baseBuildings == null || baseBuildings.Length == 0)
             {
-                var found = new List<Component>();
-                foreach (var name in new[] { "BaseA", "BaseB", "BaseL" })
-                {
-                    var b = GameObject.Find(name)?.GetComponent<CardUnit>();
-                    if (b != null) found.Add(b);
-                }
-                baseBuildings = found.ToArray();
+                // GameBootstrapper 会在 Initialize 前注入 baseBuildings
+                // 如果此处仍为空，说明注入流程异常
+                Debug.LogWarning("[BattleManager] baseBuildings 未被注入，GameObject.Find 不查找未激活对象");
             }
         }
 
@@ -361,16 +360,16 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void TriggerVictory()
         {
-            if (_gameStateMachine != null && _gameStateMachine.CurrentPhase == GamePhase.GameOver)
-                return;
+            if (_gameEnded) return;
+            _gameEnded = true;
             _gameStateMachine?.TransitionTo(GamePhase.GameOver);
             OnGameEnded?.Invoke(true);
         }
 
         internal void TriggerDefeat()
         {
-            if (_gameStateMachine != null && _gameStateMachine.CurrentPhase == GamePhase.GameOver)
-                return;
+            if (_gameEnded) return;
+            _gameEnded = true;
             _gameStateMachine?.TransitionTo(GamePhase.GameOver);
             OnGameEnded?.Invoke(false);
         }

@@ -5,7 +5,10 @@ namespace DoudizhuTower.Core.Cards
 {
     public class CardDeck
     {
+        private static int _nextDeckId = 1; // 从 1 开始，避免 deckId=0 与 default(Card) 冲突
+
         private readonly Card[] _cards;
+        private readonly int _deckId;
         private int _cursor;
         private readonly System.Random _rng;
         private int _reshuffleCount;
@@ -16,6 +19,7 @@ namespace DoudizhuTower.Core.Cards
         public int TotalCards => _cards.Length;
         public int ReshuffleCount => _reshuffleCount;
         public IReadOnlyList<Card> DiscardPile => _discardPile;
+        public int DeckId => _deckId;
 
         /// <summary>当前周期已摸出的各点数牌数（含手中+场上+弃牌堆）</summary>
         public IReadOnlyDictionary<CardRank, int> DrawnPerRank => _drawnPerRank;
@@ -33,14 +37,15 @@ namespace DoudizhuTower.Core.Cards
 
         public CardDeck(int seed)
         {
+            _deckId = _nextDeckId++;
             _rng = new System.Random(seed);
-            _cards = CreateStandardDeck();
+            _cards = CreateStandardDeck(_deckId);
             _cursor = 0;
             _reshuffleCount = 0;
             Shuffle();
         }
 
-        private static Card[] CreateStandardDeck()
+        private static Card[] CreateStandardDeck(int deckId)
         {
             var cards = new List<Card>(54);
             var suits = new[] { CardSuit.Spade, CardSuit.Heart, CardSuit.Club, CardSuit.Diamond };
@@ -52,10 +57,10 @@ namespace DoudizhuTower.Core.Cards
             int index = 0;
             foreach (var suit in suits)
                 foreach (var rank in ranks)
-                    cards.Add(new Card(suit, rank, index++));
+                    cards.Add(new Card(suit, rank, index++, deckId));
             // 2 张 Joker 用不同 index 区分
-            cards.Add(new Card(CardSuit.None, CardRank.Joker, index++));
-            cards.Add(new Card(CardSuit.None, CardRank.Joker, index++));
+            cards.Add(new Card(CardSuit.None, CardRank.Joker, index++, deckId));
+            cards.Add(new Card(CardSuit.None, CardRank.Joker, index++, deckId));
             return cards.ToArray();
         }
 

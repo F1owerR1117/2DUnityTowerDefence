@@ -187,19 +187,27 @@ namespace DoudizhuTower.Gameplay.Battle
         }
 
         [Header("轰炸参数")]
+        [Tooltip("轰炸持续时间（秒），轰炸机在此时间后自毁")]
         [SerializeField] private float _bombingDuration = 4f;
+        [Tooltip("每次 tick 伤害倍率（实际伤害 = ATK × 此值），非真正每秒伤害")]
         [SerializeField] private float _bombingDamagePerSecond = 0.3f;
+        [Tooltip("伤害间隔（秒），每过此时间对范围内敌人造成一次伤害")]
         [SerializeField] private float _bombingInterval = 0.8f;
 
         void SpawnPlane(Card[] cards, CardTypeResult result, Lane lane, Component sourceBase)
         {
             var pool = sourceBase?.GetComponent<SpawnPool>();
-            var prefab = pool?.GetBomberPrefab(result.MainRank);
-            var bomber = CreateUnitWithPrefab(prefab, result.MainRank, lane, sourceBase, CardType.Plane);
-            if (bomber == null) return;
 
-            bomber.ApplyBuff("bomber_range", new CardUnit.StatBuff(range: 5f / bomber.Stats.Range));
-            bomber.StartCoroutine(BombingRunCoroutine(bomber, sourceBase));
+            // 每个连续三条的点数生成一个轰炸机
+            int startRank = (int)result.MainRank - (result.Length - 1);
+            for (int r = startRank; r <= (int)result.MainRank; r++)
+            {
+                var rank = (CardRank)r;
+                var prefab = pool?.GetBomberPrefab(rank);
+                var bomber = CreateUnitWithPrefab(prefab, rank, lane, sourceBase, CardType.Plane);
+                if (bomber == null) continue;
+                bomber.StartCoroutine(BombingRunCoroutine(bomber, sourceBase));
+            }
         }
 
         private IEnumerator BombingRunCoroutine(CardUnit bomber, Component sourceBase)

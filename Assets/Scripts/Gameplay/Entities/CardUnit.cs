@@ -81,6 +81,8 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>所属预制体（对象池回收用，由 UnitFactory 设置）</summary>
         [System.NonSerialized] public CardUnit SourcePrefab;
 
+
+
         // ★ Core 层数据块（由预制体字段组装）
         public SoldierStats Stats { get; protected set; }
 

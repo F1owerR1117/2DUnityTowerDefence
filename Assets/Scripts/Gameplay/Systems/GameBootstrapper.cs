@@ -9,7 +9,6 @@ using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Gameplay.Battle;
 using DoudizhuTower.Gameplay.Entities;
 using DoudizhuTower.Gameplay.Network;
-using DoudizhuTower.Gameplay.Network;
 using DoudizhuTower.UI.Hand;
 using DoudizhuTower.UI.HUD;
 using DoudizhuTower.UI.Battlefield;
@@ -77,6 +76,7 @@ namespace DoudizhuTower.Gameplay.Systems
         private Action _wiredTimeUpHandler;
         private NetworkGameManager _networkGameManager;
         private Action<bool> _wiredGameEndedHandler;
+        private Action<bool> _wiredNetworkBroadcastHandler;
 
         public CardDeck MainDeck => _mainDeck;
         public EconomySystem EconomyLogic => _economyLogic;
@@ -456,7 +456,7 @@ namespace DoudizhuTower.Gameplay.Systems
                     // 手动摸牌按钮
                     drawButton.onClick.AddListener(() =>
                     {
-                        if (playerHand.IsFull) return;
+                        if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
                         if (economyManager == null || !economyManager.TrySpendGold(drawCost)) return;
                         _networkGameManager?.RequestDrawCard();
                     });
@@ -476,7 +476,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
                     drawButton.onClick.AddListener(() =>
                     {
-                        if (playerHand.IsFull) return;
+                        if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
                         if (economyManager == null || !economyManager.TrySpendGold(drawCost)) return;
 
                         var card = _mainDeck.Draw();
@@ -522,8 +522,19 @@ namespace DoudizhuTower.Gameplay.Systems
                 };
                 battleManager.OnGameEnded += onGameEnded;
                 _wiredGameEndedHandler = onGameEnded;
+
+                // 联机模式：Master 广播胜利/失败给所有客户端
                 if (_isNetworkMode)
                 {
+                    Action<bool> onNetworkBroadcast = (playerWon) =>
+                    {
+                        if (_networkGameManager != null)
+                            _networkGameManager.BroadcastGameEnd(playerWon, _networkGameManager.MySlot);
+                    };
+                    battleManager.OnGameEnded += onNetworkBroadcast;
+                    _wiredNetworkBroadcastHandler = onNetworkBroadcast;
+                    // 注册 NetworkGameManager 的游戏结束回调（客户端收到广播时触发）
+                    _networkGameManager.OnNetworkGameEnd += onGameEnded;
                     victoryPanel.OnReturnToRoomRequested += OnQuitToLobby;
                     victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
                 }
@@ -598,12 +609,11 @@ namespace DoudizhuTower.Gameplay.Systems
                     {
                         if (_isNetworkMode)
                         {
-                            // 联机模式：领域激活通过 NetworkGameManager 同步
-                            // 领域在出牌时自动触发，此按钮仅设置 pending 状态
+                            // 联机模式：通过 NetworkGameManager 同步 pending 状态
                             if (domainSystem.IsDomainPending)
-                                domainSystem.CancelDomainPending();
+                                _networkGameManager?.RequestDomainPending(false);
                             else
-                                domainSystem.SetDomainPending();
+                                _networkGameManager?.RequestDomainPending(true);
                         }
                         else
                         {
@@ -627,6 +637,17 @@ namespace DoudizhuTower.Gameplay.Systems
                 if (domainUIController != null)
                 {
                     domainUIController.Initialize(domainSystem, playerIsLandlord);
+                    // 联机模式：反制按钮走网络同步
+                    if (_isNetworkMode)
+                    {
+                        domainUIController.OnCounterButtonClicked += () =>
+                        {
+                            if (domainSystem.IsCounterPending)
+                                _networkGameManager?.RequestCounterPending(false);
+                            else
+                                _networkGameManager?.RequestCounterPending(true);
+                        };
+                    }
                 }
                 else
                 {
@@ -667,6 +688,11 @@ namespace DoudizhuTower.Gameplay.Systems
 
                             bool isAI = GameSession.AISlots.Contains(slot);
                             ai.enabled = isAI;
+                            if (isAI)
+                            {
+                                ai.SetNetworkContext(_networkGameManager, slot);
+                                _networkGameManager.RegisterSlotEconomy(slot, ai.Economy);
+                            }
                             Debug.Log($"[Bootstrapper] 槽位 {slot} → 基地 {baseIdx}, BuildingAI {(isAI ? "启用" : "禁用")}");
                         }
                     }
@@ -726,6 +752,15 @@ namespace DoudizhuTower.Gameplay.Systems
             {
                 battleManager.OnGameEnded -= _wiredGameEndedHandler;
                 _wiredGameEndedHandler = null;
+            }
+            if (_wiredNetworkBroadcastHandler != null && battleManager != null)
+            {
+                battleManager.OnGameEnded -= _wiredNetworkBroadcastHandler;
+                _wiredNetworkBroadcastHandler = null;
+            }
+            if (_wiredGameEndedHandler != null && _networkGameManager != null)
+            {
+                _networkGameManager.OnNetworkGameEnd -= _wiredGameEndedHandler;
             }
             if (_wiredTimeUpHandler != null && gameStateMachine != null)
             {

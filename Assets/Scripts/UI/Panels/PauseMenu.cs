@@ -1,4 +1,5 @@
 using System;
+using DoudizhuTower.Gameplay.Systems;
 using UnityEngine;
 using UnityEngine.UI;
 #if ENABLE_INPUT_SYSTEM
@@ -126,6 +127,7 @@ namespace DoudizhuTower.UI.Panels
 
         private void Restart()
         {
+            GameSession.Reset();
             Resume();
             OnRestartRequested?.Invoke();
         }
@@ -155,6 +157,7 @@ namespace DoudizhuTower.UI.Panels
 
         private void Quit()
         {
+            GameSession.Reset();
             Resume();
             OnQuitRequested?.Invoke();
         }

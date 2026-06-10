@@ -37,6 +37,16 @@ namespace DoudizhuTower.Gameplay.Battle
         private DomainSystem _domainSystem;
         private DoudizhuTower.UI.Battlefield.TempSlotUI _tempSlot;
 
+        // 联机同步
+        private DoudizhuTower.Gameplay.Network.NetworkGameManager _networkGameManager;
+        private int _slotIndex = -1;
+
+        public void SetNetworkContext(DoudizhuTower.Gameplay.Network.NetworkGameManager ngm, int slotIndex)
+        {
+            _networkGameManager = ngm;
+            _slotIndex = slotIndex;
+        }
+
         private float _decisionTimer;
         private float _drawTimer;
         private float _drawInterval;
@@ -271,8 +281,17 @@ namespace DoudizhuTower.Gameplay.Battle
                     _deck.Discard(entry.cards);
 
                     var routeGroup = GetComponent<RouteGroup>();
-                    Debug.Log($"[BuildingAI] {name} 出牌: {entry.result.Type}, cost={entry.cost}, route={routeGroup?.CurrentRoute != null}, hand剩余={Hand.Count}");
-                    _battleManager.DeployCards(entry.cards, entry.result, routeGroup, _baseCtl);
+                    int routeIndex = routeGroup != null ? routeGroup.CurrentIndex : 0;
+
+                    // 联机模式：通过 NetworkGameManager 广播出牌
+                    if (_networkGameManager != null && _slotIndex >= 0)
+                    {
+                        _networkGameManager.BroadcastAIPlay(_slotIndex, entry.cards, entry.result, routeIndex, _baseCtl);
+                    }
+                    else
+                    {
+                        _battleManager.DeployCards(entry.cards, entry.result, routeGroup, _baseCtl);
+                    }
 
                     // 通知领域系统 AI 出牌（用于触发要不起领域/反制护盾）
                     if (_domainSystem != null)

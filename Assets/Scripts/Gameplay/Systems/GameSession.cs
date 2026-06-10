@@ -101,6 +101,7 @@ namespace DoudizhuTower.Gameplay.Systems
             BidMultiplier = multiplier;
             LocalPlayerId = 0;
             HasResult = true;
+            IsNetworkMode = false;
 
             // 构建 3 人映射：[玩家0, AI1, AI2]
             PlayerBaseMapping = new int[3];
@@ -138,6 +139,7 @@ namespace DoudizhuTower.Gameplay.Systems
             PlayerBaseMapping = baseMapping;
             BidMultiplier = multiplier;
             HasResult = true;
+            IsNetworkMode = true;
 
             // 判断本机玩家是否是地主（地主基地只有一个，且是 landlord 身份）
             // 需要通过 base index 对应的 CardUnit.IsLandlord 判断

@@ -237,6 +237,7 @@ namespace DoudizhuTower.UI.Online
             if (_net != null)
                 _net.Disconnect();
             _isInLobby = false;
+            GameSession.Reset();
             SceneLoader.LoadMainMenu();
         }
 

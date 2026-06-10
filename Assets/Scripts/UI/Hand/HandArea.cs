@@ -195,7 +195,10 @@ namespace DoudizhuTower.UI.Hand
             }
 
             if (handCountLabel != null)
+            {
+                handCountLabel.color = Color.white;
                 handCountLabel.SetText("{0}/{1}", cards.Count, _boundHand?.Capacity ?? 17);
+            }
 
             if (cardContainer != null)
             {
@@ -233,13 +236,13 @@ namespace DoudizhuTower.UI.Hand
             if (result)
             {
                 widget.SetSelected(true);
-                AudioManager.Instance.PlayCardSelect();
+                AudioManager.Instance?.PlayCardSelect();
             }
             else if (wasSelected)
             {
                 // 已选中 → 取消选中成功
                 widget.SetSelected(false);
-                AudioManager.Instance.PlayCardSelect();
+                AudioManager.Instance?.PlayCardSelect();
             }
             else
             {
@@ -469,6 +472,16 @@ namespace DoudizhuTower.UI.Hand
             }
 
             StartCoroutine(ResetValidationLabelAfterDelay(2f));
+        }
+
+        /// <summary>手牌已满时的视觉反馈：handCountLabel 闪红 + 提示已达上限（下次 RefreshHand 自动恢复）</summary>
+        public void ShowHandFullFeedback()
+        {
+            if (handCountLabel != null)
+            {
+                handCountLabel.color = Color.red;
+                handCountLabel.text = "已达上限";
+            }
         }
 
         private IEnumerator ResetValidationLabelAfterDelay(float delay)

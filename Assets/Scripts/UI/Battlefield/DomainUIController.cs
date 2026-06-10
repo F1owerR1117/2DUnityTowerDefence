@@ -341,15 +341,21 @@ namespace DoudizhuTower.UI.Battlefield
         {
             if (_domainSystem == null) return;
 
-            if (_domainSystem.IsCounterPending)
-                _domainSystem.CancelPending();
-            else
-            {
-                _domainSystem.SetPlayerClickedCounter();
-                _domainSystem.SetCounterPending();
-            }
-
+            // 先触发事件（联机模式由 GameBootstrapper 处理网络同步）
             OnCounterButtonClicked?.Invoke();
+
+            // 设置本地标记（反制已点击，DomainSystem 需要此标记区分玩家/AI）
+            _domainSystem.SetPlayerClickedCounter();
+
+            // 如果没有订阅者（单机模式），直接设置 pending 状态
+            // 有订阅者时，pending 状态由 NetworkGameManager 广播后设置
+            if (OnCounterButtonClicked == null)
+            {
+                if (_domainSystem.IsCounterPending)
+                    _domainSystem.CancelPending();
+                else
+                    _domainSystem.SetCounterPending();
+            }
         }
 
         #endregion
