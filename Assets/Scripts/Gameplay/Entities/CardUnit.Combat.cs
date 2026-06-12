@@ -135,26 +135,75 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         private IBuildingTarget FindNearestEnemyBuilding()
         {
-            var allTargets = FindObjectsByType<CardUnit>(FindObjectsSortMode.None);
+            if (_enemyBuildings == null) return null;
+
             IBuildingTarget best = null;
             float bestDist = float.MaxValue;
             float detectRange = DetectionRange;
 
-            foreach (var unit in allTargets)
+            foreach (var target in _enemyBuildings)
             {
-                if (unit == null || !unit._isBuilding || !unit.IsAlive) continue;
-                if (unit.IsLandlord == IsLandlord) continue;
-                // 路线过滤：只检测同路线或无路线的建筑
-                if (_lane != Lane.None && unit.Lane != Lane.None && unit.Lane != _lane) continue;
+                if (target == null || target.IsDestroyed) continue;
+                var cu = target as CardUnit;
+                if (cu == null) continue;
+                if (cu.IsLandlord == IsLandlord) continue;
+                if (_lane != Lane.None && cu.Lane != Lane.None && cu.Lane != _lane) continue;
 
-                float dist = GetEdgeDistance(unit);
+                float dist = GetEdgeDistance(target);
                 if (dist <= detectRange && dist < bestDist)
                 {
                     bestDist = dist;
-                    best = unit;
+                    best = target;
                 }
             }
             return best;
+        }
+
+        /// <summary>
+        /// 多目标索敌：返回范围内最多 _maxTargets 个敌方单位，按距离排序。
+        /// 嘲讽目标始终排在最前。
+        /// </summary>
+        private List<CardUnit> FindAllTargets()
+        {
+            var result = new List<CardUnit>();
+            if (_maxTargets <= 1) return result;
+
+            float searchRadius = _multiTargetRadius > 0f ? _multiTargetRadius : Stats.Range;
+
+            // 嘲讽目标优先
+            var taunt = FindNearestTauntSourceFor(this);
+            if (taunt != null && IsTargetInRange(taunt))
+                result.Add(taunt);
+
+            // 收集范围内所有敌人
+            if (_enemyUnits != null)
+            {
+                foreach (var enemy in _enemyUnits)
+                {
+                    if (result.Count >= _maxTargets) break;
+                    if (enemy == null || !enemy.IsAlive || enemy._isBuilding || enemy == this) continue;
+                    if (result.Contains(enemy)) continue;
+                    if (!CanAttackHeight(enemy.UnitHeight)) continue;
+                    if (GetUnitEdgeDistance(enemy) > searchRadius) continue;
+                    result.Add(enemy);
+                }
+            }
+
+            // 按距离排序（嘲讽已在第一位，其余按距离）
+            if (result.Count > 1)
+            {
+                result.Sort((a, b) =>
+                {
+                    if (a == taunt) return -1;
+                    if (b == taunt) return 1;
+                    return GetUnitEdgeDistance(a).CompareTo(GetUnitEdgeDistance(b));
+                });
+            }
+
+            if (result.Count > _maxTargets)
+                result.RemoveRange(_maxTargets, result.Count - _maxTargets);
+
+            return result;
         }
 
         protected bool IsTargetInRange(CardUnit target)
@@ -247,25 +296,56 @@ namespace DoudizhuTower.Gameplay.Entities
         public void OnAttackHitFrame()
         {
             if (_isDying) return;
-
-            // ── 真凶抓捕雷达 ──
-            string targetInfo = CurrentTarget is CardUnit cu ? $"{cu.name} (ID:{cu.GetInstanceID()})" : "NULL";
-            float currentDist = CurrentTarget != null ? GetEdgeDistance(CurrentTarget) : -1f;
-            bool isSelf = CurrentTarget is CardUnit tCU && tCU == this;
-            Debug.LogWarning($"[HitFrame_Radar] _isAttacking={_isAttacking} | Target={targetInfo} | Dist={currentDist:F1} | IsSelf={isSelf} | Frame={Time.frameCount}");
-
-            // AI 未授权攻击时，拦截 Animator 残留事件，防止空挥
             if (!_isAttacking) return;
-            if (_isRanged && _projectilePrefab != null)
+
+            // 多目标模式
+            if (_maxTargets > 1)
             {
-                if (_projectileSpawned) return;
-                _projectileSpawned = true;
-                float totalDmg = ComputeAndConsumePassiveDamage();
-                SpawnProjectile(totalDmg);
+                var targets = FindAllTargets();
+                if (targets.Count == 0) { _hitCountDealt++; return; }
+
+                // 一次性计算基础伤害 + 被动加成（人海/冲锋等）
+                _bonusDamage = 0f;
+                OnAttackEvent?.Invoke(_attackTarget);
+                OnAttack(_attackTarget);
+                float totalDmg = CurrentATK + _bonusDamage;
+
+                // 对每个目标独立触发 per-target 被动（溅射/眩晕等）+ 造成伤害
+                foreach (var t in targets)
+                {
+                    if (t == null || !t.IsAlive) continue;
+                    if (!CanAttackHeight(t.UnitHeight)) continue;
+
+                    // 触发每个目标的溅射/眩晕等被动（不重复人海/冲锋）
+                    OnPerTargetAttackEvent?.Invoke(t);
+
+                    if (_isRanged && _projectilePrefab != null)
+                    {
+                        var spawnPos = _firePoint != null ? _firePoint.position : transform.position;
+                        var proj = Instantiate(_projectilePrefab, spawnPos, Quaternion.identity);
+                        proj.Fire(this, t, totalDmg, DamageType.Physical);
+                    }
+                    else
+                    {
+                        t.LastAttacker = Summoner != null ? Summoner : this;
+                        t.TakeDamage(totalDmg, DamageType.Physical);
+                    }
+                }
             }
+            // 单目标模式（原有逻辑）
             else
             {
-                DealAttackDamage();
+                if (_isRanged && _projectilePrefab != null)
+                {
+                    if (_projectileSpawned) { _hitCountDealt++; return; }
+                    _projectileSpawned = true;
+                    float totalDmg = ComputeAndConsumePassiveDamage();
+                    SpawnProjectile(totalDmg);
+                }
+                else
+                {
+                    DealAttackDamage();
+                }
             }
 
             _hitCountDealt++;
@@ -322,8 +402,10 @@ namespace DoudizhuTower.Gameplay.Entities
             }
         }
 
-        /// <summary>攻击事件（供外部组件监听）</summary>
+        /// <summary>攻击事件（供外部组件监听，每次攻击触发一次）</summary>
         public event System.Action<CardUnit> OnAttackEvent;
+        /// <summary>多目标攻击事件（每个目标独立触发，用于溅射/眩晕等按目标生效的被动）</summary>
+        public event System.Action<CardUnit> OnPerTargetAttackEvent;
         /// <summary>受伤事件（参数：伤害值, 伤害类型）。用于音效和分担，不含撕裂加成。</summary>
         public event System.Action<float, DamageType> OnTakeDamageEvent;
         /// <summary>伤害结算完成事件（参数：最终伤害值, 伤害类型）。含撕裂加成，供飘字使用。</summary>
@@ -385,8 +467,14 @@ namespace DoudizhuTower.Gameplay.Entities
             // 受击音效（撕裂乘算前，使用原始伤害）
             OnTakeDamageEvent?.Invoke(rawDamage, type);
 
-            // 分担伤害已重定向：跳过原伤害扣除（RedistributeDamage 已调用各目标的 TakeDamage）
-            if (ShareRedirected) { ShareRedirected = false; return; }
+            // 分担伤害：用分担值替代原始伤害
+            if (ShareRedirected)
+            {
+                ShareRedirected = false;
+                rawDamage = SharedDamageOverride;
+                SharedDamageOverride = 0f;
+                if (rawDamage <= 0f) return;
+            }
 
             // B3: 结算撕裂易伤叠加——每层 +5% 受伤
             float tearMultiplier = UnitPassives.GetTearMultiplier(this);
@@ -464,6 +552,25 @@ namespace DoudizhuTower.Gameplay.Entities
             {
                 OnDied?.Invoke(_unitId);
             }));
+        }
+
+        // ─── 网络同步专用 ───────────────────────────
+
+        /// <summary>设置 HP 值（网络校正用，不触发伤害流程）</summary>
+        public void SetHP(float hp)
+        {
+            if (_isDying) return;
+            _currentHP = Mathf.Clamp(hp, 0f, Stats.HP);
+            OnHPChanged?.Invoke(_unitId, _currentHP);
+        }
+
+        /// <summary>强制死亡（网络校正用，跳过伤害流程直接触发死亡）</summary>
+        public void ForceDie()
+        {
+            if (_isDying || !IsAlive) return;
+            _currentHP = 0f;
+            OnHPChanged?.Invoke(_unitId, _currentHP);
+            Die();
         }
     }
 }

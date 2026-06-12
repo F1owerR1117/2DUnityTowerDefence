@@ -132,6 +132,22 @@ namespace DoudizhuTower.Gameplay.Battle
 
         // ─── 敌方查询 ──────────────────────────────────
 
+        /// <summary>
+        /// 查询指定阵营在指定路线上的存活兵种（供 BuildingAI 路线评估使用）。
+        /// </summary>
+        public List<CardUnit> GetAliveUnitsOnRoute(RoutePath route, bool isLandlordFaction)
+        {
+            var result = new List<CardUnit>();
+            if (route == null) return result;
+            foreach (var u in _allUnits)
+            {
+                if (u == null || !u.IsAlive) continue;
+                if (u.IsLandlord == isLandlordFaction && u.FollowPath == route)
+                    result.Add(u);
+            }
+            return result;
+        }
+
         public List<CardUnit> GetEnemiesFor(CardUnit unit)
         {
             var result = new List<CardUnit>();
@@ -230,6 +246,8 @@ namespace DoudizhuTower.Gameplay.Battle
             _activeBosses.Add(boss);
             boss.OnDestroyed += _ =>
             {
+                // 缓存路径坐标，防止 BOSS 回池后路径点失效导致单位朝 (0,0) 移动
+                if (route != null) route.CachePositions();
                 _activeBosses.Remove(boss);
                 RecheckVictory();
             };
@@ -304,7 +322,11 @@ namespace DoudizhuTower.Gameplay.Battle
         private void Update()
         {
             foreach (var unit in _allUnits)
-                if (unit != null && unit.IsAlive) unit.SetEnemyUnits(GetEnemiesFor(unit));
+                if (unit != null && unit.IsAlive)
+                {
+                    unit.SetEnemyUnits(GetEnemiesFor(unit));
+                    unit.SetEnemyBuildings(_allBuildingTargets);
+                }
             CleanupDeadUnits();
         }
 

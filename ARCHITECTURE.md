@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v5.7
+# DoudizhuTower — 架构落地规范 v6.1
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -16,6 +16,9 @@
 7. [致命地雷检查表](#7-致命地雷检查表)
 8. [牌型检测器：Core 层最高优先级模块](#8-牌型检测器core-层最高优先级模块)
 9. [兵种实体规范](#9-兵种实体规范)
+   - [9.7 VisualCenter 使用基准地图](#97-visualcenter-使用基准地图)
+   - [9.8 统一 Buff 系统](#98-统一-buff-系统属性修改)
+   - [9.9 受伤计算流水线](#99-受伤计算流水线takedamage)
 10. [AI 对手系统](#10-ai-对手系统)
 11. [UI 层规范](#11-ui-层规范)
 12. [Config 配置表规范](#12-config-配置表规范)
@@ -36,7 +39,7 @@
 | `Card` (struct) | 卡牌 | Core/Card | 值对象，含 Rank + Suit |
 | `CardRank` (enum) | 点数 | Core/Card | 3~2, Joker |
 | `CardDeck` | 牌堆 | Core/Card | 54张 + 弃牌堆 + 洗牌 |
-| `CardHand` | 手牌容器 | Core/Card | 纯数据容器，无 UI |
+| `CardHand` | 手牌容器 | Core/Card | 纯数据容器，无 UI。`NotifyHandModified()` 供网络同步直接操作列表后触发 `OnHandChanged` |
 | `HandArea` | 手牌 UI | UI/Hand | 持有 CardHand 引用的 MonoBehaviour |
 | `CardTypeDetector` | 牌型检测器 | Core/Card | 核心算法，零 Unity 依赖 |
 | `EconomySystem` | 经济系统(逻辑) | Core/Economy | 纯 C#，零 MonoBehaviour |
@@ -94,14 +97,17 @@
 | `ConfigImportExport` | 配置导入导出窗口 | Editor | Tools → 配置数据管理，Units/Heroes/Economy/Bidding/Levels 双向同步 |
 | `LevelCard` | 关卡卡片 | UI/LevelSelect | 单个关卡卡片组件（缩略图 + 信息 + 动态缩放） |
 | `LevelSelectController` | 关卡选择控制器 | UI/LevelSelect | 轮播式关卡选择（中心最大，两侧缩小，拖拽滑动 + 吸附） |
-| `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API |
-| `PhotonService` | Photon 实现 | Gameplay/Network | 基于 Photon PUN 2 的 INetworkService 实现（含断线自动重连） |
+| `FollowTarget` | 特效跟随组件 | Gameplay/Entities | 使 VFX 特效跟随目标 Transform 移动（君王光环/嘲讽光环） |
+| `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API + `OnMasterSwitched` 事件 |
+| `PhotonService` | Photon 实现 | Gameplay/Network | 基于 Photon PUN 2 的 INetworkService 实现（含断线自动重连 + `OnMasterSwitched` + 中国区 nameserver `ns.photonengine.cn`） |
 | `NetworkManager` | 网络管理器 | Gameplay/Network | 单例，持有 INetworkService 引用，DontDestroyOnLoad |
 | `OnlineLobbyController` | 联机大厅控制器 | UI/Online | 联机模式选择（单排/创建房间/加入房间）+ 房间管理 |
 | `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 3 人网络轮流叫分，Master 端轮次管理 + AI 槽位支持 + 断线处理 |
 | `BiddingSceneBootstrap` | 叫分场景引导 | UI/Bidding | 检测联机房间状态，自动切换单机/联机叫分管理器 |
 | `NetworkProtocol` | 网络协议常量 | Gameplay/Network | 事件 Key 定义 + Card/CardTypeResult 序列化 + 玩家槽位工具 |
-| `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线同步，挂载到游戏场景 |
+| `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线/HP 同步，挂载到游戏场景 |
+| `NetworkLogger` | 网络日志 | Gameplay/Network | 将网络相关日志写入 `Logs/network_log_slotN.txt` 文件 |
+| `NetworkDebugPanel` | 网络调试面板 | Gameplay/Network | 游戏内左上角显示槽位/手牌/金币/单位数/最近事件 |
 
 ## 实施状态总览
 
@@ -206,6 +212,32 @@
 | 盾墙缓存优化 | _shieldWallUnits 静态列表，Awake 注册 OnDestroy 注销，遍历范围从全部单位缩小到盾墙单位 | UnitPassives.cs |
 | 连对生成修复 | 连对每个对子各生成一个兵种（去重点数） | BattleManager.cs |
 | 召唤物完整生成 | SpawnSummonedUnit 走完整生成流程（对象池/注册/路径/目标/敌方列表），直接继承召唤师 FollowPath | BattleManager.cs |
+| 多目标攻击系统 | `_maxTargets`/`_multiTargetRadius`/`MaxTargets` + `FindAllTargets()` + `OnAttackHitFrame()` 多目标分支 + `OnPerTargetAttackEvent`（溅射/眩晕按目标独立触发） | CardUnit.cs + CardUnit.Combat.cs + UnitPassives.cs |
+| 快速连击被动 | `enableBurstAttack`（连击 N 次后自我眩晕冷却），`_burstHitCounter` 对象池重置 | UnitPassives.cs |
+| 路线锁定系统 | `RoutePath._locked`/`Unlock()`/`Lock()` + `RouteGroup` 跳过锁定路线 + `GetRoute()`/`SwitchToFirstUnlocked()` | RoutePath.cs + RouteGroup.cs |
+| BOSS 路线解锁 | `BossController.ActivateBoss()` 解锁 `_bossRoute` + `_playerRouteToBoss` | BossController.cs |
+| BuildingAI 路线压力检测 | `ChooseLane()` 根据敌方金币权重 + 玩家路线权重 + 防守需求选择最优路线 | BuildingAI.cs |
+| Master 状态同步 | 每 5s 广播完整游戏状态（手牌/经济/牌堆）+ Master 切换前广播 | NetworkGameManager.cs |
+| HP 校验与修正 | 每 5s 校验和对比 + 不一致时自动请求修正 + `SetHP()`/`ForceDie()` | NetworkGameManager.cs + CardUnit.Combat.cs |
+| Master 迁移处理 | `OnMasterSwitched` 事件 + 新 Master 请求时间同步 | PhotonService.cs + NetworkGameManager.cs |
+| 飞筒联机同步 | `CARD_TRANSFER`/`CARD_ARRIVE`/`CARD_TAKE` 协议，联机模式农民可用飞筒 | NetworkGameManager.cs + GameBootstrapper.cs |
+| 经济同步增强 | `GOLD_UPDATE` 携带 `incomeRate`，所有客户端同步回金速度 | NetworkGameManager.cs |
+| 网络区域 | Photon China SDK，nameserver 为 `ns.photonengine.cn`，固定区域 "cn" | PhotonService.cs + LoadBalancingClient.cs + ChatPeer.cs |
+| 特效缩放统一 | 震波/光环/燃烧/嘲讽特效缩放系数从 `/3f` 改为 `/2f` | UnitVFX.cs |
+| 君王光环特效跟随 | `PlayKingAura` 改用 `Transform` 参数 + `FollowTarget` 组件跟随释放者 | UnitVFX.cs + UnitPassives.cs |
+| 燃烧特效半径 | `PlayBurn` 新增 `radius` 参数，特效缩放匹配实际火海范围 | UnitVFX.cs + UnitPassives.cs |
+| 召唤师攻击中兼容 | 攻击中不打断，直接生成召唤物（`StartSummon` 检查 `IsAttacking`） | UnitPassives.Summon.cs |
+| BOSS 路径缓存修复 | `ActivateBoss` 销毁回调中 `route.CachePositions()`，防止 BOSS 回池后路径点失效 | BattleManager.cs |
+| 伤害分担修复 | `RedistributeDamage` 改用 `SharedDamageOverride` 替代 `ShareRedirected` 跳过，主目标承受 60% + 其他各 20% = 100% | BattleManager.Spawning.cs + CardUnit.Combat.cs |
+| 牌堆偏移防重复 | 每个玩家同步牌堆跳过 `slot * 7` 张牌，防止多名玩家拿到相同手牌 | NetworkGameManager.cs + GameBootstrapper.cs |
+| `_deckId` 不同步修复 | 手牌验证/移除改用 `DeckIndex` 比较（`ContainsByDeckIndex`/`RemoveRangeByDeckIndex`） | NetworkGameManager.cs + CardHand.cs |
+| 经济自动创建 | `_slotEconomies` 在 PLAYER_READY 延迟到达时自动创建（验证/摸牌时） | NetworkGameManager.cs |
+| 客户端金币权威 | 客户端忽略 Master 对自身金币的覆盖 + 每 3 秒同步金币到 Master | NetworkGameManager.cs |
+| `ReconcileHand` 禁用 | 禁用 Master 状态同步中的手牌校正（Master `_slotHands` 同步延迟导致误删初始手牌） | NetworkGameManager.cs |
+| HP 同步改用 UnitId | Master 每 5 秒广播所有单位 HP（用 `UnitId` 标识，跨客户端一致），客户端直接覆盖 | NetworkGameManager.cs |
+| 联机暂停修复 | 联机模式下 `PauseMenu` 不设置 `Time.timeScale = 0` | PauseMenu.cs |
+| `CardHand.NotifyHandModified` | 公共方法，供网络同步直接操作列表后触发 `OnHandChanged` | CardHand.cs |
+| 网络调试工具 | `NetworkLogger`（日志写入文件）+ `NetworkDebugPanel`（游戏内状态面板） | Gameplay/Network/ |
 | 高度系统修复 | MoveTowardEnemyBase + MoveTowardTarget 添加 CanAttackHeight 检查 | CardUnit.Movement.cs |
 | 阻挡逻辑修复 | IsBlockedAt 从 this.CanBlockHeight 改为 other.CanBlockHeight | CardUnit.Movement.cs |
 | 溅射圆心修复 | EmitSplash 圆心从 target.transform.position 改为 Collider2D.ClosestPoint（攻击者→目标碰撞箱最近点），大型建筑边缘可溅射 | UnitPassives.cs |
@@ -227,14 +259,20 @@
 | BOSS 技能动画 | SimpleAnimator 新增 dashClip/bossSkill1-3Clip，Animator Controller 新增 Dash/BossSkill1-3 Trigger 状态，更新菜单 `Tools → 更新兵种 Animator Controller` | SimpleAnimator.cs + CardUnit.Animation.cs + CreateUnitAnimatorController.cs |
 | 动画优先级文档 | Any State Trigger 内部顺序：Death > Shockwave > Splash > StunHit > KingAura > DeathExplosion > Burn > Summon > Dash > BossSkill1-3 | ARCHITECTURE.md |
 | 骤死期双倍金币 | `EconomyManager` 订阅 `OnPhaseChanged`，骤死期回金速度 × `suddenDeathMultiplier`，GameOver 恢复基础值 | EconomyManager.cs + GameBootstrapper.cs |
+| VisualCenter 使用基准 | 全项目统一圆心地图（碰撞箱中心 vs transform.position），编辑器预览差异说明 | ARCHITECTURE.md §9.7 |
+| 统一 Buff 系统 | 命名 Buff（同名覆盖，异名乘算）+ 从基础值 RecalculateStats | CardUnit.cs §9.8 |
+| 受伤计算流水线 | 8 步串行：真实伤害→屏障→盾墙→减免→吸收→分担→撕裂→扣血 | CardUnit.Combat.cs §9.9 |
+| FindNearestEnemyBuilding 热路径优化 | `FindObjectsByType` → `_enemyBuildings` 缓存数组（BattleManager 注入），O(m) 建筑遍历 | CardUnit.Combat.cs + BattleManager.cs + CardUnit.cs |
+| transform.position 违规修复 | 10 处距离/范围计算改为 `VisualCenter`（英雄被动/三人组/轰炸/溅射/召唤） | BattleManager.Heroes.cs + Spawning.cs + UnitPassives.cs + UnitPassives.Summon.cs |
+| 静态状态跨局清理 | `UnitAudio.ClearClipCounts()` + `DamageQueue.Clear()` 在新局开始时调用，`_shieldWallUnits` 对象池回收注销 | UnitAudio.cs + DamageQueue.cs + UnitPassives.cs + GameBootstrapper.cs |
+| DomainUIController lambda 退订 | `counterCoolDown.OnCoolDownComplete` 匿名 lambda → 存储字段 `_onCounterCoolDownComplete`，OnDestroy 退订 | DomainUIController.cs |
 
 ### P1（仍需实现）
 
 | 系统 | 章节 | 说明 |
 |:---|:---|:---|
-| BuildingAI 路线压力检测 | §10.2 | `CountEnemiesOn()` 返回 0 |
 | 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
-| 图鉴/索引系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
+| 图鉴/索引系统 | — | SaveSystem 图鉴解锁 API 已实现（`UnlockCodexEntry`/`IsCodexEntryUnlocked`），SceneLoader.LoadCodex 已预留，场景/逻辑未完全实现 |
 
 ### P2（增强/可视化）
 
@@ -320,7 +358,7 @@ Assets/Scripts/
 │   │   ├── AudioManager.cs            # ★ 单例音频管理器（4 通道优先级音效 + BGM，DontDestroyOnLoad）
 │   │   ├── VFXManager.cs             # ★ 单例粒子特效对象池（DontDestroyOnLoad）
 │   │   ├── UIManager.cs              # ★ 跨场景 UI 管理器（单例，管理 UI_Scene 加载 + PauseMenu/VictoryPanel 引用）
-│   │   ├── SceneLoader.cs            # 场景加载工具（LoadBidding/LoadGame/LoadMainMenu/QuitGame）
+│   │   ├── SceneLoader.cs            # 场景加载工具（LoadBidding/LoadGame/LoadMainMenu/LoadCodex/QuitGame）
 │   │   ├── GameSession.cs            # ★ 跨场景会话数据（叫分结果 + 玩家基地映射，支持联机扩展）
 │   │   └── SaveSystem.cs             # ★ 存档系统（PlayerPrefs，金币/首次胜利/对局统计）
 │   ├── Entities/
@@ -345,8 +383,8 @@ Assets/Scripts/
 │   │   ├── BattleManager.Heroes.cs    #   英雄生成 + 被动注入 + 灵骑光环
 │   │   ├── DamageQueue.cs             # ★ 伤害批量结算队列（同帧入队，帧末统一结算 HP + 死亡）
 │   │   ├── IBuildingTarget.cs         # 可攻击目标接口（CardUnit _isBuilding 唯一实现）
-│   │   ├── RoutePath.cs               # 路径定义 + Scene 视图 Gizmo + `_cachePositions` 缓存开关
-│   │   ├── RouteGroup.cs              # 路线组
+│   │   ├── RoutePath.cs               # 路径定义 + Scene 视图 Gizmo + `_cachePositions` 缓存开关 + `_locked` 路线锁定
+│   │   ├── RouteGroup.cs              # 路线组（跳过锁定路线，`GetRoute()`/`SwitchToFirstUnlocked()`）
 │   │   ├── SpawnPool.cs               # 出兵池（8 组 ×13 槽预制体映射）
 │   │   ├── BuildingAI.cs              # ★ 建筑 AI（集成 DomainSystem 领域/反制决策 + 暂存槽自动取牌）
 │   │   ├── BossController.cs          # ★ BOSS 控制器（定时/建筑摧毁触发，召唤师能力）
@@ -357,11 +395,13 @@ Assets/Scripts/
 │   │   ├── CardTypeCompare.cs         # 牌型比较器（HasCounterInHand + CanCounter）
 │   │   └── MapController.cs           # 地图坐标常量与工具方法（WinCondition 枚举定义在 BattleManager.cs 中）
 │   ├── Network/                        # 联机网络层
-│   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步）
-│   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连）
+│   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步 + OnMasterSwitched）
+│   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连 + 中国区 nameserver）
 │   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
-│   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/领域/断线同步）
-│   │   └── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
+│   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
+│   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
+│   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
+│   │   └── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -394,7 +434,7 @@ Assets/Scripts/
 │   │   └── FloatingTextPool.cs        # 飘字对象池（订阅 BattleManager.OnUnitSpawned）
 │   ├── Panels/
 │   │   ├── UnitInfoPanel.cs           # ★ 兵种信息面板（世界空间，跟随目标，实时属性）
-│   │   ├── PauseMenu.cs              # ★ 暂停菜单（ESC 切换，音量滑块，重新开始/退出）
+│   │   ├── PauseMenu.cs              # ★ 暂停菜单（ESC 切换，音量滑块，联机模式不暂停游戏逻辑）
 │   │   ├── VictoryPanel.cs           # ★ 胜利/结算面板（单人/联机模式，对局时长+奖励）
 │   │   └── VictoryStats.cs           # 结算数据 struct（gameDuration + 联机结算公式字段）
 │   ├── MainMenuController.cs          # 主菜单控制器（开始游戏/退出）
@@ -451,7 +491,8 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 牌堆刷新 | `OnDeckReshuffled()` | CardDeck | — |
 | 兵种扣血 | `OnHPChanged(int, float)` | CardUnit | UnitHealthBar |
 | 兵种阵亡 | `OnDied(int)` | CardUnit | BattleManager → UnitFactory |
-| 兵种攻击 | `OnAttackEvent(CardUnit)` | CardUnit | UnitPassives（人海/冲锋/眩晕/溅射）|
+| 兵种攻击 | `OnAttackEvent(CardUnit)` | CardUnit | UnitPassives（人海/冲锋，每次攻击触发一次）|
+| 兵种多目标攻击 | `OnPerTargetAttackEvent(CardUnit)` | CardUnit | UnitPassives（溅射/眩晕/连击，每个目标独立触发）|
 | 兵种受伤 | `OnTakeDamageEvent(float, DamageType)` | CardUnit | UnitAudio（音效）, BattleManager（分担）|
 | 伤害结算完成 | `OnDamageCalculated(float, DamageType)` | CardUnit | FloatingTextPool（飘字，含撕裂加成）|
 | 兵种死亡 | `OnDeathEvent()` | CardUnit | UnitPassives（死爆/燃烧）|
@@ -477,6 +518,13 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 联机金币同步 | `BroadcastGoldUpdate(slot, gold)` | EconomyManager | NetworkGameManager |
 | 联机领域激活 | `RequestDomainActivate(result)` | DomainSystem | NetworkGameManager |
 | 联机反制激活 | `RequestCounterActivate(result)` | DomainSystem | NetworkGameManager |
+| 联机传牌请求 | `RequestCardTransfer(card)` | GameBootstrapper | NetworkGameManager |
+| 联机取牌请求 | `RequestCardTake()` | GameBootstrapper | NetworkGameManager |
+| 飞筒传牌到达 | `OnCardArrived(senderSlot, card)` | NetworkGameManager | GameBootstrapper（放入暂存槽） |
+| 飞筒取牌完成 | `OnCardTaken(takerSlot)` | NetworkGameManager | GameBootstrapper（清空暂存槽） |
+| Master 切换 | `OnMasterSwitched()` | INetworkService | NetworkGameManager（请求时间同步） |
+| HP 修正 | `HP_CORRECTION[unitId, hp, ...]` | NetworkGameManager(Master) | NetworkGameManager(Client)（覆盖本地 HP） |
+| 状态同步 | `MASTER_STATE_SYNC[slot, cards, gold, ...]` | NetworkGameManager(Master) | NetworkGameManager(Client)（经济追踪更新） |
 
 ### 3.2 订阅者生命周期规则
 
@@ -515,7 +563,7 @@ Step 5:  依赖注入焊接（EconomyManager.Initialize(gameStateMachine), Battl
 Step 5b: BOSS 控制器注入（FindObjectsByType<BossController> → 纠正阵营 SetLandlord → 刷新血条颜色 → 启用 BuildingAI → boss.Inject(battleManager, deck)）
 Step 5a: AI 对手初始化（遍历 aiHands，非玩家基地注入 BuildingAI + DomainSystem 引用）
 Step 6:  焊接 UI（HandArea 空值保护 → return, 出牌事件, PlayValidator）
-Step 6b: 焊接传送飞筒 + 暂存槽（查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线）+ 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
+Step 6b: 焊接传送飞筒 + 暂存槽（单机：查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线 / 联机：地主隐藏飞筒，农民启用飞筒 + NetworkGameManager 传牌/取牌同步）+ 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
 Step 7:  基地血条使用 UnitHealthBar（与兵种共用）
 Step 8:  焊接摸牌按钮（自动摸牌定时器 + 手动摸牌按钮，地主 5s/10g，农民 6s/12g）
 Step 9:  暂停菜单事件焊接
@@ -756,6 +804,27 @@ CardUnit 拆分为 4 个文件：
 - `LogicCenter` → 返回 `VisualCenter`（`Collider2D.bounds.center`）
 - `GetWorldRadius()` 已删除
 
+**多目标攻击：**
+- `_maxTargets`：同时攻击的最大目标数（1=单目标，>1=多目标），`MaxTargets` 属性公开
+- `_multiTargetRadius`：多目标搜索半径（0=使用攻击范围）
+- `FindAllTargets()`：返回范围内最多 `_maxTargets` 个敌方单位，嘲讽目标优先，按距离排序
+- `OnAttackHitFrame()` 多目标模式：
+  1. `OnAttackEvent` 一次性触发人海/冲锋等基础被动 + 计算伤害
+  2. 循环每个目标：`OnPerTargetAttackEvent` 独立触发溅射/眩晕/连击 + 造成伤害
+- `OnAttackHitFrame()` 单目标模式：`OnAttackEvent` 触发所有被动（含溅射/眩晕），与旧行为一致
+
+**网络同步方法：**
+```csharp
+public void SetHP(float hp);              // 设置 HP（网络校正用，不触发伤害流程）
+public void ForceDie();                   // 强制死亡（网络校正用，跳过伤害流程）
+```
+
+**伤害分担字段：**
+```csharp
+public bool ShareRedirected { get; set; }           // 分担标记（RedistributeDamage 设置）
+public float SharedDamageOverride { get; set; }     // 分担后的伤害值（>0 时替代原始伤害）
+```
+
 **新增方法：**
 ```csharp
 // 统一边缘距离计算（建筑目标）
@@ -826,21 +895,22 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
 | 被动 | 开关字段 | 触发方式 | 说明 |
 |:---|:---|:---|:---|
 | 点杀 | `enableSniper` | `OverrideFindTarget` | 锁定全场血量最低的敌方单位 |
-| 人海连击 | `enableSwarm` | `OnAttackEvent` | 每名周围友军追加 50% ATK |
-| 冲锋一击 | `enableCharge` | `OnAttackEvent` | 蓄力后首击 ATK×2.5，蓄力期间移速×1.3 |
+| 人海连击 | `enableSwarm` | `OnAttackEvent`（一次） | 每名周围友军追加 50% ATK |
+| 冲锋一击 | `enableCharge` | `OnAttackEvent`（一次） | 蓄力后首击 ATK×2.5，蓄力期间移速×1.3 |
 | 君王光环 | `enableKingAura` | Update 每 interval | 周期震退周围敌人 |
 | 盾墙线 | `enableShieldWall` | `ApplyShieldWallGlobal` | 周围友军伤害减免（乘法叠加）|
 | 嘲讽光环 | `enableTaunt` | Awake | 设置 `IsTauntSource = true` |
 | 死亡爆炸 | `enableDeathExplosion` | `OnDeathEvent` | 死亡时范围爆炸 |
 | 护盾吸收 | `enableShieldAbsorb` | Awake | 设置 `DamageAbsorbRemaining` |
 | 减速光环 | `enableSlowAura` | Update 每帧 | 周围敌人移速降低，仅首次 `≈0` 时保存 `OriginalMoveSpeed`，多光环不互相覆盖；`SlowRestoreTimer` 到期恢复后清零 |
-| 攻击眩晕 | `enableStunOnHit` | `OnAttackEvent` | 攻击命中设置目标 `StunTimer` |
+| 攻击眩晕 | `enableStunOnHit` | `OnAttackEvent` + `OnPerTargetAttackEvent` | 攻击命中设置目标 `StunTimer`（多目标模式下每个目标独立眩晕） |
 | 撕裂 | `enableTear` | `OnAttackEvent` | 为目标叠加 `TearStacks`；`CardUnit.TakeDamage()` 扣除血量前调用 `GetTearMultiplier()` 结算受伤 +5%/层 |
 | 出场震波 | `enableShockwave` | Awake | 出场震退周围敌人 |
 | 死亡燃烧 | `enableBurnOnDeath` | `OnDeathEvent` | 死亡留下火海（BurnZone）持续伤害 |
-| 溅射攻击 | `enableSplash` | `OnAttackEvent` | 攻击时以 `Collider2D.ClosestPoint`（攻击者→目标碰撞箱最近点）为圆心扩散范围伤害，支持大型建筑边缘溅射 |
+| 溅射攻击 | `enableSplash` | `OnAttackEvent` + `OnPerTargetAttackEvent` | 攻击时以 `Collider2D.ClosestPoint`（攻击者→目标碰撞箱最近点）为圆心扩散范围伤害，支持大型建筑边缘溅射；多目标模式下每个目标独立触发溅射 |
 | 骑兵追击 | `enableCavalryChase` | `OverrideFindTarget` | 优先锁定远程（IsRanged）敌方单位 |
 | 召唤师 | `enableSummoner` | Update 定时 + `OnKillEvent` | 定时召唤（Animation Event 驱动）+ 击杀召唤（从尸体位置立刻生成），召唤物直接继承召唤师的 `FollowPath`（而非基地 `RouteGroup.CurrentRoute`），击杀归属到召唤师 |
+| 快速连击 | `enableBurstAttack` | `OnAttackEvent` + `OnPerTargetAttackEvent` | 连续攻击 N 次后自我眩晕进入冷却（`burstHitCount`/`burstCooldown`），多目标模式下每个命中计数 |
 
 **召唤师可配参数**：`summonPrefab`（召唤物预制体）、`summonInterval`（定时召唤间隔）、`maxSummons`（最大召唤物数量）、`summonOnKill`（击杀时是否额外召唤）
 
@@ -880,6 +950,123 @@ public System.Func<CardUnit, float> OverrideAttackRange;      // 自定义攻击
 // OnPoolSpawn() → gameObject.SetActive(true) → 血条重新绑定
 ```
 
+### 9.7 VisualCenter 使用基准地图
+
+`VisualCenter` = `_collider.bounds.center`（碰撞箱 bounds 中心），`_collider` 为 null 时回退 `transform.position`。
+`_collider` 仅在 `Initialize()` 中赋值，编辑器预览时可能为 null。
+
+| 系统 | 圆心/基准 | 说明 |
+|:---|:---|:---|
+| 攻击范围判定 | `VisualCenter`（仅作 ClosestPoint 查询起点） | 实际距离为边缘到边缘（`GetUnitEdgeDistance`） |
+| 攻击范围 Gizmo | `bounds.center`（实时取碰撞箱，有兜底） | `CardUnit.Animation.cs`：`_collider != null ? _collider : GetComponentInChildren` |
+| 点杀搜索 | `_owner.VisualCenter` | `Physics2D.OverlapCircle` 圆心 + `GetUnitEdgeDistance` 边缘判定 |
+| 点杀 Gizmo | `owner.VisualCenter` | `UnitPassives.cs`：`_collider` 未初始化时回退 `transform.position` |
+| 被动技能 AoE | `_owner.VisualCenter` | 人海/君王光环/减速光环/震波/死爆/死燃/嘲讽/骑兵追击 |
+| 被动 Gizmo | `owner.VisualCenter` | 编辑器预览时 `_collider` 未初始化 → 回退 `transform.position`（停在预制体中心不动） |
+| 溅射攻击 | `col.ClosestPoint(_owner.VisualCenter)` | **圆心在碰撞箱边缘**：目标碰撞箱上离攻击者最近的点（查询起点从 transform.position 修正为 VisualCenter） |
+| 英雄被动（神射/术士/灵骑） | `unit.VisualCenter` / `owner.VisualCenter` | OverlapCircle 扫描圆心 |
+| 三人组伤害分担 | `damaged.VisualCenter` / `unit.VisualCenter` | 距离判定双端 |
+| 轰炸机伤害 | `bomber.VisualCenter` | OverlapCircle 扫描圆心 |
+| 召唤物生成 | `_owner.VisualCenter` / `victim.VisualCenter` | 定期召唤 + 击杀召唤位置 |
+| BOSS 技能 | `_owner.VisualCenter` | AOE 伤害/眩晕/击退/冲刺方向/VFX 生成 |
+| BOSS 技能 Gizmo | 无 | BossSkillSystem 没有 OnDrawGizmos |
+| 击退方向 | `enemy.VisualCenter - _owner.VisualCenter` | 所有击退/推离向量 |
+| 伤害飘字 | `unit.transform.position + offset` | **基于 transform.position**，非 VisualCenter |
+| 弹道生成 | `_firePoint ?? transform.position` | 基于 firePoint 或 transform.position |
+| 兵种生成 | `SpawnPoint.position` / `MapController.GetSpawnPosition` | 基于 transform.position |
+| IBuildingTarget.LogicCenter | `VisualCenter` | 建筑逻辑中心 = 碰撞箱中心 |
+
+**编辑器预览差异**：`CardUnit.Animation` 的 Gizmo 有 `GetComponentInChildren<Collider2D>()` 兜底，即使 `_collider` 为 null 也能正确跟随碰撞箱。`UnitPassives` 的 Gizmo 依赖 `owner.VisualCenter`，`_collider` 为 null 时回退 `transform.position`，导致编辑器中被动 Gizmo 可能停在预制体原点。**运行时无差异**（`Initialize()` 已赋值 `_collider`）。
+
+### 9.8 统一 Buff 系统（属性修改）
+
+`CardUnit.cs:196-247` — 命名 Buff + 从基础值乘法叠加。
+
+```csharp
+public struct StatBuff
+{
+    public float AtkIntervalMult;  // 攻击间隔乘数（1.0 = 无影响）
+    public float MoveSpeedMult;    // 移速乘数
+    public float HpMult;           // HP 乘数
+    public float AtkMult;          // ATK 乘数
+    public float RangeMult;        // 射程乘数
+}
+
+// 应用 Buff（同名覆盖，异名乘算）
+public void ApplyBuff(string buffId, StatBuff buff);
+public void RemoveBuff(string buffId);
+```
+
+**叠加规则**：
+- 每个 Buff 有唯一 `buffId`，**同名 BuffId 覆盖**（后到的替换先到的）
+- **异名 Buff 乘法叠加**：从 `_baseStats`（首次 ApplyBuff 时快照）重新计算
+- 重算公式：`最终值 = 基础值 × buff1.X × buff2.X × buff3.X × ...`
+
+**举例**：基础移速 10，冲锋 Buff(`"charge"`, ×1.3) + 减速 Buff(`"slow_aura"`, ×0.7)：
+```
+10 × 1.3 × 0.7 = 9.1
+```
+
+如果再叠加第二个减速源用不同 buffId（如 `"boss_slow"`, ×0.8）：
+```
+10 × 1.3 × 0.7 × 0.8 = 7.28
+```
+
+但当前减速光环统一使用 `"slow_aura"`，后到的覆盖先到的，不会叠加。
+
+**当前使用的 BuffId**：
+
+| buffId | 来源 | 效果 |
+|:---|:---|:---|
+| `"charge"` | UnitPassives 冲锋 | MoveSpeed × chargeSpeedMultiplier |
+| `"slow_aura"` | UnitPassives 减速光环 / BossSkillSystem | MoveSpeed × (1 - slowPercent) |
+| `"spirit_rider"` | BattleManager 灵骑光环 | MoveSpeed × spiritRiderMoveSpeedBonus |
+
+### 9.9 受伤计算流水线（TakeDamage）
+
+`CardUnit.Combat.cs:425-499` — **严格串行，每一步的输出是下一步的输入**：
+
+```
+原始伤害 rawDamage
+    │
+    ├─ 1. 真实伤害（DamageType.True）？ → 直接扣血，跳过一切
+    │
+    ├─ 2. 屏障层（ShieldBlocks > 0）？ → 消耗一层，吸收全部伤害，结束
+    │
+    ├─ 3. 盾墙减免 → rawDamage × ∏(1 - 盾墙减伤)  ← 多个盾墙单位各自乘一次
+    │
+    ├─ 4. 伤害减免（DamageReduction）→ rawDamage × (1 - DamageReduction)  ← 如守护者 30%
+    │
+    ├─ 5. 伤害吸收（DamageAbsorbRemaining）→ 扣除护盾池（诱饵护盾/帝王盾）
+    │
+    ├─ 6. 分担伤害（ShareRedirected）→ 用 SharedDamageOverride 替代（主目标 60%，其他各 20%）
+    │
+    ├─ 7. 撕裂易伤 → rawDamage × (1 + 层数 × 每层比例)  ← 默认 +5%/层，上限 5 层
+    │
+    └─ 8. finalDamage → 扣血 → 死亡判定
+```
+
+**举例**：100 伤害打一个有 2 层撕裂(5%/层)、30% 守护者减伤、附近有 1 个 20% 盾墙的单位：
+```
+100 × (1 - 0.2) × (1 - 0.3) × (1 + 2 × 0.05)
+= 100 × 0.8 × 0.7 × 1.1
+= 61.6
+```
+
+如果附近有 2 个盾墙单位（各 20%）：
+```
+100 × (1 - 0.2) × (1 - 0.2) × (1 - 0.3) × (1 + 2 × 0.05)
+= 100 × 0.8 × 0.8 × 0.7 × 1.1
+= 49.28
+```
+
+**关键区别**：
+- **速度 Buff**：同名覆盖，异名乘算，从基础值重算（`RecalculateStats`）
+- **减伤**：串行相乘（盾墙 → 减免 → 吸收），不存在覆盖问题
+- **撕裂增伤**：最后一步乘算，在所有减伤之后应用
+- **真实伤害**：跳过全部减伤/吸收/撕裂
+- **屏障**：吸收整击（不论伤害量），优先级最高（仅次于真实伤害）
+
 ---
 
 ## 10. AI 对手系统
@@ -901,7 +1088,7 @@ public class BuildingAI : MonoBehaviour {
 | 出牌频率 | 每 4 秒判定一次 |
 | 选牌策略 | 枚举合规牌型，选最贵且付得起的；**性能优化**：k 从大到小遍历（高价优先），上限 1000 次评估防帧率尖刺 |
 | 选路（农民） | 固定路线（RouteGroup 配置） |
-| 选路（地主） | 固定路线（RouteGroup 配置），`ChooseLane()` 已删除 |
+| 选路（地主） | 路线压力评估（`ChooseLane()`），根据敌方存活兵种金币权重 + 玩家路线权重 + 防守需求选择最优路线 |
 | 自动摸牌 | 地主 5s / 农民 6s |
 | 经济增长 | 每分钟 +1g/s |
 | 领域决策 | 集成 DomainSystem，地主 AI 在手牌充足时激活要不起领域，农民 AI 在可反制时激活反制护盾 |
@@ -1195,6 +1382,7 @@ public interface INetworkService
     event Action<string> OnPlayerLeft;
     event Action OnAllPlayersReady;
     event Action<string, object, int> OnCustomEvent;
+    event Action OnMasterSwitched;
 }
 ```
 
@@ -1206,7 +1394,7 @@ Core/ 是纯 C# 且逻辑确定性（Deterministic），联机时只需要服务
 
 PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocusRecent` 导致的 `TimeoutDisconnect`。
 
-**超时配置**：`Connect()` 时将 `DisconnectTimeout` 增大至 30 秒（默认约 10 秒），容忍应用失焦期间的心跳丢失。
+**超时配置**：`Connect()` 时将 `DisconnectTimeout` 增大至 30 秒（默认约 10 秒），容忍应用失焦期间的心跳丢失。固定区域为 "cn"（中国区，nameserver `ns.photonengine.cn`）。
 
 **自动重连触发**：`OnApplicationFocus(hasFocus)` 和 `OnApplicationPause(pauseStatus)` 在应用恢复时检测连接状态，若已断开则自动重连。
 
@@ -1220,6 +1408,21 @@ PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocu
 应用失焦 → OS 限制网络 → Photon 心跳丢失 → 30s 超时 → OnDisconnected(TimeoutDisconnect)
 应用重获焦点 → OnApplicationFocus(true) → TryReconnect() → ReconnectAndRejoin / ConnectUsingSettings
 ```
+
+### 13.4a Master 迁移机制
+
+当 Master 客户端断线时，Photon 自动将 Master 权限转移给其他玩家：
+
+```
+旧 Master 断线 → Photon.OnMasterClientSwitched(newMaster)
+  → PhotonService.OnMasterSwitched 事件
+  → NetworkGameManager.OnMasterSwitched()
+    → SyncGameTime()（新 Master 请求时间同步）
+    → 等待旧 Master 最后一次状态广播（5s 内）
+    → 新 Master 开始定期 BroadcastGameState() + BroadcastHPChecksum()
+```
+
+**状态连续性**：Master 每 5 秒广播完整游戏状态（手牌/经济/牌堆），新 Master 上任后可从最后一次广播恢复。HP 校验和机制确保战斗状态一致。
 
 ### 13.5 网络协议层（NetworkProtocol）
 
@@ -1237,6 +1440,10 @@ public static class NetworkProtocol
     public const string PLAYER_READY;
     public const string DOMAIN_PENDING, COUNTER_PENDING;
     public const string ADD_AI, REMOVE_AI, KICK_PLAYER;
+    public const string CARD_TRANSFER, CARD_ARRIVE, CARD_TAKE;  // 飞筒传牌
+    public const string MASTER_STATE_SYNC;  // Master 状态同步（每 5s 广播手牌/经济/牌堆）
+    public const string HP_CHECKSUM;        // 已弃用
+    public const string HP_CORRECTION;      // Master 广播所有单位 HP（用 UnitId 标识）
 
     // 序列化工具
     public static int[] SerializeCards(Card[] cards);
@@ -1272,19 +1479,31 @@ public static class NetworkProtocol
 | 胜利同步 | ✅ BroadcastGameEnd 广播赢家阵营 + 客户端自行判断胜负 |
 | 手牌追踪 | ✅ Master 为远程玩家创建同步牌堆 _slotDecks，摸牌/出牌双向同步 |
 | 断线转 AI | ✅ 保留实际金币和剩余手牌，AI 继承断线玩家状态 |
+| 飞筒联机 | ✅ 农民可用飞筒，Master 验证传牌/取牌，CARD_TRANSFER/ARRIVE/TAKE 协议 |
+| Master 状态同步 | ✅ NetworkGameManager（每 5s 广播完整游戏状态 + 切换前广播） |
+| HP 校验与修正 | ✅ NetworkGameManager（每 5s 校验和对比 + 自动请求修正） |
+| Master 迁移 | ✅ PhotonService.OnMasterSwitched → NetworkGameManager 请求时间同步 |
+| 飞筒联机同步 | ✅ CARD_TRANSFER/ARRIVE/TAKE 协议，Master 验证 + 广播 |
+| 经济同步增强 | ✅ GOLD_UPDATE 携带 incomeRate，所有客户端同步回金速度 |
 
 ### 13.7 联机游戏管理器（NetworkGameManager）
 
 Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
 
 **核心职责：**
-- **出牌同步**：Client → `SendToMaster(PLAY_CARDS)` → Master 验证金币 → `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
-- **摸牌同步**：Client → `SendToMaster(DRAW_CARD)` → Master 从同步牌堆抽牌 → `SendToAll(DRAW_CARD, [slot, cardIndex])` → 客户端添加手牌
-- **经济同步**：`BroadcastGoldUpdate(slot, gold)` → 所有客户端更新金币显示；`PLAYER_READY` 上报初始金币
+- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币（信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
+- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 + 扣费 → `SendToAll(DRAW_CARD, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
+- **经济同步**：客户端每 3 秒向 Master 报告金币；Master 的 `GOLD_UPDATE` 不覆盖客户端自身金币（客户端是自身金币的权威来源）
 - **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
 - **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
 - **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
 - **断线处理**：`OnPlayerLeft` → 保留断线玩家实际金币 → 转为 AI 控制
+- **飞筒传牌同步**：`RequestCardTransfer(card)` → Master 验证手牌 → 广播 `CARD_ARRIVE` → 接收方暂存槽；`RequestCardTake()` → Master 广播 `CARD_TAKE` → 清空暂存槽
+- **HP 同步**：Master 每 5 秒广播所有存活单位 HP（用 `UnitId` 标识，跨客户端一致），客户端直接覆盖本地 HP
+- **Master 迁移**：`OnMasterSwitched` → 新 Master 请求时间同步
+- **牌堆偏移**：每个玩家的同步牌堆跳过 `slot * 7` 张牌，防止多名玩家拿到相同手牌
+- **手牌验证**：用 `DeckIndex` 比较（`ContainsByDeckIndex`），避免 `_deckId` 跨客户端不一致导致验证失败
+- **调试工具**：`NetworkLogger`（日志写入 `Logs/` 文件）+ `NetworkDebugPanel`（游戏内左上角状态面板）
 
 **数据流：**
 ```
@@ -1294,6 +1513,13 @@ Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 
 
 所有客户端: ExecutePlayApproved()
   → 扣费(仅本机玩家) → 移除手牌 → DeployCards() → DomainSystem.OnCardPlayed()
+
+飞筒传牌 → LaunchTubeUI → NetworkGameManager.RequestCardTransfer(card)
+  ├─ Master: MasterHandleCardTransfer() → 验证手牌 → SendToAll(CARD_ARRIVE)
+  └─ Client: SendToMaster(CARD_TRANSFER) → 等待 CARD_ARRIVE
+
+接收方: OnCardArrived → teammateTempSlotUI.ReceiveCard(card)
+取牌方: RequestCardTake() → SendToAll(CARD_TAKE) → OnCardTaken → Clear()
 ```
 
 **手牌同步机制：**
@@ -1484,7 +1710,7 @@ SetAnimBool("ShieldWall", true); // 开启盾墙
 | `BombingRunCoroutine` (B11) | `Physics2D.OverlapCircleAll` 每帧分配 | 实例 `_overlapCache[128]` + `OverlapCircleNonAlloc` |
 | `BurnZone.Update` (B10) | `OverlapCircleAll` 每帧分配 | `_burnCache[64]` + `OverlapCircleNonAlloc` + 0.25s Tick 间隔 |
 | `BuildingAI.MakeDecision` (B4) | 全组合枚举 C(20,5)≈38K 次/4s | k 从大到小 + 上限 1000 次评估 |
-| `FindNearestEnemyBuilding` (B16) | `FindObjectsByType<CardUnit>` 在 OnUpdate 中每帧调用 | ❌ 待整改：应改为 `_allUnits` 缓存列表或 OverlapCircle |
+| `FindNearestEnemyBuilding` (B16) | `FindObjectsByType<CardUnit>` 在 OnUpdate 中每帧调用 | `_enemyBuildings` 缓存数组（`BattleManager._allBuildingTargets` 注入），O(m) 遍历建筑而非 O(n) 全场景扫描 |
 
 ---
 
@@ -1572,9 +1798,10 @@ TakeDamage(rawDamage, type)
   ├─ 盾墙减免 → 乘法减少
   ├─ 伤害减免 → 百分比减少
   ├─ 伤害吸收 → 护盾池扣除
-  ├─ OnTakeDamageEvent → 受击音效 + 飘字（立即触发）
-  ├─ 分担重定向 → ShareRedirected 跳过原单位扣血
+  ├─ OnTakeDamageEvent → 受击音效（立即触发，使用原始伤害）
+  ├─ 分担重定向 → SharedDamageOverride 替代原始伤害（主目标 60%，其他各 20%，总计 100%）
   ├─ 撕裂易伤 → 最终倍率
+  ├─ OnDamageCalculated → 飘字（含撕裂加成）
   └─ 批量模式 → DamageQueue.Enqueue(finalDamage)
 ```
 
@@ -1617,7 +1844,15 @@ TakeDamage(rawDamage, type)
 
 `BuildingAI.takeCardDelay`（默认 0.5s）：暂存槽有牌后等待指定时间再取牌，让玩家能看到暂存槽中的牌。
 
-### 18.4 基地摧毁处理
+### 18.4 联机模式
+
+联机模式下飞筒系统通过 `NetworkGameManager` 同步：
+- 农民可用飞筒（地主隐藏），传牌通过 `CARD_TRANSFER`/`CARD_ARRIVE` 协议同步
+- `RequestCardTransfer(card)` → Master 验证手牌 → 广播给接收方暂存槽
+- `RequestCardTake()` → Master 广播 `CARD_TAKE` → 所有客户端清空暂存槽
+- `FindTeammateSlot()` 自动查找同阵营队友槽位
+
+### 18.5 基地摧毁处理
 
 - 玩家基地摧毁 → 清空玩家暂存槽 + 锁定飞筒
 - 队友基地摧毁 → 清空队友暂存槽 + 锁定飞筒
@@ -1680,14 +1915,16 @@ Assets/Prefabs/
 │   ├── Wizard.prefab               # 法师
 │   ├── DeathWizard.prefab          # 暗黑法师
 │   ├── Bat.prefab                  # 蝙蝠（飞行单位）
-│   ├── BossKing.prefab             # BOSS（BossController + BuildingAI + SpawnPool + BossSkillSystem）
+│   ├── BossGiantBird.prefab        # BOSS：巨鸟（BossController + BuildingAI + SpawnPool + BossSkillSystem）
+│   ├── BossSword.prefab            # BOSS：剑圣（BossController + BuildingAI + SpawnPool + BossSkillSystem）
 │   └── PlaneTest.prefab            # 飞机/轰炸机
 ├── Buildings/TowerEntities/        # 建筑预制体
 │   ├── FarmerA.prefab              # 农民基地
 │   └── LandLord.prefab             # 地主基地
 ├── BulletAndHitEffect/             # 弹道特效
 │   ├── Bullet/Arrow.prefab         # 箭矢投射物
-│   └── HitEffects/Bow.prefab       # 弓箭命中特效
+│   ├── Fire.prefab                 # 火焰投射物
+│   └── KingArea.prefab             # 君王领域投射物
 ├── UI/UIPrefabs/                   # UI 预制体
 │   ├── GamePrefabs/
 │   │   ├── GameCanvas.prefab       # 主游戏画布
@@ -1713,6 +1950,7 @@ Assets/Prefabs/
 | `Save_FirstWin` | int (0/1) | 是否已有首次胜利 |
 | `Save_GamesPlayed` | int | 总对局数 |
 | `Save_GamesWon` | int | 胜利次数 |
+| `Codex_{id}` | int (0/1) | 图鉴条目解锁状态（按 ID 存储） |
 
 ### 20.2 生命周期
 
@@ -1730,6 +1968,10 @@ SaveSystem.OnGameEnded(playerWon, goldEarned);  // 游戏结束更新
 SaveSystem.Reset();                             // 清除存档（调试用）
 SaveSystem.Data.Gold                            // 读取当前金币
 SaveSystem.Data.HasFirstWin                     // 是否首次胜利
+SaveSystem.UnlockCodexEntry(id);                // 解锁图鉴条目
+SaveSystem.IsCodexEntryUnlocked(id);            // 查询图鉴是否已解锁
+SaveSystem.LoadAllCodexEntries(allIds);         // 批量加载图鉴状态
+SaveSystem.GetUnlockedCodexCount();             // 获取已解锁数量
 ```
 
 ---
@@ -1875,7 +2117,7 @@ NetworkBiddingManager.HandleBidResult()
 ### 23.2 Prefab 结构
 
 ```
-BossKing (CardUnit, BossController, BuildingAI, SpawnPool, RouteGroup, UnitPassives, UnitVFX)
+BossGiantBird / BossSword (CardUnit, BossController, BuildingAI, SpawnPool, RouteGroup, UnitPassives, UnitVFX)
 ├── Visual (SpriteRenderer, SimpleAnimator, Animator, AttackEventRelay)
 ├── HealthBar (UnitHealthBar, SpriteRenderer)
 ├── Audio (UnitAudio)  ← 解耦到子物体
@@ -1891,6 +2133,7 @@ BossKing (CardUnit, BossController, BuildingAI, SpawnPool, RouteGroup, UnitPassi
 | CardUnit | `_isLandlord` | Inspector 值会被 Step 5b 强制纠正 |
 | BossController | `_trigger` | OnStart / OnTimer / OnBuildingDestroyed |
 | BossController | `_bossRoute` | BOSS 行进路线（RoutePath） |
+| BossController | `_playerRouteToBoss` | 玩家主堡到 BOSS 的路线（BOSS 激活后解锁） |
 | BossController | `_enableSummoner` | 启用召唤师能力 |
 | BuildingAI | `decisionInterval` | 出牌判定间隔（秒） |
 | SpawnPool | `_rankPrefabs[13]` | 按点数映射的召唤物预制体 |

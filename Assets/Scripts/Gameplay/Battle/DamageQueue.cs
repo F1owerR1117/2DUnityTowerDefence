@@ -21,6 +21,9 @@ namespace DoudizhuTower.Gameplay.Battle
         /// <summary>当前帧是否有待结算的伤害</summary>
         public static bool HasPending => _queue.Count > 0;
 
+        /// <summary>清空队列（场景切换时调用，防止残留 CardUnit 引用）</summary>
+        public static void Clear() => _queue.Clear();
+
         /// <summary>
         /// 入队一条伤害（由 CardUnit.TakeDamage 在批量模式下调用）。
         /// 调用前必须完成所有减伤计算，finalDamage 为最终扣血值。

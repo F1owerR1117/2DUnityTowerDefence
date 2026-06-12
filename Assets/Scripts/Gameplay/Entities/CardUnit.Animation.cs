@@ -310,9 +310,13 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             // 清除每次 Spawn 周期订阅的事件，防止对象池复用后 lambda 累积
             ClearSpawnEvents();
+            // 注销盾墙静态缓存（OnDestroy 不会触发，需手动清理）
+            var passives = GetComponentInChildren<UnitPassives>();
+            if (passives != null) passives.UnregisterShieldWall();
 
             Target = null;
             _enemyUnits = null;
+            _enemyBuildings = null;
             if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             _isDying = false;
             ClearHeightOverride();

@@ -100,6 +100,15 @@ namespace DoudizhuTower.Gameplay.Entities
         [Tooltip("眩晕持续时间（秒）")]
         public float stunDuration = 1f;
 
+        [Header("快速连击")]
+        [Tooltip("启用后快速攻击 N 次后自我眩晕进入冷却")]
+        public bool enableBurstAttack;
+        [Tooltip("连击次数")]
+        public int burstHitCount = 3;
+        [Tooltip("自我眩晕冷却时间（秒）")]
+        public float burstCooldown = 2f;
+        private int _burstHitCounter;
+
         [Header("撕裂（易伤叠加）")]
         [Tooltip("启用后每次攻击为目标叠加易伤效果，受伤增加")]
         public bool enableTear;
@@ -195,7 +204,8 @@ namespace DoudizhuTower.Gameplay.Entities
                 _owner.OverrideAttackRange = GetSniperAttackRange;
             }
             if (enableCavalryChase) _owner.OverrideFindTarget = FindCavalryChaseTarget;
-            if (enableSwarm || enableCharge || enableStunOnHit || enableSplash) _owner.OnAttackEvent += OnAttack;
+            if (enableSwarm || enableCharge || enableStunOnHit || enableSplash || enableBurstAttack) _owner.OnAttackEvent += OnAttack;
+            if (enableStunOnHit || enableSplash || enableBurstAttack) _owner.OnPerTargetAttackEvent += OnPerTargetAttack;
             if (enableTear) _owner.OnAttackEvent += OnTearAttack;
             if (enableDeathExplosion || enableBurnOnDeath) _owner.OnDeathEvent += OnDeath;
             if (enableSummoner && summonOnKill) _owner.OnKillEvent += OnSummonerKill;
@@ -234,14 +244,20 @@ namespace DoudizhuTower.Gameplay.Entities
         public void ResubscribeEvents()
         {
             if (_owner == null) return;
-            if (enableSwarm || enableCharge || enableStunOnHit || enableSplash)
+            _burstHitCounter = 0;
+            if (enableSwarm || enableCharge || enableStunOnHit || enableSplash || enableBurstAttack)
                 _owner.OnAttackEvent += OnAttack;
+            if (enableStunOnHit || enableSplash || enableBurstAttack)
+                _owner.OnPerTargetAttackEvent += OnPerTargetAttack;
             if (enableTear)
                 _owner.OnAttackEvent += OnTearAttack;
             if (enableDeathExplosion || enableBurnOnDeath)
                 _owner.OnDeathEvent += OnDeath;
             if (enableSummoner && summonOnKill)
                 _owner.OnKillEvent += OnSummonerKill;
+            // 对象池复用时重新注册盾墙（Awake 只执行一次，UnregisterShieldWall 在回池时注销）
+            if (enableShieldWall && !_shieldWallUnits.Contains(this))
+                _shieldWallUnits.Add(this);
             if (enableSniper)
             {
                 _owner.OverrideFindTarget = FindSniperTarget;
@@ -262,6 +278,15 @@ namespace DoudizhuTower.Gameplay.Entities
             _unitVFX?.PlaySpawn();
         }
 
+        /// <summary>
+        /// 对象池回收时注销盾墙缓存。由 CardUnit.OnPoolDespawn 调用。
+        /// </summary>
+        public void UnregisterShieldWall()
+        {
+            if (enableShieldWall)
+                _shieldWallUnits.Remove(this);
+        }
+
         private void OnDestroy()
         {
             // 盾墙单位从缓存注销
@@ -272,6 +297,7 @@ namespace DoudizhuTower.Gameplay.Entities
             {
                 _owner.OnAttackEvent -= OnAttack;
                 _owner.OnAttackEvent -= OnTearAttack;
+                _owner.OnPerTargetAttackEvent -= OnPerTargetAttack;
                 _owner.OnDeathEvent -= OnDeath;
                 _owner.OnKillEvent -= OnSummonerKill;
                 if (enableSniper || enableTaunt)
@@ -307,6 +333,24 @@ namespace DoudizhuTower.Gameplay.Entities
             _lastAttackTime = Time.time;  // 重置脱离战斗计时
             if (enableSwarm) ApplySwarm(target);
             if (enableCharge) ApplyCharge(target);
+            // 单目标模式下 per-target 效果也在此触发
+            if (_owner.MaxTargets <= 1)
+            {
+                if (enableStunOnHit && target != null)
+                {
+                    target.StunTimer = stunDuration;
+                    _owner.TriggerAnim("StunHit");
+                    _unitAudio?.PlayStunHit();
+                    _unitVFX?.PlayStunHit(target.transform);
+                }
+                if (enableSplash) EmitSplash(target);
+                if (enableBurstAttack) ApplyBurstAttack();
+            }
+        }
+
+        /// <summary>多目标模式下每个目标独立触发的效果（溅射/眩晕/连击）</summary>
+        private void OnPerTargetAttack(CardUnit target)
+        {
             if (enableStunOnHit && target != null)
             {
                 target.StunTimer = stunDuration;
@@ -315,6 +359,17 @@ namespace DoudizhuTower.Gameplay.Entities
                 _unitVFX?.PlayStunHit(target.transform);
             }
             if (enableSplash) EmitSplash(target);
+            if (enableBurstAttack) ApplyBurstAttack();
+        }
+
+        private void ApplyBurstAttack()
+        {
+            _burstHitCounter++;
+            if (_burstHitCounter >= burstHitCount)
+            {
+                _burstHitCounter = 0;
+                _owner.StunTimer = burstCooldown;
+            }
         }
 
         private void OnDeath()
@@ -453,9 +508,9 @@ namespace DoudizhuTower.Gameplay.Entities
             if (_kingTimer >= kingInterval)
             {
                 _kingTimer = 0f;
-                _owner.TriggerAnim("KingAura");
+                if (!_owner.IsAttacking) _owner.TriggerAnim("KingAura");
                 _unitAudio?.PlayKingAura();
-                _unitVFX?.PlayKingAura(_owner.VisualCenter, kingRadius);
+                _unitVFX?.PlayKingAura(_owner.transform, kingRadius);
                 int num = Physics2D.OverlapCircle(_owner.VisualCenter, kingRadius, _overlapFilter, _overlapBuffer);
                 for (int i = 0; i < num; i++)
                 {
@@ -672,7 +727,7 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             _owner.TriggerAnim("Burn");
             _unitAudio?.PlayBurn();
-            _unitVFX?.PlayBurn(_owner.VisualCenter, burnDuration);
+            _unitVFX?.PlayBurn(_owner.VisualCenter, burnRadius, burnDuration);
             var go = new GameObject("BurnZone");
             go.transform.position = _owner.VisualCenter;
             var zone = go.AddComponent<BurnZone>();
@@ -692,9 +747,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _unitAudio?.PlaySplash();
 
             // 从攻击者到目标碰撞箱的最近点作为溅射圆心，避免大型建筑溅射不到边缘单位
-            Vector3 center = target.transform.position;
+            Vector3 center = target.VisualCenter;
             if (target.TryGetComponent<Collider2D>(out var col))
-                center = col.ClosestPoint(_owner.transform.position);
+                center = col.ClosestPoint(_owner.VisualCenter);
 
             // 播放溅射爆炸特效
             _unitVFX?.PlaySplash(center, splashRadius);

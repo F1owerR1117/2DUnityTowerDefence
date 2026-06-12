@@ -31,7 +31,7 @@ namespace DoudizhuTower.Gameplay.Entities
             if (_summonTimer >= summonInterval && _summons.Count < maxSummons)
             {
                 _summonTimer = 0f;
-                StartSummon(_owner.transform.position);
+                StartSummon(_owner.VisualCenter);
             }
         }
 
@@ -43,22 +43,26 @@ namespace DoudizhuTower.Gameplay.Entities
             // 击杀召唤物不会触发重复召唤，防止无限循环
             if (victim.Summoner != null) return;
             // 击杀召唤：立刻从尸体位置生成，不播放动画
-            SpawnSummon(victim.transform.position);
+            SpawnSummon(victim.VisualCenter);
         }
 
-        /// <summary>开始召唤：打断当前攻击，播放召唤动画，调整速度对齐间隔</summary>
+        /// <summary>开始召唤：播放召唤动画，调整速度对齐间隔</summary>
         private void StartSummon(Vector3 position)
         {
             if (_isSummoning) return;
+
+            // 攻击中不打断，直接生成召唤物
+            if (_owner.IsAttacking)
+            {
+                SpawnSummon(position);
+                return;
+            }
 
             _isSummoning = true;
             _summonPosition = position;
 
             // 订阅召唤帧事件（Animation Event 触发）
             _owner.OnSummonFrame += OnSummonFrameHandler;
-
-            // 打断当前攻击
-            _owner.InterruptAttack();
 
             // 调整召唤动画速度，使动画长度对齐召唤间隔
             float clipLen = 0f;

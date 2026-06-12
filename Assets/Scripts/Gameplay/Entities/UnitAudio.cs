@@ -81,6 +81,9 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>每种 AudioClip 当前正在播放的数量</summary>
         private static readonly Dictionary<AudioClip, int> _clipCounts = new();
 
+        /// <summary>清除所有 Clip 并发计数（场景切换时调用，防止跨局泄漏）</summary>
+        public static void ClearClipCounts() => _clipCounts.Clear();
+
         #endregion
 
         #region 屏幕可见性

@@ -70,6 +70,7 @@ namespace DoudizhuTower.UI.Battlefield
         private TextMeshProUGUI _counterBtnText;
         private string _currentDomainState;
         private string _currentCounterState;
+        private Action _onCounterCoolDownComplete;
 
         #endregion
 
@@ -114,7 +115,10 @@ namespace DoudizhuTower.UI.Battlefield
 
             // 初始化冷却完成回调
             if (counterCoolDown != null)
-                counterCoolDown.OnCoolDownComplete += () => SetCounterButtonState(true);
+            {
+                _onCounterCoolDownComplete = () => SetCounterButtonState(true);
+                counterCoolDown.OnCoolDownComplete += _onCounterCoolDownComplete;
+            }
 
             // 初始状态
             _currentDomainState = stateDefault;
@@ -130,6 +134,8 @@ namespace DoudizhuTower.UI.Battlefield
 
         private void OnDestroy()
         {
+            if (counterCoolDown != null && _onCounterCoolDownComplete != null)
+                counterCoolDown.OnCoolDownComplete -= _onCounterCoolDownComplete;
             if (_domainSystem != null)
             {
                 _domainSystem.OnDomainActivated -= OnDomainActivated;

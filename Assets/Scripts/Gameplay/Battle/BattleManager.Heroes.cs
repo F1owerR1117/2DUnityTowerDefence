@@ -87,7 +87,7 @@ namespace DoudizhuTower.Gameplay.Battle
                         float minPct = float.MaxValue;
                         CardUnit best = null;
                         var filter = new ContactFilter2D().NoFilter();
-                        int count = Physics2D.OverlapCircle((Vector2)unit.transform.position, 999f, filter, _overlapCache);
+                        int count = Physics2D.OverlapCircle(unit.VisualCenter, 999f, filter, _overlapCache);
                         for (int i = 0; i < count; i++)
                         {
                             var enemy = _overlapCache[i].GetComponentInParent<CardUnit>();
@@ -103,7 +103,7 @@ namespace DoudizhuTower.Gameplay.Battle
                     unit.OnAttackEvent += (target) =>
                     {
                         var filter = new ContactFilter2D().NoFilter();
-                        int count = Physics2D.OverlapCircle((Vector2)unit.transform.position, warlockSplashRadius, filter, _overlapCache);
+                        int count = Physics2D.OverlapCircle(unit.VisualCenter, warlockSplashRadius, filter, _overlapCache);
                         for (int i = 0; i < count; i++)
                         {
                             var splash = _overlapCache[i].GetComponentInParent<CardUnit>();
@@ -131,7 +131,7 @@ namespace DoudizhuTower.Gameplay.Battle
 
             while (owner != null && owner.IsAlive)
             {
-                int count = Physics2D.OverlapCircle((Vector2)owner.transform.position, auraRadius, filter, overlapCache);
+                int count = Physics2D.OverlapCircle(owner.VisualCenter, auraRadius, filter, overlapCache);
                 var inRange = new HashSet<CardUnit>();
 
                 for (int i = 0; i < count; i++)

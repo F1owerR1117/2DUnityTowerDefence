@@ -77,6 +77,13 @@ namespace DoudizhuTower.Gameplay.Entities
         [SerializeField] private float _range = 1.8f;
         [Tooltip("单次攻击动画的打击帧数（双刀填 2）")]
         [SerializeField] private int _hitCount = 1;
+        [Tooltip("同时攻击的最大目标数（1=单目标，>1=多目标）")]
+        [SerializeField] private int _maxTargets = 1;
+        [Tooltip("多目标搜索半径（0=使用攻击范围）")]
+        [SerializeField] private float _multiTargetRadius = 0f;
+
+        /// <summary>最大同时攻击目标数</summary>
+        public int MaxTargets => _maxTargets;
 
         /// <summary>所属预制体（对象池回收用，由 UnitFactory 设置）</summary>
         [System.NonSerialized] public CardUnit SourcePrefab;
@@ -246,6 +253,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         /// <summary>分担伤害已重定向标记（防止原伤害重复扣除）</summary>
         public bool ShareRedirected { get; set; }
+        /// <summary>分担后的伤害值（>0 时替代原始伤害）</summary>
+        public float SharedDamageOverride { get; set; }
 
         /// <summary>是否为远程单位（弓骑兵需要动态设置）</summary>
         public bool IsRanged { get => _isRanged; set => _isRanged = value; }
@@ -360,6 +369,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         // 本路线上的所有敌方单位（由 BattleManager 注入）
         protected List<CardUnit> _enemyUnits;
+        // 所有敌方建筑（由 BattleManager 注入，替代 FindObjectsByType）
+        protected IBuildingTarget[] _enemyBuildings;
 
         // 事件
         public event Action<int, float> OnHPChanged;    // unitId, newHP
@@ -484,6 +495,7 @@ namespace DoudizhuTower.Gameplay.Entities
             _pathDistance = 0f;
             Target = null;
             _enemyUnits = null;
+            _enemyBuildings = null;
 
             _baseScale = transform.localScale;
             _needsFirstFrameSearch = true;
@@ -542,6 +554,14 @@ namespace DoudizhuTower.Gameplay.Entities
                 if (containsSelf)
                     Debug.LogError($"[严重] {name}(ID={_unitId}) SetEnemyUnits 列表包含自身！count={enemies.Count}");
             }
+        }
+
+        /// <summary>
+        /// 注入敌方建筑列表（由 BattleManager 每帧更新，替代 FindObjectsByType）
+        /// </summary>
+        public void SetEnemyBuildings(IBuildingTarget[] buildings)
+        {
+            _enemyBuildings = buildings;
         }
 
         // ─── 生命周期 ─────────────────────────────────

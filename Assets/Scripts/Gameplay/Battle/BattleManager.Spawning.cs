@@ -79,23 +79,28 @@ namespace DoudizhuTower.Gameplay.Battle
             if (_isRedistributingDamage) return;
 
             var allies = new List<CardUnit>();
-            Vector3 pos = damaged.transform.position;
+            Vector3 pos = damaged.VisualCenter;
             foreach (var unit in _allUnits)
             {
                 if (unit == null || !unit.IsAlive || unit == damaged) continue;
                 if (unit.IsLandlord != damaged.IsLandlord) continue;
                 if (unit.SourceCardType != CardType.Triple) continue;
-                if (Vector2.Distance(pos, unit.transform.position) <= _shareRange) allies.Add(unit);
+                if (Vector2.Distance(pos, unit.VisualCenter) <= _shareRange) allies.Add(unit);
             }
             if (allies.Count < 2) return;
 
             _isRedistributingDamage = true;
-            damaged.ShareRedirected = true;
             allies.Add(damaged);
             var sorted = allies.OrderByDescending(a => a.CurrentHP).ToList();
+
+            // 主目标（最高血量）：设置分担伤害替代原始伤害
+            sorted[0].ShareRedirected = true;
+            sorted[0].SharedDamageOverride = damage * _shareMainPct;
+
+            // 其他目标：直接施加分担伤害
             for (int i = 1; i < sorted.Count; i++)
                 sorted[i].TakeDamage(damage * _shareOtherPct, type);
-            sorted[0].TakeDamage(damage * _shareMainPct, type);
+
             _isRedistributingDamage = false;
         }
 
@@ -218,7 +223,7 @@ namespace DoudizhuTower.Gameplay.Battle
             while (elapsed < _bombingDuration)
             {
                 var filter = new ContactFilter2D().NoFilter();
-                int count = Physics2D.OverlapCircle((Vector2)bomber.transform.position, bomber.Stats.Range, filter, _overlapCache);
+                int count = Physics2D.OverlapCircle(bomber.VisualCenter, bomber.Stats.Range, filter, _overlapCache);
                 for (int i = 0; i < count; i++)
                 {
                     var enemy = _overlapCache[i].GetComponentInParent<CardUnit>();

@@ -83,6 +83,10 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void Awake()
         {
+            Debug.Log($"[Bootstrapper] Awake: HasResult={GameSession.HasResult}, IsNetworkMode={GameSession.IsNetworkMode}, " +
+                      $"NetworkSeed={GameSession.NetworkSeed}, LocalPlayerId={GameSession.LocalPlayerId}, " +
+                      $"PlayerBaseMapping={GameSession.PlayerBaseMapping != null}");
+
             // 读取叫分结果（如果有），否则使用 Inspector 默认值
             if (GameSession.HasResult)
             {
@@ -115,8 +119,14 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private IEnumerator Start()
         {
+            Debug.Log("[Bootstrapper] Start() 协程已进入");
             // ── Step 0: 确保 UI_Scene 已加载 ────────
             yield return UIManager.WaitForReady();
+            Debug.Log("[Bootstrapper] Step 0 完成: UI_Scene 已就绪");
+
+            // ── 新局开始：清除上一局静态状态，防止跨局泄漏 ──
+            UnitAudio.ClearClipCounts();
+            DamageQueue.Clear();
 
             // ── Step 0b: 加载存档 ─────────────────
             SaveSystem.Load();
@@ -167,7 +177,7 @@ namespace DoudizhuTower.Gameplay.Systems
             }
             else
             {
-                // 联机模式：为 AI 槽位的基地创建 AI 手牌
+                // 联机模式：为 AI 槽位的基地创建 AI 手牌（用独立牌堆，每个槽位跳过前面玩家的牌）
                 foreach (var aiSlot in GameSession.AISlots)
                 {
                     if (aiSlot < 0 || aiSlot >= GameSession.PlayerBaseMapping.Length) continue;
@@ -175,8 +185,10 @@ namespace DoudizhuTower.Gameplay.Systems
                     if (baseIdx < 0 || baseIdx >= baseBuildings.Length) continue;
                     var baseBldg = baseBuildings[baseIdx];
                     if (baseBldg == null) continue;
+                    var aiDeck = new CardDeck(seed);
+                    aiDeck.Deal(aiSlot * 7, new CardHand(17)); // 跳过前面玩家的牌
                     var aiHand = new CardHand(17);
-                    _mainDeck.Deal(7, aiHand);
+                    aiDeck.Deal(7, aiHand);
                     aiHands[baseBldg] = aiHand;
                 }
             }
@@ -326,10 +338,30 @@ namespace DoudizhuTower.Gameplay.Systems
                 // ── Step 6b: 焊接传送飞筒 + 暂存槽 ────────
                 if (_isNetworkMode)
                 {
-                    // 联机模式：暂不支持飞筒同步，隐藏相关 UI
-                    launchTubeUI?.gameObject.SetActive(false);
-                    tempSlotUI?.gameObject.SetActive(false);
-                    teammateTempSlotUI?.gameObject.SetActive(false);
+                    // 联机模式：地主隐藏飞筒，农民启用飞筒
+                    if (playerIsLandlord)
+                    {
+                        launchTubeUI?.gameObject.SetActive(false);
+                        tempSlotUI?.gameObject.SetActive(false);
+                        teammateTempSlotUI?.gameObject.SetActive(false);
+                    }
+                    else
+                    {
+                        // 农民：初始化飞筒（网络事件订阅延迟到 Step 11 之后）
+                        if (launchTubeUI != null)
+                        {
+                            launchTubeUI.Initialize(handArea);
+                            launchTubeUI.SetTempSlot(teammateTempSlotUI);
+                        }
+
+                        // 暂存槽：初始化（接收队友的牌）
+                        if (tempSlotUI != null)
+                            tempSlotUI.Initialize(_mainDeck, handArea, playerHand);
+
+                        // 队友暂存槽：联机模式下初始化为可交互（玩家需要从这里取牌）
+                        if (teammateTempSlotUI != null)
+                            teammateTempSlotUI.Initialize(_mainDeck, handArea, playerHand);
+                    }
                 }
                 else
                 {
@@ -453,12 +485,11 @@ namespace DoudizhuTower.Gameplay.Systems
                         _networkGameManager?.RequestDrawCard();
                     });
 
-                    // 手动摸牌按钮
+                    // 手动摸牌按钮（联机模式下不本地扣费，由 Master 验证后扣除）
                     drawButton.onClick.AddListener(() =>
                     {
                         if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
-                        if (economyManager == null || !economyManager.TrySpendGold(drawCost)) return;
-                        _networkGameManager?.RequestDrawCard();
+                        _networkGameManager?.RequestDrawCard(drawCost);
                     });
                 }
                 else
@@ -533,10 +564,9 @@ namespace DoudizhuTower.Gameplay.Systems
                     };
                     battleManager.OnGameEnded += onNetworkBroadcast;
                     _wiredNetworkBroadcastHandler = onNetworkBroadcast;
-                    // 注册 NetworkGameManager 的游戏结束回调（客户端收到广播时触发）
-                    _networkGameManager.OnNetworkGameEnd += onGameEnded;
-                    victoryPanel.OnReturnToRoomRequested += OnQuitToLobby;
+                    // 联机模式下也允许返回主菜单
                     victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
+                    // _networkGameManager 的 OnNetworkGameEnd 注册延迟到 Step 11 之后
                 }
                 else
                 {
@@ -656,9 +686,11 @@ namespace DoudizhuTower.Gameplay.Systems
             }
 
             // ── Step 11: 联机模式初始化 NetworkGameManager ──
+            Debug.Log($"[Bootstrapper] Step 11: _isNetworkMode={_isNetworkMode}, NetworkManager.Instance={NetworkManager.Instance != null}");
             if (_isNetworkMode)
             {
                 var net = NetworkManager.Instance?.Service;
+                Debug.Log($"[Bootstrapper] Step 11: net={net != null}, IsInRoom={NetworkManager.Instance?.IsInRoom}");
                 if (net != null)
                 {
                     var ngo = new GameObject("NetworkGameManager");
@@ -712,6 +744,51 @@ namespace DoudizhuTower.Gameplay.Systems
                 else
                 {
                     Debug.LogError("[Bootstrapper] 联机模式但 NetworkManager.Service 为空！");
+                }
+
+                // ── Step 11b: 焊接飞筒网络事件（依赖 NetworkGameManager）──
+                if (_networkGameManager != null && !playerIsLandlord)
+                {
+                    // 农民：飞筒传牌/取牌事件
+                    if (launchTubeUI != null)
+                    {
+                        launchTubeUI.OnCardTransmitted += (card) =>
+                        {
+                            _networkGameManager.RequestCardTransfer(card);
+                        };
+                    }
+                    if (teammateTempSlotUI != null)
+                    {
+                        teammateTempSlotUI.OnCardMovedToHand += (card) =>
+                        {
+                            _networkGameManager.RequestCardTake();
+                        };
+                    }
+
+                    // 监听网络传牌到达 → 放入队友暂存槽
+                    _networkGameManager.OnCardArrived += (senderSlot, card) =>
+                    {
+                        if (teammateTempSlotUI != null)
+                        {
+                            teammateTempSlotUI.ReceiveCard(card);
+                            Debug.Log($"[飞筒联机] 收到队友 {senderSlot} 传来的 {card}");
+                        }
+                    };
+
+                    // 监听网络取牌 → 清空暂存槽
+                    _networkGameManager.OnCardTaken += (takerSlot) =>
+                    {
+                        teammateTempSlotUI?.Clear();
+                        Debug.Log($"[飞筒联机] 暂存槽已清空");
+                    };
+                }
+
+                // 注册胜利面板的网络结束回调（Step 9b 时 _networkGameManager 还未创建）
+                if (_networkGameManager != null && _wiredGameEndedHandler != null)
+                {
+                    _networkGameManager.OnNetworkGameEnd += _wiredGameEndedHandler;
+                    if (victoryPanel != null)
+                        victoryPanel.OnReturnToRoomRequested += OnQuitToLobby;
                 }
             }
 
