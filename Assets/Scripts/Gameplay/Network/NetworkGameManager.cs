@@ -214,6 +214,11 @@ namespace DoudizhuTower.Gameplay.Network
                 return;
             }
 
+            // Master：自动累加远程玩家的收入（替代客户端报告金币，防止伪造）
+            float dt = Time.deltaTime;
+            foreach (var kvp in _slotEconomies)
+                kvp.Value.UpdateEconomy(dt);
+
             _stateSyncTimer += Time.deltaTime;
             if (_stateSyncTimer >= STATE_SYNC_INTERVAL)
             {
@@ -575,7 +580,7 @@ namespace DoudizhuTower.Gameplay.Network
                         int drawSlot = SafeInt(requestData[0]);
                         float drawClientGold = requestData.Length > 1 ? SafeFloat(requestData[1]) : -1f;
                         float drawCost = requestData.Length > 2 ? SafeFloat(requestData[2]) : 0f;
-                        // Master 使用自己追踪的金币，不信任客户端报告
+                        // Master 使用自己追踪的金币（已在 Update 中自动累加收入），不信任客户端报告
                         MasterDrawCard(drawSlot, drawCost);
                     }
                     else
@@ -675,7 +680,7 @@ namespace DoudizhuTower.Gameplay.Network
             int senderSlot = NetworkProtocol.GetPlayerSlot(senderActor, _actorNumbers);
             if (senderSlot < 0) return;
 
-            // Master 使用自己追踪的金币，不信任客户端报告（防止金币伪造）
+            // Master 使用自己追踪的金币（已在 Update 中自动累加收入），不信任客户端报告
             float clientGold = (data.Length > 4) ? SafeFloat(data[4]) : -1f;
             Trace("PLAY_CARDS_RECV", senderSlot);
             MasterValidateAndPlay(senderSlot, cardIndices, typeData, routeIndex, baseIndex, clientGold);
@@ -756,7 +761,7 @@ namespace DoudizhuTower.Gameplay.Network
                 Debug.Log($"[NetworkGame] 自动创建槽位 {playerSlot} 经济: 金币={initGold}");
             }
 
-            // Master 使用自己追踪的金币，不信任客户端报告（防止金币伪造）
+            // Master 使用自己追踪的金币（已在 Update 中自动累加收入），不信任客户端报告
             if (targetEconomy == null || !targetEconomy.TrySpend(cost))
             {
                 float gold = targetEconomy?.CurrentGold ?? 0f;
