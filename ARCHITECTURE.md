@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v6.1
+# DoudizhuTower — 架构落地规范 v6.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -29,6 +29,7 @@
 17. [伤害批量结算系统](#17-伤害批量结算系统damagequeue)
 18. [传送飞筒系统](#18-传送飞筒系统)
 19. [要不起领域系统](#19-要不起领域系统domainsystem)
+24. [架构债务登记](#24-架构债务登记)
 
 ---
 
@@ -266,6 +267,11 @@
 | transform.position 违规修复 | 10 处距离/范围计算改为 `VisualCenter`（英雄被动/三人组/轰炸/溅射/召唤） | BattleManager.Heroes.cs + Spawning.cs + UnitPassives.cs + UnitPassives.Summon.cs |
 | 静态状态跨局清理 | `UnitAudio.ClearClipCounts()` + `DamageQueue.Clear()` 在新局开始时调用，`_shieldWallUnits` 对象池回收注销 | UnitAudio.cs + DamageQueue.cs + UnitPassives.cs + GameBootstrapper.cs |
 | DomainUIController lambda 退订 | `counterCoolDown.OnCoolDownComplete` 匿名 lambda → 存储字段 `_onCounterCoolDownComplete`，OnDestroy 退订 | DomainUIController.cs |
+| PLAYER_READY 竞态防护 | `_playerReadyReceived` 集合，MasterDrawCard 拒绝未就绪槽位摸牌，Master 自身槽位初始化时注册 | NetworkGameManager.cs |
+| clientGold 金币权威 | 删除 3 处客户端金币覆盖（出牌/摸牌/HandlePlayCards），Master 只信自己追踪的金币 | NetworkGameManager.cs |
+| Master 领域封印校验 | `MasterValidateAndPlay` 新增领域封印检查（炸弹破封 + 能管上放行），`HandlePlayRejected` 补充反馈 | NetworkGameManager.cs |
+| StateVersion 状态版本号 | `MASTER_STATE_SYNC` 携带 `_stateVersion`，客户端丢弃旧版本广播，防止乱序覆盖 | NetworkGameManager.cs |
+| Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式，支持同步问题快速定位 | NetworkGameManager.cs |
 
 ### P1（仍需实现）
 
@@ -1491,9 +1497,9 @@ public static class NetworkProtocol
 Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
 
 **核心职责：**
-- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币（信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
-- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 + 扣费 → `SendToAll(DRAW_CARD, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
-- **经济同步**：客户端每 3 秒向 Master 报告金币；Master 的 `GOLD_UPDATE` 不覆盖客户端自身金币（客户端是自身金币的权威来源）
+- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币 + 领域封印（不信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
+- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 PLAYER_READY 已到达 + 扣费 → `SendToAll(DRAW_CARD, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
+- **经济同步**：Master 使用自己追踪的金币，不接受客户端报告的金币覆盖（防止金币伪造）；`GOLD_UPDATE` 不覆盖客户端自身金币
 - **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
 - **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
 - **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
@@ -1508,7 +1514,7 @@ Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 
 **数据流：**
 ```
 玩家出牌 → HandArea → NetworkGameManager.RequestPlayCards()
-  ├─ Master: MasterValidateAndPlay() → 验证金币 → SendToAll(PLAY_APPROVED)
+  ├─ Master: MasterValidateAndPlay() → 验证手牌 + 金币 + 领域封印 → SendToAll(PLAY_APPROVED)
   └─ Client: SendToMaster(PLAY_CARDS) → 等待 PLAY_APPROVED
 
 所有客户端: ExecutePlayApproved()
@@ -1541,10 +1547,26 @@ OnPlayerLeft(playerName)
 
 **关键设计**：
 - Master 维护所有槽位的 `_slotHands`、`_slotDecks`、`_slotEconomies`，Client 只维护自己的
-- 出牌验证在 Master 端完成（金币充足），手牌验证仅限 Master 自己的槽位
+- 出牌验证在 Master 端完成（手牌 + 金币 + 领域封印），不信任客户端报告的金币
 - AI 出牌通过 `BroadcastAIPlay()` 由 Master 执行并扣除 AI 金币后广播
 - 所有网络事件使用 `SafeInt`/`SafeFloat`/`SafeArray` 安全拆箱，防止 `InvalidCastException`
 - `OnDestroy` 设置 `_initialized = false` 并清除所有引用，防止 `GameSession.Reset()` 时序问题
+
+**同步防护机制（5 项）：**
+
+| 防护 | 机制 | 解决的问题 |
+|:---|:---|:---|
+| PLAYER_READY 竞态 | `_playerReadyReceived` 集合，MasterDrawCard 拒绝未就绪槽位的摸牌请求 | 自动摸牌先于 PLAYER_READY 到达导致手牌永久不同步 |
+| 金币权威 | 删除 3 处 `SetGold(clientGold)` 覆盖，Master 只用自己追踪的金币 | 客户端伪造金币导致超花或金币不同步 |
+| 领域封印校验 | `MasterValidateAndPlay` 中检查领域封印（炸弹/王炸破封，能管上的牌放行） | 客户端领域状态不同步时出牌被误拦或绕过封印 |
+| StateVersion | `MASTER_STATE_SYNC` 携带版本号，客户端丢弃 `ver <= lastVer` 的旧广播 | 状态广播乱序导致旧状态覆盖新状态 |
+| Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式 | 同步问题排查无日志，靠猜定位 |
+
+**Trace 日志关键搜索词：**
+- `PLAYER_READY_SEND` / `PLAYER_READY_RECV` — 玩家就绪
+- `PLAY_CARDS_RECV` / `PLAY_APPROVED` / `PLAY_REJECTED` — 出牌流程
+- `DRAW_REJECTED_NOT_READY` — PLAYER_READY 竞态触发
+- `STATE_SYNC` / `STATE_SYNC_STALE` — 状态同步及旧版本丢弃
 
 ---
 
@@ -2206,5 +2228,18 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 `CoolDownEffect` 使用 `Image.fillAmount` 实现圆形冷却进度。冷却遮罩 Image 必须配置为：
 - **Image Type = Filled**
 - **Fill Method = Radial 360**
+
+---
+
+## 24. 架构债务登记
+
+以下为已识别但暂不偿还的架构债务，待功能扩展时根据实际痛点决定是否升级。
+
+| 债务 | 现状 | 触发偿还条件 |
+|:---|:---|:---|
+| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager(44) + GameBootstrapper(18) 等处，无统一 `IGameAuthority` 接口 | 新增观战/AI/回放/专用服务器中任意 2 项 |
+| 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
+| 状态同步体系较简单 | StateVersion 为全局版本号（非分字段），无增量同步、无 StateHash | 需要断线重连状态恢复或观战模式 |
+| 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
