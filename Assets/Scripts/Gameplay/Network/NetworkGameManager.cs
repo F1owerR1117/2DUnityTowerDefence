@@ -55,6 +55,7 @@ namespace DoudizhuTower.Gameplay.Network
         // 状态版本号（Master 递增，客户端丢弃旧版本广播）
         private int _stateVersion;
         private int _lastReceivedStateVersion;
+        private bool _simulatesCombat;
 
         // 游戏状态机（用于时间同步）
         private GameStateMachine _gameStateMachine;
@@ -112,10 +113,14 @@ namespace DoudizhuTower.Gameplay.Network
             // 联机模式必须后台运行，否则窗口失焦时 Update 暂停导致模拟分叉
             Application.runInBackground = true;
             // Master Authority Combat：Client 不参与战斗模拟
+            _simulatesCombat = _net.IsMasterClient;
             CardUnit.SimulatesCombatDefault = _net.IsMasterClient;
             // Master 广播单位死亡事件
             if (_net.IsMasterClient && _battleManager != null)
                 _battleManager.OnUnitDiedEvent += BroadcastUnitDied;
+            // 每次生成单位时设置 SimulatesCombat（解决本地多玩家 static 冲突）
+            if (_battleManager != null)
+                _battleManager.OnUnitSpawned += OnUnitSpawned_SetCombatMode;
             _handArea = handArea;
             _cardCounter = cardCounter;
             _playerBase = playerBase;
@@ -177,7 +182,10 @@ namespace DoudizhuTower.Gameplay.Network
                 _net.OnMasterSwitched -= OnMasterSwitched;
             }
             if (_battleManager != null)
+            {
                 _battleManager.OnUnitDiedEvent -= BroadcastUnitDied;
+                _battleManager.OnUnitSpawned -= OnUnitSpawned_SetCombatMode;
+            }
             CardUnit.SimulatesCombatDefault = true; // 离开联机时恢复默认
             OnNetworkGameEnd = null;
             OnCardArrived = null;
@@ -296,6 +304,13 @@ namespace DoudizhuTower.Gameplay.Network
             // 只在有单位时广播
             if (aliveCount > 0)
                 _net.SendToAll(NetworkProtocol.HP_CORRECTION, hpData.ToArray());
+        }
+
+        /// <summary>每次单位生成时设置 SimulatesCombat（解决本地多玩家 static 冲突）</summary>
+        private void OnUnitSpawned_SetCombatMode(CardUnit unit)
+        {
+            if (unit != null)
+                unit.SimulatesCombat = _simulatesCombat;
         }
 
         /// <summary>Master 广播单位死亡（Client 播放视觉死亡）</summary>
