@@ -89,6 +89,8 @@ namespace DoudizhuTower.Gameplay.Battle
 
         /// <summary>单位生成事件（用于 UI 层挂钩飘字/信息面板等）</summary>
         public event System.Action<CardUnit> OnUnitSpawned;
+        /// <summary>单位死亡事件（用于网络广播 UNIT_DIED）</summary>
+        public event System.Action<int> OnUnitDiedEvent;
 
         /// <summary>游戏结束事件（bool = 玩家是否胜利）</summary>
         public event System.Action<bool> OnGameEnded;
@@ -341,6 +343,7 @@ namespace DoudizhuTower.Gameplay.Battle
                 _economyManager.AddGold(unit.Stats.ATK * _killGoldBonusPct);
             }
             _pendingDeaths.Add(unit);
+            OnUnitDiedEvent?.Invoke(unitId);
         }
 
         private void CleanupDeadUnits()

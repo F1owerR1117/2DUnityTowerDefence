@@ -282,6 +282,7 @@ namespace DoudizhuTower.Gameplay.Entities
             TearTimer = 0f;
             SlowRestoreTimer = 0f;
             _needsFirstFrameSearch = true;
+            SimulatesCombat = SimulatesCombatDefault;
             _currentAnimState = -1;
             OverrideFindTarget = null;
             OverrideAttackRange = null;

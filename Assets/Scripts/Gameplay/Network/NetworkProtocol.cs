@@ -47,6 +47,19 @@ namespace DoudizhuTower.Gameplay.Network
         public const string DOMAIN_PENDING = "DOMAIN_PENDING";
         public const string COUNTER_PENDING = "COUNTER_PENDING";
 
+        // 飞筒传牌
+        public const string CARD_TRANSFER = "CARD_TRANSFER";   // 发送方 → Master
+        public const string CARD_ARRIVE = "CARD_ARRIVE";       // Master → 接收方
+        public const string CARD_TAKE = "CARD_TAKE";           // 接收方 → Master（取走暂存槽牌）
+
+        // Master 迁移
+        public const string MASTER_STATE_SYNC = "MASTER_STATE_SYNC"; // Master 定期广播 / 迁移时广播
+
+        // 战斗 HP 校验
+        public const string HP_CHECKSUM = "HP_CHECKSUM";             // Master 定期广播 HP 校验和
+        public const string HP_CORRECTION = "HP_CORRECTION";         // Master 广播完整 HP 修正数据
+        public const string UNIT_DIED = "UNIT_DIED";                 // Master 广播单位死亡（Client 播放死亡动画+回收）
+
         // 房间管理
         public const string ADD_AI = "ADD_AI";
         public const string REMOVE_AI = "REMOVE_AI";

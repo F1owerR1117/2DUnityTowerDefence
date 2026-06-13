@@ -111,6 +111,12 @@ namespace DoudizhuTower.Gameplay.Network
             _playerHand = playerHand;
             // 联机模式必须后台运行，否则窗口失焦时 Update 暂停导致模拟分叉
             Application.runInBackground = true;
+            // Master Authority Combat：Client 不参与战斗模拟
+            CardUnit.SimulatesCombatDefault = _net.IsMasterClient;
+            // Master 广播单位死亡事件
+            if (_net.IsMasterClient && _battleManager != null)
+                _battleManager.OnUnitDiedEvent += BroadcastUnitDied;
+            _isNetworkMode = true;
             _handArea = handArea;
             _cardCounter = cardCounter;
             _playerBase = playerBase;
@@ -171,6 +177,9 @@ namespace DoudizhuTower.Gameplay.Network
                 _net.OnPlayerLeft -= OnPlayerLeft;
                 _net.OnMasterSwitched -= OnMasterSwitched;
             }
+            if (_battleManager != null)
+                _battleManager.OnUnitDiedEvent -= BroadcastUnitDied;
+            CardUnit.SimulatesCombatDefault = true; // 离开联机时恢复默认
             OnNetworkGameEnd = null;
             OnCardArrived = null;
             OnCardTaken = null;
@@ -185,7 +194,7 @@ namespace DoudizhuTower.Gameplay.Network
         private float _hpSyncTimer;
         private float _goldSyncTimer;
         private const float STATE_SYNC_INTERVAL = 5f;
-        private const float HP_SYNC_INTERVAL = 5f;
+        private const float HP_SYNC_INTERVAL = 2f;
         private const float GOLD_SYNC_INTERVAL = 3f;
 
 
@@ -290,6 +299,14 @@ namespace DoudizhuTower.Gameplay.Network
                 _net.SendToAll(NetworkProtocol.HP_CORRECTION, hpData.ToArray());
         }
 
+        /// <summary>Master 广播单位死亡（Client 播放视觉死亡）</summary>
+        private void BroadcastUnitDied(int unitId)
+        {
+            if (!_net.IsMasterClient) return;
+            Trace("UNIT_DIED", unitId);
+            _net.SendToAll(NetworkProtocol.UNIT_DIED, new object[] { unitId });
+        }
+
         private void HandleHPCorrection(object[] data)
         {
             if (_net.IsMasterClient) return;
@@ -319,6 +336,25 @@ namespace DoudizhuTower.Gameplay.Network
 
             if (corrected > 0)
                 Debug.Log($"[NetworkGame] HP 修正: {corrected} 个单位");
+        }
+
+        /// <summary>Client 处理 Master 广播的单位死亡（仅播视觉死亡动画，不走战斗管线）</summary>
+        private void HandleUnitDied(object[] data)
+        {
+            if (_net.IsMasterClient) return;
+            if (data.Length < 1) return;
+            int unitId = SafeInt(data[0]);
+
+            var units = FindObjectsByType<CardUnit>(FindObjectsSortMode.None);
+            foreach (var u in units)
+            {
+                if (u != null && u.UnitId == unitId && u.IsAlive)
+                {
+                    Trace("UNIT_DIED_RECV", unitId);
+                    u.VisualDeath();
+                    return;
+                }
+            }
         }
         private void OnMasterSwitched()
         {
@@ -665,6 +701,10 @@ namespace DoudizhuTower.Gameplay.Network
 
                 case NetworkProtocol.HP_CORRECTION:
                     HandleHPCorrection(SafeArray(value));
+                    break;
+
+                case NetworkProtocol.UNIT_DIED:
+                    HandleUnitDied(SafeArray(value));
                     break;
             }
         }

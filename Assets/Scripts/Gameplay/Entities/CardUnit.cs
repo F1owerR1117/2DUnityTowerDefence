@@ -181,6 +181,11 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>伤害减免乘数（0=无减免，0.5=减半），由重骑兵/铁骑兵设置</summary>
         public float DamageReduction { get; set; }
 
+        /// <summary>是否参与战斗模拟（Master=true, Client 联机=false）。Client 仅做视觉表现。</summary>
+        public bool SimulatesCombat { get; set; } = true;
+        /// <summary>新生成单位的默认 SimulatesCombat 值（由 NetworkGameManager 设置）</summary>
+        public static bool SimulatesCombatDefault { get; set; } = true;
+
         /// <summary>撕裂层数（由 UnitPassives 管理）</summary>
         public int TearStacks { get; set; }
         /// <summary>撕裂计时器</summary>
@@ -496,6 +501,7 @@ namespace DoudizhuTower.Gameplay.Entities
             Target = null;
             _enemyUnits = null;
             _enemyBuildings = null;
+            SimulatesCombat = SimulatesCombatDefault;
 
             _baseScale = transform.localScale;
             _needsFirstFrameSearch = true;
@@ -643,6 +649,8 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         protected virtual void OnUpdate()
         {
+            // Client 不参与战斗决策（Master Authority 模式）
+            if (!SimulatesCombat) return;
             // 建筑静止：不移动、不攻击、不索敌
             if (_isBuilding) return;
 
