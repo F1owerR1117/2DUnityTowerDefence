@@ -33,8 +33,10 @@ namespace DoudizhuTower.Gameplay.Network
 
         public static void SendToAll(string key, object value, int senderActor)
         {
+            // 不把消息发回给发送者（防止 Master 收到自己广播的消息后再次广播导致无限递归）
             for (int i = 0; i < _players.Count; i++)
-                _players[i]?.ReceiveEvent(key, value, senderActor);
+                if (_players[i] != null && _players[i].LocalActorNumber != senderActor)
+                    _players[i].ReceiveEvent(key, value, senderActor);
         }
 
         public static void SendToMaster(string key, object value, int senderActor)
