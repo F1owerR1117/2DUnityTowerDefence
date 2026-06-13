@@ -750,6 +750,10 @@ namespace DoudizhuTower.Gameplay.Network
                 ? _economyManager?.CoreEconomy
                 : (_slotEconomies.ContainsKey(playerSlot) ? _slotEconomies[playerSlot] : null);
 
+            // 经济同步验证日志（观察 Master 与 Client 金币是否长期一致）
+            if (playerSlot != _mySlot && targetEconomy != null)
+                Debug.Log($"[ECON SYNC] slot={playerSlot} client={clientGold:F0} master={targetEconomy.CurrentGold:F0} cost={cost:F0}");
+
             // 远程玩家：自动创建经济追踪（PLAYER_READY 可能延迟到达）
             if (playerSlot != _mySlot && !_slotEconomies.ContainsKey(playerSlot))
             {
