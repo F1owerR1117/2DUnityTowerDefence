@@ -87,7 +87,15 @@ namespace DoudizhuTower.Editor
 
         private void Start()
         {
-            if (AutoStart) StartTest();
+            if (AutoStart) StartCoroutine(DelayedStart());
+        }
+
+        private System.Collections.IEnumerator DelayedStart()
+        {
+            // 等一帧，确保 GameBootstrapper.Start() 已完成（BattleManager 已初始化）
+            yield return null;
+            yield return null;
+            StartTest();
         }
 
         public void StartTest()
