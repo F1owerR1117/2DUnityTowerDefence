@@ -2245,6 +2245,7 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 | 状态同步体系较简单 | StateVersion 为全局版本号（非分字段），无增量同步、无 StateHash | 需要断线重连状态恢复或观战模式 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
 | 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2246 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+| Client 战斗表现层缺失 | Client 兵种只做路径行军，无攻击动画/受击反馈/死亡预警/战斗特效。玩家看到"走→突然死"，缺乏战斗过程感 | Master Authority 稳定后，加视觉攻击节奏系统（Client 每 X 秒播攻击动画）+ HP 下降受击反馈 + 死亡预警变暗 + 战斗特效代理 |
 | 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2246 行），查找成本随章节增长上升 | 联机稳定化完成后拆分为 `Architecture.md`（架构+规范）+ `Debt.md`（债务清单）+ `ADR/`（决策记录） |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
