@@ -126,8 +126,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         protected void MoveTowardEnemyBase()
         {
-            // 射程内有可攻击的敌方 → 禁止行军，切换目标进入战斗
-            if (_enemyUnits != null)
+            // 射程内有可攻击的敌方 → 禁止行军，切换目标进入战斗（仅 Master）
+            if (SimulatesCombat && _enemyUnits != null)
             {
                 CardUnit closest = null;
                 float closestDist = float.MaxValue;

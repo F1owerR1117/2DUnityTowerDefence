@@ -649,10 +649,16 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         protected virtual void OnUpdate()
         {
-            // Client 不参与战斗决策（Master Authority 模式）
-            if (!SimulatesCombat) return;
             // 建筑静止：不移动、不攻击、不索敌
             if (_isBuilding) return;
+
+            // ── Client 视觉模式：只做路径行军，不做战斗决策 ──
+            if (!SimulatesCombat)
+            {
+                UpdateAnimatorState(1);
+                MoveTowardEnemyBase();
+                return;
+            }
 
             // ── 攻击中 → 等待动画和伤害都完成 ──
             if (_isAttacking)
