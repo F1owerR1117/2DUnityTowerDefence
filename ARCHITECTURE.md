@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v6.2
+# DoudizhuTower — 架构落地规范 v6.3
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -45,7 +45,7 @@
 | `CardTypeDetector` | 牌型检测器 | Core/Card | 核心算法，零 Unity 依赖 |
 | `EconomySystem` | 经济系统(逻辑) | Core/Economy | 纯 C#，零 MonoBehaviour |
 | `EconomyManager` | 经济系统(焊接) | Gameplay/Systems | 桥接 Core → UI 事件 + 骤死期双倍回金 |
-| `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑 |
+| `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑。`SimulatesCombat` 控制是否参与战斗模拟（Master=true, Client=false） |
 | `UnitPassives` | 兵种被动 | Gameplay/Entities | 16 种通用被动（含召唤师），Inspector 勾选启用。溅射以 ClosestPoint 为圆心，召唤物继承召唤师 FollowPath |
 | `BurnZone` | 燃烧区域 | Gameplay/Entities | UnitPassives 内嵌类（`public class BurnZone : MonoBehaviour`），UnitPassives 和 BattleManager 共用 |
 | `BattleManager` | 战场管理器 | Gameplay/Battle | 主循环 + 牌型生成 + 全局唯一 UnitId 分配（`_globalUnitId` + `Dictionary<int, CardUnit>` O(1) 查找）+ `TriggerDefeat()` internal |
@@ -109,6 +109,9 @@
 | `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线/HP 同步，挂载到游戏场景 |
 | `NetworkLogger` | 网络日志 | Gameplay/Network | 将网络相关日志写入 `Logs/network_log_slotN.txt` 文件 |
 | `NetworkDebugPanel` | 网络调试面板 | Gameplay/Network | 游戏内左上角显示槽位/手牌/金币/单位数/最近事件 |
+| `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
+| `LocalNetworkService` | 本地联机服务 | Gameplay/Network | INetworkService 本地实现，零网络延迟，用于单进程多玩家测试 |
+| `LocalTestLauncher` | 本地联机测试启动器 | Editor | Editor 窗口（Tools → 本地联机测试），创建多玩家 LocalNetworkService |
 
 ## 实施状态总览
 
@@ -272,6 +275,10 @@
 | Master 领域封印校验 | `MasterValidateAndPlay` 新增领域封印检查（炸弹破封 + 能管上放行），`HandlePlayRejected` 补充反馈 | NetworkGameManager.cs |
 | StateVersion 状态版本号 | `MASTER_STATE_SYNC` 携带 `_stateVersion`，客户端丢弃旧版本广播，防止乱序覆盖 | NetworkGameManager.cs |
 | Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式，支持同步问题快速定位 | NetworkGameManager.cs |
+| Master Authority Combat | `SimulatesCombat` 属性控制战斗模拟归属。Client 禁止 OnUpdate/TakeDamage/Die，只做视觉行军。死亡由 Master 广播 UNIT_DIED 驱动 | CardUnit.cs + CardUnit.Combat.cs + NetworkGameManager.cs |
+| SimulatesCombat 按单位设置 | `OnUnitSpawned` 事件中按所属 NGM 实例设置（解决本地多玩家 static 冲突） | NetworkGameManager.cs |
+| 记牌器负值兜底 | `Mathf.Max(0, total - discarded)` 防止联机牌堆不同步时显示负数 | CardCounterUI.cs |
+| 本地联机模拟系统 | `LocalNetworkHub`（消息路由）+ `LocalNetworkService`（INetworkService 本地实现）+ `LocalTestLauncher`（Editor 窗口）。单进程多玩家，零网络延迟 | LocalNetworkHub.cs + LocalNetworkService.cs + LocalTestLauncher.cs |
 
 ### P1（仍需实现）
 
@@ -407,7 +414,9 @@ Assets/Scripts/
 │   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
-│   │   └── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
+│   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -474,7 +483,8 @@ Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下�
 ├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
 ├── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
-└── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+├── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+└── LocalTestLauncher.cs              # ★ 本地联机测试启动器（Tools → 本地联机测试，单进程多玩家）
 ```
 
 ---
