@@ -109,6 +109,8 @@ namespace DoudizhuTower.Gameplay.Network
             _domainSystem = domainSystem;
             _deck = deck;
             _playerHand = playerHand;
+            // 联机模式必须后台运行，否则窗口失焦时 Update 暂停导致模拟分叉
+            Application.runInBackground = true;
             _handArea = handArea;
             _cardCounter = cardCounter;
             _playerBase = playerBase;
