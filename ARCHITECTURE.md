@@ -2237,6 +2237,7 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 
 | 债务 | 现状 | 触发偿还条件 |
 |:---|:---|:---|
+| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 1556 行） | 超过 2500 行或新增观战/回放时拆分为 `NetworkPlaySync`/`NetworkEconomySync`/`NetworkDomainSync`/`NetworkStateSync` |
 | Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager(44) + GameBootstrapper(18) 等处，无统一 `IGameAuthority` 接口 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
 | 状态同步体系较简单 | StateVersion 为全局版本号（非分字段），无增量同步、无 StateHash | 需要断线重连状态恢复或观战模式 |
