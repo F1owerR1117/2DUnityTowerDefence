@@ -2237,13 +2237,14 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 
 | 债务 | 现状 | 触发偿还条件 |
 |:---|:---|:---|
-| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 1556 行） | 超过 2500 行或新增观战/回放时拆分为 `NetworkPlaySync`/`NetworkEconomySync`/`NetworkDomainSync`/`NetworkStateSync` |
-| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager(44) + GameBootstrapper(18) 等处，无统一 `IGameAuthority` 接口 | 新增观战/AI/回放/专用服务器中任意 2 项 |
+| **[ARCH-001] 战斗模拟双端运行（P0）** | BattleManager/CardUnit 在 Client 和 Master 各自独立运行（0 处网络检查），HP 靠修正同步（Client 63 次修正 vs Master 0 次）。最小化窗口 → 一端暂停 → 战斗永久分叉。继续修补同步问题成本递增 | **下一个开发周期专门处理**。目标：Master Only Simulation（Master 负责战斗/经济/领域，Client 仅输入+UI+动画） |
+| 双模拟同步（经济） | Client 和 Master 各自运行 EconomySystem.UpdateEconomy()，float 误差/tick 差异导致长期分叉 | 随 ARCH-001 一起解决 |
+| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 1556 行） | 超过 2500 行或新增观战/回放时拆分 |
+| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager(44) + GameBootstrapper(18) 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
 | 状态同步体系较简单 | StateVersion 为全局版本号（非分字段），无增量同步、无 StateHash | 需要断线重连状态恢复或观战模式 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
-| 双模拟同步（经济） | Client 和 Master 各自运行 EconomySystem.UpdateEconomy()，靠独立模拟保持一致（float 误差/tick 差异可能导致长期分叉） | 经济持续不同步时改为 Master Only Simulation（Client 删除本地经济模拟，仅 UI 渲染） |
-| 双模拟同步（战斗） | BattleManager/CardUnit 在 Client 和 Master 各自独立运行战斗模拟（0 处网络检查），HP 靠修正同步（日志显示 Client 63 次修正 vs Master 0 次）。最小化窗口导致一端暂停 → 战斗永久分叉 | 联机稳定化后改为 Master Only Simulation：Client 删除战斗模拟，兵种行为由 Master 广播驱动，Client 仅渲染 |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2246 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
 | 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2246 行），查找成本随章节增长上升 | 联机稳定化完成后拆分为 `Architecture.md`（架构+规范）+ `Debt.md`（债务清单）+ `ADR/`（决策记录） |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
