@@ -116,7 +116,6 @@ namespace DoudizhuTower.Gameplay.Network
             // Master 广播单位死亡事件
             if (_net.IsMasterClient && _battleManager != null)
                 _battleManager.OnUnitDiedEvent += BroadcastUnitDied;
-            _isNetworkMode = true;
             _handArea = handArea;
             _cardCounter = cardCounter;
             _playerBase = playerBase;
