@@ -29,8 +29,11 @@ namespace DoudizhuTower.UI.Panels
         public static bool IsGameOver { get; set; }
 
         /// <summary>设置联机模式：隐藏重启按钮</summary>
+        private bool _isMultiplayer;
+
         public void SetMultiplayerMode(bool isMultiplayer)
         {
+            _isMultiplayer = isMultiplayer;
             if (restartButton != null)
                 restartButton.gameObject.SetActive(!isMultiplayer);
         }
@@ -55,7 +58,8 @@ namespace DoudizhuTower.UI.Panels
             if (IsPaused)
             {
                 IsPaused = false;
-                Time.timeScale = 1f;
+                if (!_isMultiplayer)
+                    Time.timeScale = 1f;
             }
         }
 
@@ -113,7 +117,9 @@ namespace DoudizhuTower.UI.Panels
         public void Pause()
         {
             IsPaused = true;
-            Time.timeScale = 0f;
+            // 联机模式下不暂停游戏逻辑（其他玩家仍在运行）
+            if (!_isMultiplayer)
+                Time.timeScale = 0f;
             ShowPanel(_pauseCanvasGroup);
         }
 

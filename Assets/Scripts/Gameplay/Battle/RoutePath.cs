@@ -11,9 +11,22 @@ namespace DoudizhuTower.Gameplay.Battle
         [Header("路径点（按顺序拖入）")]
         public Transform[] waypoints;
 
+        [Header("路线锁定")]
+        [Tooltip("初始是否锁定（锁定时玩家无法选择此路线）")]
+        [SerializeField] private bool _locked;
+
         [Header("可视化")]
         public Color lineColor = Color.green;
         public float waypointSize = 0.3f;
+
+        /// <summary>路线是否被锁定</summary>
+        public bool IsLocked => _locked;
+
+        /// <summary>解锁路线（由 BossController 等系统调用）</summary>
+        public void Unlock() => _locked = false;
+
+        /// <summary>锁定路线</summary>
+        public void Lock() => _locked = true;
 
         [Tooltip("启用后路径点坐标在 Awake 时锁定，运行时不受父物体位移影响。若路径点需跟随移动物体（如 BOSS），请取消勾选。")]
         [SerializeField] private bool _cachePositions = true;

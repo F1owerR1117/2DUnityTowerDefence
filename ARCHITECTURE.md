@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v6.1
+# DoudizhuTower — 架构落地规范 v7.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -29,6 +29,14 @@
 17. [伤害批量结算系统](#17-伤害批量结算系统damagequeue)
 18. [传送飞筒系统](#18-传送飞筒系统)
 19. [要不起领域系统](#19-要不起领域系统domainsystem)
+20. [存档系统](#20-存档系统savesystem)
+21. [叫分期系统](#21-叫分期系统biddingmanager--networkbiddingmanager--biddingconfig)
+22. [跨场景数据传递](#22-跨场景数据传递gamesession)
+23. [BOSS 系统](#23-boss-系统bosscontroller--buildingai)
+24. [架构债务登记](#24-架构债务登记)
+25. [Event+Snapshot+Tick 三层确定性模型 v2.0](#25-event-snapshot-tick-三层确定性模型-v20final-lock)
+26. [Truth Source Convergence（真相源收敛）](#26-truth-source-convergence真相源收敛)
+27. [Client 战斗表现层（Event-Driven Presentation）](#27-client-战斗表现层event-driven-presentation)
 
 ---
 
@@ -44,7 +52,7 @@
 | `CardTypeDetector` | 牌型检测器 | Core/Card | 核心算法，零 Unity 依赖 |
 | `EconomySystem` | 经济系统(逻辑) | Core/Economy | 纯 C#，零 MonoBehaviour |
 | `EconomyManager` | 经济系统(焊接) | Gameplay/Systems | 桥接 Core → UI 事件 + 骤死期双倍回金 |
-| `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑 |
+| `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑。`SimulatesCombat` 控制是否参与战斗模拟（Master=true, Client=false） |
 | `UnitPassives` | 兵种被动 | Gameplay/Entities | 16 种通用被动（含召唤师），Inspector 勾选启用。溅射以 ClosestPoint 为圆心，召唤物继承召唤师 FollowPath |
 | `BurnZone` | 燃烧区域 | Gameplay/Entities | UnitPassives 内嵌类（`public class BurnZone : MonoBehaviour`），UnitPassives 和 BattleManager 共用 |
 | `BattleManager` | 战场管理器 | Gameplay/Battle | 主循环 + 牌型生成 + 全局唯一 UnitId 分配（`_globalUnitId` + `Dictionary<int, CardUnit>` O(1) 查找）+ `TriggerDefeat()` internal |
@@ -108,6 +116,9 @@
 | `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线/HP 同步，挂载到游戏场景 |
 | `NetworkLogger` | 网络日志 | Gameplay/Network | 将网络相关日志写入 `Logs/network_log_slotN.txt` 文件 |
 | `NetworkDebugPanel` | 网络调试面板 | Gameplay/Network | 游戏内左上角显示槽位/手牌/金币/单位数/最近事件 |
+| `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
+| `LocalNetworkService` | 本地联机服务 | Gameplay/Network | INetworkService 本地实现，零网络延迟，用于单进程多玩家测试 |
+| `LocalTestLauncher` | 本地联机测试启动器 | Editor | Editor 窗口（Tools → 本地联机测试），创建多玩家 LocalNetworkService |
 
 ## 实施状态总览
 
@@ -266,6 +277,20 @@
 | transform.position 违规修复 | 10 处距离/范围计算改为 `VisualCenter`（英雄被动/三人组/轰炸/溅射/召唤） | BattleManager.Heroes.cs + Spawning.cs + UnitPassives.cs + UnitPassives.Summon.cs |
 | 静态状态跨局清理 | `UnitAudio.ClearClipCounts()` + `DamageQueue.Clear()` 在新局开始时调用，`_shieldWallUnits` 对象池回收注销 | UnitAudio.cs + DamageQueue.cs + UnitPassives.cs + GameBootstrapper.cs |
 | DomainUIController lambda 退订 | `counterCoolDown.OnCoolDownComplete` 匿名 lambda → 存储字段 `_onCounterCoolDownComplete`，OnDestroy 退订 | DomainUIController.cs |
+| PLAYER_READY 竞态防护 | `_playerReadyReceived` 集合，MasterDrawCard 拒绝未就绪槽位摸牌，Master 自身槽位初始化时注册 | NetworkGameManager.cs |
+| clientGold 金币权威 | 删除 3 处客户端金币覆盖（出牌/摸牌/HandlePlayCards），Master 只信自己追踪的金币 | NetworkGameManager.cs |
+| Master 领域封印校验 | `MasterValidateAndPlay` 新增领域封印检查（炸弹破封 + 能管上放行），`HandlePlayRejected` 补充反馈 | NetworkGameManager.cs |
+| StateVersion 状态版本号 | `MASTER_STATE_SYNC` 携带 `_stateVersion`，客户端丢弃旧版本广播，防止乱序覆盖 | NetworkGameManager.cs |
+| Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式，支持同步问题快速定位 | NetworkGameManager.cs |
+| Master Authority Combat | `SimulatesCombat` 属性控制战斗模拟归属。Client 禁止 OnUpdate/TakeDamage/Die，只做视觉行军。死亡由 Master 广播 UNIT_DIED 驱动 | CardUnit.cs + CardUnit.Combat.cs + NetworkGameManager.cs |
+| SimulatesCombat 按单位设置 | `OnUnitSpawned` 事件中按所属 NGM 实例设置（解决本地多玩家 static 冲突） | NetworkGameManager.cs |
+| 记牌器负值兜底 | `Mathf.Max(0, total - discarded)` 防止联机牌堆不同步时显示负数 | CardCounterUI.cs |
+| 本地联机模拟系统 | `LocalNetworkHub`（消息路由）+ `LocalNetworkService`（INetworkService 本地实现）+ `LocalTestLauncher`（Editor 窗口）。单进程多玩家，零网络延迟 | LocalNetworkHub.cs + LocalNetworkService.cs + LocalTestLauncher.cs |
+| 摸牌协议分离 | `DRAW_CARD`（请求）与 `DRAW_CARD_RESULT`（结果）使用独立协议 Key，防止 Master 收到自己的广播后误判为新请求导致无限摸牌循环 | NetworkProtocol.cs + NetworkGameManager.cs |
+| 叫分槽位转换 | `OnStartGame()` 将大厅位置索引正确转换为 actor-number 排序槽位，AI 槽位 = 全集 {0,1,2} - 真人玩家槽位，修复后加入玩家替代 AI 叫分的 bug | OnlineLobbyController.cs |
+| 叫分槽位同步等待 | `InitializeSlotWhenReady()` 协程等待 Photon PlayerList 同步完成后再计算槽位（最多 3 秒轮询），修复同时进入时所有玩家拿到相同手牌 | NetworkBiddingManager.cs |
+| AI 槽位房间持久化 | AI 槽位通过 Photon 房间属性（`aiSlots`）持久化，后加入玩家从房间属性恢复，修复后加入玩家看不到 AI 的 bug | OnlineLobbyController.cs |
+| 农民路线 UI 隐藏 | `HandArea.SetRouteUIVisible(false)` 隐藏农民不需要的路线选择 UI（prev/nextButton, routeLabel, routeIndicator） | HandArea.cs + GameBootstrapper.cs |
 
 ### P1（仍需实现）
 
@@ -401,7 +426,9 @@ Assets/Scripts/
 │   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
-│   │   └── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
+│   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -450,8 +477,8 @@ Assets/Scripts/
 │   ├── UnitStatsConfig.cs             # ★ 兵种数值汇总（CSV 管线中间层，预制体引用+属性）
 │   └── CardSpriteDB.cs                # 卡牌精灵图数据库
 │
-└── Tests/                              # 测试目录
-    └── ...
+└── _DisabledTests/                     # 已禁用的测试目录
+    └── CardTypeDetectorTests.cs
 
 Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线）
 ├── Units.csv                          # 兵种数值表
@@ -468,7 +495,8 @@ Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下�
 ├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
 ├── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
-└── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+├── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+└── LocalTestLauncher.cs              # ★ 本地联机测试启动器（Tools → 本地联机测试，单进程多玩家）
 ```
 
 ---
@@ -1103,8 +1131,8 @@ GameBootstrapper 在初始化完成后根据玩家身份自动隐藏不需要的
 
 | 身份 | 隐藏的 UI | 保留的 UI |
 |:---|:---|:---|
-| 地主 | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` | `laneArea`（分路系统） |
-| 农民 | `laneArea` | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` |
+| 地主 | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` | `laneArea`（分路系统）, 路线选择 UI |
+| 农民 | `laneArea`, 路线选择 UI（prev/nextRouteButton, routeLabel, routeIndicator） | `launchTubeUI`, `tempSlotUI`, `teammateTempSlotUI` |
 
 **实现位置**：`GameBootstrapper.Start()` Step 6b 末尾
 
@@ -1115,6 +1143,7 @@ if (playerIsLandlord) {
     teammateTempSlotUI?.gameObject.SetActive(false);
 } else {
     laneArea?.SetActive(false);
+    handArea?.SetRouteUIVisible(false);  // 农民不需要路线选择
 }
 ```
 
@@ -1321,6 +1350,41 @@ _bomberPrefabs[13]:   飞机轰炸机
 
 ### 13.1 架构
 
+**网络模型：Hybrid Authority Model（混合权威模型）**
+
+Master 立即 apply 状态 + 广播结果，Client 只接收 RESULT 事件镜像状态。
+不使用 Event Sourcing、Pure Functional State Replay、Deterministic Lockstep。
+
+**三条不可破坏不变量（顶层约束，高于一切实现细节）：**
+
+1. **权威状态唯一性（Single Authority State）** — 游戏逻辑状态（牌堆/手牌/出牌/叫分/胜负）只能由 Master 计算并更新。Client 不得推导、修正或模拟状态。Client 只做：显示（Render）、输入（Request）
+2. **事件是传输层，不是真相层（Event ≠ State）** — 网络事件只代表状态变化请求或结果通知。不能依赖"是否收到某个事件"判断状态，不能依赖事件顺序恢复状态。State = Master Snapshot，Event = State transition notification
+3. **任何客户端必须可以无历史恢复（Join-time Snapshot）** — 客户端状态不能依赖事件历史。进入房间后只需获取当前快照即可直接进入 Running，不需要 replay event log、等 START_MATCH、等 PLAYER_READY 链
+
+**判断标准**：如果某个客户端丢掉所有网络事件，它还能回到正确状态吗？不能 → 一定会出 bug。
+
+**Network Rules（7 条铁律）：**
+
+1. **Master is authoritative state writer** — 所有游戏状态变更由 Master 决定
+2. **Master applies state immediately** — Master 在广播 RESULT 前先本地执行状态变更，保证后续逻辑可访问最新状态。未来 AI 不得改为"必须等 RESULT 回来再执行"
+3. **Clients only mirror RESULT events** — Client 收到 RESULT 后更新本地表现。Client 禁止从 REQUEST 事件推导游戏状态
+4. **No client-side state mutation** — Client 不修改手牌/金币/HP 等游戏状态
+5. **No dual simulation（ARCH-001）** — Client 禁止独立于 Master 运行游戏逻辑模拟。所有状态转换仅由 Master 产生。Client 与 Master 之间的状态偏差视为同步 bug，不视为合法的游戏分歧
+6. **All protocol keys must be request/result paired** — 请求和结果使用独立 Key（如 `DRAW_CARD` / `DRAW_CARD_RESULT`、`PLAY_CARDS` / `PLAY_APPROVED`）。例外：内部同步事件（`MASTER_STATE_SYNC`、`HP_CORRECTION`）、心跳/状态快照无需配对
+7. **UI state from Master snapshot, not local derivation** — `NetworkRemaining` 等 UI 显示状态由 Master 计算后通过 RESULT 广播，Client 直接使用，禁止本地推导。实现：`_sharedPoolRemaining`（NetworkGameManager，Master 独有）→ 广播 → `_deck.NetworkRemaining`（CardDeck，纯属性，所有客户端统一读取）→ CardCounterUI 显示。Client 不得调用 `_deck.Draw()` 或自行计算 remaining
+
+> 当前系统的问题不是架构错误，而是协议复用 + 同步时序 + 数据映射的工程问题，已逐一修复。
+
+### NETWORK EXECUTION GUARANTEE
+
+本系统保证：
+
+1. 存在且仅存在一个权威模拟（Master）
+2. Client 是被动投影层（Passive Projection）
+3. 任何 Client 逻辑不得影响权威状态
+4. 所有游戏状态变更源自 Master
+5. Client 与 Master 之间的状态偏差视为同步 bug，不视为合法的游戏分歧
+
 ```
 UI 层（OnlineLobbyController / NetworkBiddingManager）
     ↓ 调用接口
@@ -1434,8 +1498,9 @@ public static class NetworkProtocol
     // 事件 Key（叫分/出牌/抽牌/领域/状态校验/房间管理）
     public const string BID_TURN, BID_ACTION, BID_RESULT;
     public const string GAME_INIT, PLAY_CARDS, PLAY_APPROVED, PLAY_REJECTED;
-    public const string DRAW_CARD, DOMAIN_ACTIVATE, COUNTER_ACTIVATE;
+    public const string DRAW_CARD, DRAW_CARD_RESULT, DOMAIN_ACTIVATE, COUNTER_ACTIVATE;
     public const string STATE_CHECKSUM, GAME_END, PLAYER_LEFT;
+    public const string HP_CHECKSUM, HP_CORRECTION, UNIT_DIED;
     public const string GOLD_UPDATE;
     public const string PLAYER_READY;
     public const string DOMAIN_PENDING, COUNTER_PENDING;
@@ -1491,9 +1556,9 @@ public static class NetworkProtocol
 Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
 
 **核心职责：**
-- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币（信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
-- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 + 扣费 → `SendToAll(DRAW_CARD, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
-- **经济同步**：客户端每 3 秒向 Master 报告金币；Master 的 `GOLD_UPDATE` 不覆盖客户端自身金币（客户端是自身金币的权威来源）
+- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币 + 领域封印（不信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
+- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 PLAYER_READY 已到达 + 扣费 → `SendToAll(DRAW_CARD_RESULT, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
+- **经济同步**：Master 使用自己追踪的金币，不接受客户端报告的金币覆盖（防止金币伪造）；`GOLD_UPDATE` 不覆盖客户端自身金币
 - **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
 - **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
 - **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
@@ -1508,7 +1573,7 @@ Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 
 **数据流：**
 ```
 玩家出牌 → HandArea → NetworkGameManager.RequestPlayCards()
-  ├─ Master: MasterValidateAndPlay() → 验证金币 → SendToAll(PLAY_APPROVED)
+  ├─ Master: MasterValidateAndPlay() → 验证手牌 + 金币 + 领域封印 → SendToAll(PLAY_APPROVED)
   └─ Client: SendToMaster(PLAY_CARDS) → 等待 PLAY_APPROVED
 
 所有客户端: ExecutePlayApproved()
@@ -1520,6 +1585,12 @@ Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 
 
 接收方: OnCardArrived → teammateTempSlotUI.ReceiveCard(card)
 取牌方: RequestCardTake() → SendToAll(CARD_TAKE) → OnCardTaken → Clear()
+
+摸牌流程（Request/Result 分离）:
+  Client: SendToMaster(DRAW_CARD, [slot, gold, cost])
+  Master: MasterDrawCard() → 验证 + 抽牌 + 本地执行 → SendToAll(DRAW_CARD_RESULT, [slot, cardIndex, cost])
+  Client: HandleDrawCard() → 添加手牌 + 扣费
+  ⚠️ Master 收到自己的 DRAW_CARD_RESULT 不重复执行（!IsMasterClient 防护）
 ```
 
 **手牌同步机制：**
@@ -1541,10 +1612,28 @@ OnPlayerLeft(playerName)
 
 **关键设计**：
 - Master 维护所有槽位的 `_slotHands`、`_slotDecks`、`_slotEconomies`，Client 只维护自己的
-- 出牌验证在 Master 端完成（金币充足），手牌验证仅限 Master 自己的槽位
+- 出牌验证在 Master 端完成（手牌 + 金币 + 领域封印），不信任客户端报告的金币
 - AI 出牌通过 `BroadcastAIPlay()` 由 Master 执行并扣除 AI 金币后广播
 - 所有网络事件使用 `SafeInt`/`SafeFloat`/`SafeArray` 安全拆箱，防止 `InvalidCastException`
 - `OnDestroy` 设置 `_initialized = false` 并清除所有引用，防止 `GameSession.Reset()` 时序问题
+
+**同步防护机制（5 项）：**
+
+| 防护 | 机制 | 解决的问题 |
+|:---|:---|:---|
+| PLAYER_READY 竞态 | `_playerReadyReceived` 集合，MasterDrawCard 拒绝未就绪槽位的摸牌请求 | 自动摸牌先于 PLAYER_READY 到达导致手牌永久不同步 |
+| 金币权威 | 删除 3 处 `SetGold(clientGold)` 覆盖，Master 只用自己追踪的金币 | 客户端伪造金币导致超花或金币不同步 |
+| 领域封印校验 | `MasterValidateAndPlay` 中检查领域封印（炸弹/王炸破封，能管上的牌放行） | 客户端领域状态不同步时出牌被误拦或绕过封印 |
+| StateVersion | `MASTER_STATE_SYNC` 携带版本号，客户端丢弃 `ver <= lastVer` 的旧广播 | 状态广播乱序导致旧状态覆盖新状态 |
+| Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式 | 同步问题排查无日志，靠猜定位 |
+| Request/Result 分离 | `DRAW_CARD`（请求）与 `DRAW_CARD_RESULT`（结果）使用独立 Key，Master 收到结果不重复执行 | Master 自广播被误判为新请求，导致无限摸牌循环 |
+
+**Trace 日志关键搜索词：**
+- `PLAYER_READY_SEND` / `PLAYER_READY_RECV` — 玩家就绪
+- `PLAY_CARDS_RECV` / `PLAY_APPROVED` / `PLAY_REJECTED` — 出牌流程
+- `DRAW_CARD` / `DRAW_CARD_RESULT` — 摸牌请求与结果（分离协议）
+- `DRAW_REJECTED_NOT_READY` — PLAYER_READY 竞态触发
+- `STATE_SYNC` / `STATE_SYNC_STALE` — 状态同步及旧版本丢弃
 
 ---
 
@@ -2207,4 +2296,404 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 - **Image Type = Filled**
 - **Fill Method = Radial 360**
 
+### 23.8 BOSS 施法动画同步
+
+BOSS 技能施法时间与动画同步机制：
+
+| 参数 | 说明 |
+|:---|:---|
+| `useAnimLength` | 是否使用动画长度作为施法时间 |
+| `castDuration` | 手动配置的施法时间（秒） |
+
+**同步规则**：
+- `useAnimLength = true` 且 `castDuration > 0`：调整动画速度匹配 `castDuration`
+- `useAnimLength = true` 且 `castDuration = 0`：使用动画长度作为施法时间
+- `useAnimLength = false`：使用手动配置的 `castDuration`
+
+**公式**：`speedMult = animLength / castDuration`
+
+### 23.9 BOSS 技能触发保护
+
+| 保护 | 说明 |
+|:---|:---|
+| `IsCasting` | 公开属性，供 CardUnit 检查施法状态 |
+| `Invulnerable` | 施法期间不可选取，免疫所有伤害 |
+| 效果强制触发 | `effectDelay > castDuration` 时，在施法结束前强制触发效果 |
+
+---
+
+## 24. 架构债务登记
+
+以下为已识别但暂不偿还的架构债务，待功能扩展时根据实际痛点决定是否升级。
+
+| 债务 | 现状 | 触发偿还条件 |
+|:---|:---|:---|
+| ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
+| ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
+| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2068 行） | 超过 2500 行或新增观战/回放时拆分 |
+| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager + GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
+| 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
+| ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
+| 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2623 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+| ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
+| ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
+
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
+
+---
+
+## 25. Event + Snapshot + Tick 三层确定性模型 v2.0（Final Lock）
+
+> 🔒 **不可再扩展协议阶段（Frozen Architecture）**，禁止再演化。
+> 本节取代原 §13 中 `StateVersion` 全局版本号设计，是网络同步的**顶层架构规范**。
+
+### 25.1 系统目标（最终约束）
+
+| 目标 | 说明 |
+|:---|:---|
+| 多客户端强一致（Strong Consistency） | 所有客户端收敛到同一权威状态 |
+| 弱网可恢复（Recoverable） | 网络延迟/乱序/丢包容忍 |
+| 任意客户端可自愈（Self-Healing） | 不依赖事件历史，Snapshot 可完全重建游戏 |
+| 支持无限循环对局（Loop Safe） | Round-based / Session-based 稳定运行 |
+| 不依赖事件顺序 | Event 是不可变输入流，Snapshot 才是真相源 |
+| 不允许"隐式状态修改" | Event 仅作为输入，Client 缓存后由 Snapshot 授权执行 |
+
+### 25.2 三层架构定义（锁定版）
+
+#### 🥇 L1: Event Layer（事件层 / 增量事实）
+
+**定义**：Event = 不可变事实记录（Append-only Log）
+
+```
+struct GameEvent {
+    int tick;           // 绑定的 Tick
+    string type;        // 事件类型
+    object[] payload;   // 事件数据
+}
+```
+
+**规则（强约束）**：
+- ✔ Event 不直接修改状态
+- ✔ Event 必须携带 Tick
+- ✔ Event 允许乱序到达
+- ✔ Event 允许丢弃（由 Tick 判定）
+- ✔ Event 不参与最终一致性计算（只做输入）
+
+#### 🥈 L2: Snapshot Layer（状态层 / 权威世界）
+
+**定义**：Snapshot = 某 Tick 下的完整世界快照
+
+```
+class GameSnapshot {
+    int tick;                                // 快照 Tick
+    int deckId;                              // 牌堆唯一标识
+    int remaining;                           // 牌堆剩余张数
+    string gamePhase;                        // 游戏阶段
+    Dictionary<int, int[]> slotHands;        // 每个槽位手牌
+    Dictionary<int, float> slotGold;         // 每个槽位金币
+    Dictionary<int, float> slotIncomeRates;  // 每个槽位回金速度
+    Dictionary<int, float> unitHPs;          // 所有存活单位 HP
+}
+```
+
+**规则**：
+- ✔ Snapshot 是唯一"真相源（Truth Source）"
+- ✔ Snapshot 永远可覆盖 Event
+- ✔ Snapshot 只前进不回退（tick monotonic）
+- ✔ Snapshot 用于修正 & 重建
+
+#### 🥉 L3: Tick Layer（确定性核心）
+
+**定义**：Tick = Master 单调递增逻辑时钟
+
+**规则（最关键）**：
+- ✔ Tick 只由 Master 增长
+- ✔ Tick 不可回退
+- ✔ 所有 Event 必须绑定 Tick
+- ✔ 所有 Snapshot 必须绑定 Tick
+
+**判定规则（铁律）**：
+```csharp
+if (incoming.tick < local.tick) → 丢弃
+```
+
+### 25.3 核心运行流程（最终锁定）
+
+#### 🧠 Master 流程（唯一权威）
+
+```
+1. Receive Request
+2. AdvanceTick()
+3. Execute Logic
+4. Modify State
+5. Build Snapshot(tick)
+6. Broadcast Event + Snapshot
+```
+
+#### 📡 Client 流程（纯投影）
+
+```
+1. Receive Event → 缓存（不执行）
+2. Receive Snapshot:
+   if snapshot.tick > local.tick:
+        apply snapshot (overwrite state)
+```
+
+#### 🔁 自愈流程（Reconciliation Loop）
+
+```
+每 N 秒（默认 5s）：
+  Client → Request Snapshot(tick)
+  Master → Return Snapshot(latest)
+  Client → 强制对齐
+```
+
+### 25.4 五条一致性铁律（最终锁死）
+
+| # | 铁律 | 违反后果 |
+|:---|:---|:---|
+| 1 | **Tick 单调递增** — `tick[n+1] > tick[n]` | 状态回滚 → 客户端分叉 |
+| 2 | **旧数据永远无效** — `if (incoming.tick < local.tick) ignore` | 乱序覆盖 → 状态污染 |
+| 3 | **Event 不改变状态** — Event = 输入，Snapshot = 真相 | Event 丢失 → 状态不可恢复 |
+| 4 | **Snapshot 是唯一修正源** — 任何偏差必须被 Snapshot 覆盖 | Client 本地推导 → 状态分叉 |
+| 5 | **Master 唯一写状态** — Client 永远只投影 | 多端写入 → 状态分裂 |
+
+### 25.5 生命周期（最终工业循环）
+
+```
+INIT
+  ↓
+SYNC (Snapshot Sync)
+  ↓
+RUN (Event Flow)
+  ↓
+RECONCILE LOOP (Self-Heal)
+  ↓
+END
+  ↓
+RESET (FULL STATE WIPE)
+  ↓
+INIT
+```
+
+### 25.6 Deck 系统映射
+
+```
+struct DeckState {
+    int tick;        // 快照时的 Tick
+    int deckId;      // 局级隔离
+    int remaining;   // Snapshot 权威值
+}
+```
+
+### 25.7 Bug 根因解释
+
+三类系统缺陷叠加导致当前问题：
+
+| 问题 | 根因 | v2.0 解决方式 |
+|:---|:---|:---|
+| Event 丢失/延迟 | PLAYER_READY 不稳定 | Snapshot 覆盖 |
+| 状态依赖 Event 顺序 | 某客户端"永远不同步" | Tick 丢弃旧事件 |
+| 没有强制全局收敛点 | 局部冻结（只有 Master 正常） | Reconcile 修复 |
+
+### 25.8 与当前系统的映射
+
+| 当前系统 | v2.0 目标 | 改造要点 |
+|:---|:---|:---|
+| `_stateVersion` | `_tick` | 已完成 ✅ |
+| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **待实现** |
+| `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅ |
+| `HP_CORRECTION` 独立修正 | 合并入 Snapshot | 已完成 ✅ |
+| `SyncState` 状态机 | 生命周期阶段 | **待升级** |
+
+### 25.9 Trace 日志关键搜索词
+
+| 搜索词 | 说明 |
+|:---|:---|
+| `TICK_ADVANCE` | Tick 递增 |
+| `EVENT_BUFFERED` | Event 已缓存，等待 Snapshot 授权 |
+| `EVENT_DISCARD_STALE` | Event 因 tick < localTick 被丢弃 |
+| `SNAPSHOT_APPLIED` | Snapshot 成功覆盖本地状态 |
+| `SNAPSHOT_STALE` | Snapshot 因 tick <= localTick 被丢弃 |
+| `RECONCILE_REQUEST` | 客户端请求 Snapshot 校正 |
+| `PHASE_TRANSITION` | 生命周期阶段切换 |
+
+---
+
+## 26. Truth Source Convergence（真相源收敛）
+
+> 本节定义所有游戏状态的唯一真相源，确保 Master 是唯一权威写入方。
+> Client 为纯投影层，只读取状态、显示 UI、播放表现。
+
+### 26.1 收敛原则
+
+```
+Master = 唯一真相源
+Client = 纯投影层
+UI     = 只读显示
+AI     = 只读决策（联机模式）
+```
+
+**禁止**：
+- Client 直接修改游戏状态
+- UI 层写回业务数据
+- AI 在联机模式修改金币/Buff/HP
+
+### 26.2 真相源清单
+
+| 系统 | 真相源 | 保护机制 | 状态 |
+|:---|:---|:---|:---|
+| 牌堆剩余 | `CardDeck.Remaining` | 计算属性 `TotalCards - _cursor` | ✅ 已收敛 |
+| 手牌 | `_slotHands[slot]` | 字典存储，`_playerHand` 为只读投影 | ✅ 已收敛 |
+| 金币 | `_slotEconomies[slot]` | `IsMaster` 检查 | ✅ 已收敛 |
+| Buff | `CardUnit._buffs` | `SimulatesCombat` 门控 | ✅ 已收敛 |
+| Stun | `CardUnit.StunTimer` | `SimulatesCombat` 门控 | ✅ 已收敛 |
+| 击退 | `transform.position` | `SimulatesCombat` 门控 | ✅ 已收敛 |
+| HP | `CardUnit._currentHP` | `SimulatesCombat` 门控 | ✅ 已收敛 |
+| 目标 | `CardUnit.Target/CurrentTarget` | `SimulatesCombat` 门控（`OnUpdate` 入口） | ✅ 已收敛 |
+| 位移 | `transform.position` | `SimulatesCombat` 门控（战斗位移） | ✅ 已收敛 |
+
+### 26.3 SimulatesCombat 保护矩阵
+
+| 方法 | SimulatesCombat 检查 | 说明 |
+|:---|:---|:---|
+| `TakeDamage()` | ✅ `if (!SimulatesCombat) return;` | 仅 Master 处理伤害 |
+| `Die()` | ✅ `if (!SimulatesCombat) return;` | 仅 Master 触发死亡 |
+| `Heal()` | ✅ `if (!SimulatesCombat) return;` | 仅 Master 治疗 |
+| `ApplyBuff()` | ✅ `if (!SimulatesCombat) return;` | 仅 Master 修改 Buff |
+| `RemoveBuff()` | ✅ `if (!SimulatesCombat) return;` | 仅 Master 移除 Buff |
+| `StunTimer` 递减 | ✅ `if (SimulatesCombat && StunTimer > 0f)` | 仅 Master 递减眩晕 |
+| `UpdateBuilding()` 回血 | ✅ `if (SimulatesCombat && _isBuilding)` | 仅 Master 回血 |
+| `OnUpdate()` 入口 | ✅ `if (!SimulatesCombat) return;` | Client 仅行军 |
+| `BossSkillSystem.ExecuteAoeStun()` | ✅ `if (!_owner.SimulatesCombat) return;` | 仅 Master 眩晕 |
+| `BossSkillSystem.ExecuteKnockback()` | ✅ `if (!_owner.SimulatesCombat) return;` | 仅 Master 击退 |
+| `BossSkillSystem.ExecuteDash()` | ✅ `if (!_owner.SimulatesCombat) return;` | 仅 Master 冲刺 |
+| `BossSkillSystem.ClearCC()` | ✅ `if (!_owner.SimulatesCombat) return;` | 仅 Master 清除 CC |
+| `UnitPassives.EmitShockwave()` | ✅ `if (_owner.SimulatesCombat)` | 仅 Master 执行震波 |
+| `UnitPassives.KnockbackCoroutine()` | ✅ `if (_owner.SimulatesCombat)` | 仅 Master 执行击退 |
+
+### 26.4 经济系统保护
+
+| 方法 | IsMaster 检查 | 说明 |
+|:---|:---|:---|
+| `EconomyManager.Update()` | ✅ 联机模式不调用 `UpdateEconomy()` | Client 不自动增长金币 |
+| `EconomyManager.TrySpendGold()` | ✅ `!IsMasterClient → return false` | Client 不消耗金币 |
+| `EconomyManager.AddGold()` | ✅ `!IsMasterClient → return` | Client 不增加金币 |
+| `BuildingAI.Update()` | ✅ 联机模式不调用 `UpdateEconomy()` | AI 不自动增长金币 |
+| `BuildingAI.MakeDecision()` | ✅ `!IsMasterClient → continue` | AI 不执行 `TrySpend()` |
+| `NetworkGameManager.Update()` | ✅ `_net.IsMasterClient` 检查 | 仅 Master 执行 `_slotEconomies.UpdateEconomy()` |
+
+### 26.5 数据流
+
+```
+Master 端:
+_slotEconomies[slot].UpdateEconomy(dt)
+    ↓
+EconomySystem.CurrentGold += increment
+    ↓
+BuildCurrentSnapshot()
+    ↓
+_net.SendToAll(MASTER_STATE_SYNC, snapshot.Serialize())
+
+Client 端:
+HandleMasterStateSync()
+    ↓
+_slotEconomies[slot].SetGold(kvp.Value)
+    ↓
+EconomySystem.CurrentGold = amount
+    ↓
+OnGoldChanged?.Invoke(CurrentGold)
+    ↓
+EconomyManager.UpdateGoldUI()
+```
+
+### 26.6 验证清单
+
+| 验证项 | 状态 |
+|:---|:---|
+| Client 不执行 `UpdateEconomy()` | ✅ |
+| Client 不执行 `TrySpend()` | ✅ |
+| Client 不执行 `AddGold()` | ✅ |
+| Client 不修改 `Buff` | ✅ |
+| Client 不修改 `StunTimer` | ✅ |
+| Client 不执行 `Knockback` | ✅ |
+| Client 不修改 `HP` | ✅ |
+| Client 不选择 `Target` | ✅ |
+| Client 仅执行路径行军（视觉） | ✅ |
+| Master 唯一写入所有游戏状态 | ✅ |
+
+---
+
+## 27. Client 战斗表现层（Event-Driven Presentation）
+
+> 🔒 **已冻结**。禁止新增事件类型，禁止重构同步架构。
+> Client 为纯投影层，通过网络事件驱动视觉表现。
+
+### 27.1 设计原则
+
+```
+Master = 唯一战斗逻辑权威
+Client = 纯投影层（动画 + 特效 + UI + 音效）
+NetworkGameManager = 事件转发层（不直接播放音效）
+```
+
+**禁止**：
+- Client 修改任何战斗状态
+- Client 执行战斗计算
+- NetworkGameManager 直接播放音效
+- 新增事件类型（CombatEvent struct 等）
+
+### 27.2 事件体系（已冻结）
+
+| 事件 | 方向 | 用途 |
+|:---|:---|:---|
+| `UNIT_ATTACK` | Master → Client | 播放攻击动画 + 攻击音效 |
+| `UNIT_HIT` | Master → Client | 播放受击动画 + 受击音效 + 飘字 |
+| `UNIT_STUN` | Master → Client | 播放眩晕视觉（VisualStunTimer） |
+| `UNIT_KNOCKBACK` | Master → Client | 播放击退视觉协程 |
+| `UNIT_DIED` | Master → Client | 播放死亡动画 + 死亡音效（已有） |
+| `HP_CORRECTION` | Master → Client | 血量同步（已有） |
+
+### 27.3 音效系统架构
+
+```
+Master: TakeDamage() → OnTakeDamageEvent → UnitAudio.OnTakeDamage() → 播放音效
+Client: UNIT_HIT → NetworkGameManager → UnitAudio.PlayHitNetwork() → 播放音效
+```
+
+**关键规则**：
+- Master 保留本地事件驱动音效（不修改）
+- Client 通过网络事件驱动音效
+- `NetworkGameManager` 不直接播放音效，转发到 `UnitAudio`
+- `HandleUnitAttack()` 检查 `IsMasterClient`，Master 不执行
+
+### 27.4 VisualStunTimer（Client 专用）
+
+```
+StunTimer      → 逻辑层，仅 Master 写入
+VisualStunTimer → 表现层，Client 用于视觉效果
+```
+
+**防止逻辑污染**：Client 设置 `VisualStunTimer`，不修改 `StunTimer`。
+
+### 27.5 HP 事件拆分
+
+| 事件 | 触发时机 | 用途 |
+|:---|:---|:---|
+| `OnHPChanged` | TakeDamage / Heal / SetHP | 血条动画 + 闪烁 |
+| `OnStatsChanged` | ApplyBuff / RemoveBuff / RecalculateStats | 属性 UI 刷新 |
+
+**禁止**：`RecalculateStats()` 调用 `OnHPChanged`（属性变化不应触发血条闪烁）。
+
+### 27.6 实现状态
+
+| 功能 | 状态 |
+|:---|:---|
+| 攻击动画同步 (UNIT_ATTACK) | ✅ 完成 |
+| 受击反馈 (UNIT_HIT) | ✅ 完成 |
+| 血条平滑动画 | ✅ 完成 |
+| 事件拆分 (OnHPChanged + OnStatsChanged) | ✅ 完成 |
+| 音效系统重构 | ✅ 完成 |
+| 攻击特效 | ⏳ P1 待实现 |
+| 技能特效 | ⏳ P1 待实现 |

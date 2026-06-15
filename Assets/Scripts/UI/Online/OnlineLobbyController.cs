@@ -99,6 +99,7 @@ namespace DoudizhuTower.UI.Online
                 _net.OnPlayerJoined += OnPlayerJoined;
                 _net.OnPlayerLeft += OnPlayerLeft;
                 _net.OnAllPlayersReady += OnAllPlayersReady;
+                _net.OnPlayerReadyChanged += OnPlayerReadyChanged;
                 _net.OnConnectionLost += OnConnectionLost;
                 _net.OnCustomEvent += OnCustomEvent;
 
@@ -121,6 +122,7 @@ namespace DoudizhuTower.UI.Online
                 _net.OnPlayerJoined -= OnPlayerJoined;
                 _net.OnPlayerLeft -= OnPlayerLeft;
                 _net.OnAllPlayersReady -= OnAllPlayersReady;
+                _net.OnPlayerReadyChanged -= OnPlayerReadyChanged;
                 _net.OnConnectionLost -= OnConnectionLost;
                 _net.OnCustomEvent -= OnCustomEvent;
             }
@@ -263,14 +265,14 @@ namespace DoudizhuTower.UI.Online
                     playerSlots[i].text = "<color=#888888>等待中...</color>";
             }
 
-            // 踢出按钮：仅房主可见，不能踢自己，可踢真人和 AI
+            // 踢出按钮：仅房主可见，不能踢自己（房主始终在大厅位置 0），可踢真人和 AI
             if (kickButtons != null)
             {
                 for (int i = 0; i < kickButtons.Length; i++)
                 {
                     if (kickButtons[i] == null) continue;
                     bool hasTarget = _aiSlots.Contains(i) || i < names.Length;
-                    bool canKick = _net.IsMasterClient && i != _mySlot && hasTarget;
+                    bool canKick = _net.IsMasterClient && i != 0 && hasTarget;
                     kickButtons[i].gameObject.SetActive(canKick);
                 }
             }
@@ -291,13 +293,16 @@ namespace DoudizhuTower.UI.Online
                 if (text != null) text.text = _isReady ? "取消准备" : "准备";
             }
 
+            bool allReady = _net.AreAllPlayersReady;
             if (startGameButton != null)
-                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3;
+                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3 && allReady;
 
             if (roomStatusText != null)
             {
                 if (totalCount < 3)
                     roomStatusText.text = $"等待玩家加入... ({totalCount}/3)";
+                else if (!allReady)
+                    roomStatusText.text = $"等待所有玩家准备... ({totalCount}/3)";
                 else
                     roomStatusText.text = "所有人已就绪，可以开始";
             }
@@ -314,33 +319,16 @@ namespace DoudizhuTower.UI.Online
         private void OnStartGame()
         {
             if (_net == null || !_net.IsMasterClient) return;
+            if (!_net.AreAllPlayersReady) return;
             int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
             if (totalCount < 3) return;
 
             // 房主同步跳转到叫分场景
             GameSession.Reset();
 
-            // 将 AI 槽位从位置索引转换为 actor-number 排序后的槽位索引
-            // 大厅的 _aiSlots 基于玩家位置（playerSlots 数组索引），
-            // 叫分管理器的槽位基于 actor number 排序后的位置
-            var actorNumbers = _net.GetPlayerActorNumbers();
-            var convertedSlots = new HashSet<int>();
-            string[] names = _net.GetPlayerNames();
-            int realIdx = 0;
-            for (int pos = 0; pos < 3; pos++)
-            {
-                if (_aiSlots.Contains(pos)) continue; // AI 槽位，跳过
-                if (realIdx < names.Length)
-                {
-                    // 这是真人玩家的位置，找到它在 actorNumbers 中的索引
-                    int actorNum = _net.GetPlayerActorNumbers()[realIdx];
-                    int sortedIdx = NetworkProtocol.GetPlayerSlot(actorNum, actorNumbers);
-                    realIdx++;
-                    // 真人玩家的 sortedIdx 不是 AI，不需要转换
-                }
-            }
-            // 直接用位置索引作为 AI 槽位（与叫分管理器的 _currentTurnSlot 一致）
-            GameSession.AISlots = new HashSet<int>(_aiSlots);
+            // 存储原始大厅 AI 槽位（playerSlots[] 索引），
+            // 转换延迟到 NetworkBiddingManager 等 PlayerList 同步后再执行
+            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
 
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }
@@ -397,6 +385,9 @@ namespace DoudizhuTower.UI.Online
                 _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, actors);
             }
 
+            // 从房间属性恢复 AI 槽位（房主添加 AI 在本机加入之前的情况）
+            RestoreAISlotsFromRoom();
+
             if (roomCodeText != null)
                 roomCodeText.text = $"房间号: {roomName}";
             ShowRoom();
@@ -429,6 +420,11 @@ namespace DoudizhuTower.UI.Online
         }
 
         private void OnAllPlayersReady()
+        {
+            UpdateRoomUI();
+        }
+
+        private void OnPlayerReadyChanged()
         {
             UpdateRoomUI();
         }
@@ -482,6 +478,7 @@ namespace DoudizhuTower.UI.Online
         private void ApplyAddAI(int slot)
         {
             _aiSlots.Add(slot);
+            SyncAISlotsToRoom();
             UpdateRoomUI();
             Debug.Log($"[OnlineLobby] 添加 AI 到槽位 {slot}");
         }
@@ -497,16 +494,44 @@ namespace DoudizhuTower.UI.Online
             }
             else
             {
-                // 踢真人（发送踢出事件给目标玩家）
-                _net.SendToPlayer(slot, NetworkProtocol.KICK_PLAYER, 0);
+                // 踢真人（将大厅位置转换为 actor number 后发送）
+                int actorNumber = _net.GetActorNumberAtPosition(slot);
+                if (actorNumber > 0)
+                    _net.SendToPlayer(actorNumber, NetworkProtocol.KICK_PLAYER, 0);
             }
         }
 
         private void ApplyRemoveAI(int slot)
         {
             _aiSlots.Remove(slot);
+            SyncAISlotsToRoom();
             UpdateRoomUI();
             Debug.Log($"[OnlineLobby] 移除 AI 槽位 {slot}");
+        }
+
+        private void SyncAISlotsToRoom()
+        {
+            if (_net == null || !_net.IsMasterClient) return;
+            // 将 AI 槽位集合序列化为逗号分隔字符串，存入房间属性
+            var slots = new System.Collections.Generic.List<int>(_aiSlots);
+            slots.Sort();
+            string serialized = string.Join(",", slots);
+            _net.SetRoomProperty("aiSlots", serialized);
+        }
+
+        private void RestoreAISlotsFromRoom()
+        {
+            if (_net == null) return;
+            object val = _net.GetRoomProperty("aiSlots");
+            if (val is string s && !string.IsNullOrEmpty(s))
+            {
+                _aiSlots.Clear();
+                foreach (var part in s.Split(','))
+                {
+                    if (int.TryParse(part.Trim(), out int slot))
+                        _aiSlots.Add(slot);
+                }
+            }
         }
 
         private void OnCustomEvent(string key, object value, int senderActor)

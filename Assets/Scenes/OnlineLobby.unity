@@ -718,6 +718,7 @@ GameObject:
   - component: {fileID: 108956592}
   - component: {fileID: 108956591}
   - component: {fileID: 108956595}
+  - component: {fileID: 108956596}
   m_Layer: 5
   m_Name: CancelMatchButton
   m_TagString: Untagged
@@ -847,6 +848,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &108956596
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 108956590}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &239305898
 GameObject:
   m_ObjectHideFlags: 0
@@ -1399,6 +1415,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 415132468}
+  - component: {fileID: 415132470}
+  - component: {fileID: 415132469}
   m_Layer: 5
   m_Name: JoinRoomArea
   m_TagString: Untagged
@@ -1427,6 +1445,65 @@ RectTransform:
   m_AnchoredPosition: {x: -174, y: -158}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &415132469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 415132467}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
+--- !u!114 &415132470
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 415132467}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e29b1a8efbd4b44bb3f3716e73f07ff, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Navigation:
+    m_Mode: 3
+    m_WrapAround: 0
+    m_SelectOnUp: {fileID: 0}
+    m_SelectOnDown: {fileID: 0}
+    m_SelectOnLeft: {fileID: 0}
+    m_SelectOnRight: {fileID: 0}
+  m_Transition: 1
+  m_Colors:
+    m_NormalColor: {r: 1, g: 1, b: 1, a: 1}
+    m_HighlightedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_PressedColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 1}
+    m_SelectedColor: {r: 0.9607843, g: 0.9607843, b: 0.9607843, a: 1}
+    m_DisabledColor: {r: 0.78431374, g: 0.78431374, b: 0.78431374, a: 0.5019608}
+    m_ColorMultiplier: 1
+    m_FadeDuration: 0.1
+  m_SpriteState:
+    m_HighlightedSprite: {fileID: 0}
+    m_PressedSprite: {fileID: 0}
+    m_SelectedSprite: {fileID: 0}
+    m_DisabledSprite: {fileID: 0}
+  m_AnimationTriggers:
+    m_NormalTrigger: Normal
+    m_HighlightedTrigger: Highlighted
+    m_PressedTrigger: Pressed
+    m_SelectedTrigger: Selected
+    m_DisabledTrigger: Disabled
+  m_Interactable: 1
+  m_TargetGraphic: {fileID: 0}
+  m_OnClick:
+    m_PersistentCalls:
+      m_Calls: []
 --- !u!1 &423758236
 GameObject:
   m_ObjectHideFlags: 0
@@ -1440,6 +1517,7 @@ GameObject:
   - component: {fileID: 423758239}
   - component: {fileID: 423758241}
   - component: {fileID: 423758238}
+  - component: {fileID: 423758242}
   m_Layer: 5
   m_Name: AddAIbutton
   m_TagString: Untagged
@@ -1569,6 +1647,21 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &423758242
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 423758236}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &465997152
 GameObject:
   m_ObjectHideFlags: 0
@@ -1798,6 +1891,7 @@ GameObject:
   - component: {fileID: 530842981}
   - component: {fileID: 530842980}
   - component: {fileID: 530842984}
+  - component: {fileID: 530842985}
   m_Layer: 5
   m_Name: SoloQueueButton
   m_TagString: Untagged
@@ -1927,6 +2021,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &530842985
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 530842979}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &536463872
 GameObject:
   m_ObjectHideFlags: 0
@@ -2727,6 +2836,7 @@ GameObject:
   - component: {fileID: 862480866}
   - component: {fileID: 862480865}
   - component: {fileID: 862480869}
+  - component: {fileID: 862480870}
   m_Layer: 5
   m_Name: CreateRoomButton
   m_TagString: Untagged
@@ -2856,6 +2966,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &862480870
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 862480864}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &863982710
 GameObject:
   m_ObjectHideFlags: 0
@@ -3122,6 +3247,7 @@ GameObject:
   - component: {fileID: 1186054643}
   - component: {fileID: 1186054645}
   - component: {fileID: 1186054646}
+  - component: {fileID: 1186054647}
   m_Layer: 5
   m_Name: ReadyButton
   m_TagString: Untagged
@@ -3251,6 +3377,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1186054647
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1186054641}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1189346395
 GameObject:
   m_ObjectHideFlags: 0
@@ -3947,6 +4088,7 @@ GameObject:
   - component: {fileID: 1480079176}
   - component: {fileID: 1480079175}
   - component: {fileID: 1480079177}
+  - component: {fileID: 1480079180}
   m_Layer: 5
   m_Name: KickPlayer3
   m_TagString: Untagged
@@ -4076,6 +4218,21 @@ RectTransform:
   m_AnchoredPosition: {x: -738, y: 32}
   m_SizeDelta: {x: 240, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1480079180
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1480079174}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1491368781
 GameObject:
   m_ObjectHideFlags: 0
@@ -4304,6 +4461,7 @@ GameObject:
   - component: {fileID: 1644820165}
   - component: {fileID: 1644820167}
   - component: {fileID: 1644820168}
+  - component: {fileID: 1644820169}
   m_Layer: 5
   m_Name: StartGameButton
   m_TagString: Untagged
@@ -4433,6 +4591,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1644820169
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1644820163}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1648745703
 GameObject:
   m_ObjectHideFlags: 0
@@ -4718,6 +4891,7 @@ GameObject:
   - component: {fileID: 1804647949}
   - component: {fileID: 1804647948}
   - component: {fileID: 1804647952}
+  - component: {fileID: 1804647953}
   m_Layer: 5
   m_Name: BackToMenuButton
   m_TagString: Untagged
@@ -4847,6 +5021,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1804647953
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1804647947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1805090065
 GameObject:
   m_ObjectHideFlags: 0
@@ -5404,6 +5593,7 @@ GameObject:
   - component: {fileID: 2060070999}
   - component: {fileID: 2060070998}
   - component: {fileID: 2060071002}
+  - component: {fileID: 2060071003}
   m_Layer: 5
   m_Name: LeaveRoomButton
   m_TagString: Untagged
@@ -5533,6 +5723,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &2060071003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2060070997}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &2077372614
 GameObject:
   m_ObjectHideFlags: 0
@@ -5774,6 +5979,7 @@ GameObject:
   - component: {fileID: 2080899146}
   - component: {fileID: 2080899148}
   - component: {fileID: 2080899145}
+  - component: {fileID: 2080899149}
   m_Layer: 5
   m_Name: KickPlayer2
   m_TagString: Untagged
@@ -5903,6 +6109,21 @@ MonoBehaviour:
   m_OnClick:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &2080899149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2080899143}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &2140052790
 GameObject:
   m_ObjectHideFlags: 0

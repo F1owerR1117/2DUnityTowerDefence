@@ -44,6 +44,7 @@ namespace DoudizhuTower.Gameplay.Network
         // ─── 玩家标识 ───
         int LocalActorNumber { get; }
         int[] GetPlayerActorNumbers();
+        int GetActorNumberAtPosition(int position);
 
         // ─── 事件 ───
         event Action OnServerConnected;
@@ -54,6 +55,8 @@ namespace DoudizhuTower.Gameplay.Network
         event Action<string> OnPlayerJoined;
         event Action<string> OnPlayerLeft;
         event Action OnAllPlayersReady;
+        event Action OnPlayerReadyChanged;
         event Action<string, object, int> OnCustomEvent;
+        event Action OnMasterSwitched;
     }
 }

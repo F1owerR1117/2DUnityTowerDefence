@@ -12,10 +12,10 @@ namespace DoudizhuTower.Gameplay.Entities
         private int _currentAnimState = -1;
 
         /// <summary>
-        /// 更新动画状态（由子类 Update 循环调用）
+        /// 更新动画状态（由子类 Update 循环调用，或网络同步调用）
         /// 状态值：0=Idle, 1=Walk, 2=Attack
         /// </summary>
-        protected void UpdateAnimatorState(int state)
+        public void UpdateAnimatorState(int state)
         {
             if (_isDying) return; // 死亡动画期间禁止一切状态切换
             if (state == _currentAnimState) return; // 状态未变，不重复设置
@@ -114,8 +114,8 @@ namespace DoudizhuTower.Gameplay.Entities
             return _animator;
         }
 
-        /// <summary>安全设置 Animator 播放速度</summary>
-        private void SetAnimSpeed(float speed)
+        /// <summary>设置动画播放速度（1=正常，>1=加速，<1=减速）</summary>
+        public void SetAnimSpeed(float speed)
         {
             var anim = GetAnimator();
             if (anim != null) anim.speed = speed;
@@ -282,6 +282,7 @@ namespace DoudizhuTower.Gameplay.Entities
             TearTimer = 0f;
             SlowRestoreTimer = 0f;
             _needsFirstFrameSearch = true;
+            SimulatesCombat = SimulatesCombatDefault;
             _currentAnimState = -1;
             OverrideFindTarget = null;
             OverrideAttackRange = null;

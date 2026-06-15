@@ -6,6 +6,7 @@ using DoudizhuTower.Core.Battle;
 using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Gameplay.Entities;
+using DoudizhuTower.Gameplay.Network;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Battle
@@ -25,6 +26,16 @@ namespace DoudizhuTower.Gameplay.Battle
         [SerializeField] private float counterUseChance = 0.5f;
         [Tooltip("暂存槽取牌延迟（秒），防止牌瞬间消失")]
         [SerializeField] private float takeCardDelay = 0.5f;
+
+        [Header("路线评估")]
+        [Tooltip("玩家路线权重（>1 时优先攻击玩家路线）")]
+        [SerializeField] private float _playerWeight = 1.1f;
+        [Tooltip("基地血量比例低于此值时优先防守")]
+        [SerializeField] private float _defenseThreshold = 0.3f;
+        [Tooltip("威胁度差距小于此比例时随机选路")]
+        [SerializeField] private float _randomThreshold = 0.15f;
+        [Tooltip("每多一个兵种加算的金币等价值")]
+        [SerializeField] private float _unitCountWeight = 2f;
 
         public CardHand Hand { get; set; }
         public EconomySystem Economy { get; set; }
@@ -102,8 +113,11 @@ namespace DoudizhuTower.Gameplay.Battle
                     Debug.LogWarning($"[BuildingAI] {name} 等待初始化: Hand={Hand != null}(count={Hand?.Count ?? -1}), Economy={Economy != null}, bm={_battleManager != null}, baseCtl={_baseCtl != null}");
                 }
                 // 仍然更新经济和摸牌，即使手牌为空
-                if (Economy != null)
-                    Economy.UpdateEconomy(Time.deltaTime);
+                // v2.0: 仅 Master 端执行经济增长
+                if (Economy != null && _networkGameManager == null)
+            // v2.0: 仅 Master 端执行经济增长（联机模式由 NetworkGameManager 驱动）
+            if (_networkGameManager == null)
+                Economy.UpdateEconomy(Time.deltaTime);
                 if (Hand != null && _deck != null)
                 {
                     _drawTimer += Time.deltaTime;
@@ -170,6 +184,118 @@ namespace DoudizhuTower.Gameplay.Battle
             }
 
             Economy.UpdateEconomy(Time.deltaTime);
+        }
+
+        /// <summary>
+        /// 路线压力评估：根据敌方存活兵种金币权重选择最优进攻路线。
+        /// 同时考虑防守需求（己方基地血量低时优先防守该路线）。
+        /// </summary>
+        private int ChooseLane()
+        {
+            var routeGroup = GetComponent<RouteGroup>();
+            if (routeGroup == null || routeGroup.RouteCount <= 1)
+                return routeGroup?.CurrentIndex ?? 0;
+
+            int bestIndex = 0;
+            float bestScore = float.MinValue;
+            var baseCU = _baseCtl.GetComponent<CardUnit>();
+            bool baseIsLow = baseCU != null && (baseCU.CurrentHP / baseCU.MaxHP) < _defenseThreshold;
+
+            for (int i = 0; i < routeGroup.RouteCount; i++)
+            {
+                var route = GetRouteByIndex(routeGroup, i);
+                if (route == null || route.IsLocked) continue;
+
+                // 敌方在该路线上的存活兵种
+                var enemies = _battleManager.GetAliveUnitsOnRoute(route, !_isLandlord);
+                // 己方在该路线上的存活兵种（用于防守判断）
+                var friendlies = _battleManager.GetAliveUnitsOnRoute(route, _isLandlord);
+
+                // 计算敌方金币威胁度
+                float goldThreat = 0f;
+                foreach (var e in enemies)
+                    goldThreat += DoudizhuTower.Core.Economy.CardCostCalculator.BaseCost(e.Stats.Rank);
+
+                // 威胁度 = 金币 + 兵种数量加权
+                float score = goldThreat + enemies.Count * _unitCountWeight;
+
+                // 判断该路线是否经过玩家基地（玩家路线权重提升）
+                bool isPlayerRoute = IsPlayerRoute(route);
+                if (isPlayerRoute)
+                    score *= _playerWeight;
+
+                // 防守加权：己方基地血量低 + 该路有敌方兵种 → 优先防守
+                if (baseIsLow && enemies.Count > 0 && friendlies.Count == 0)
+                    score += 100f;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestIndex = i;
+                }
+            }
+
+            // 随机扰动：差距小时随机选路
+            if (routeGroup.RouteCount >= 2)
+            {
+                var secondBest = float.MinValue;
+                for (int i = 0; i < routeGroup.RouteCount; i++)
+                {
+                    if (i == bestIndex) continue;
+                    var route = GetRouteByIndex(routeGroup, i);
+                    if (route == null || route.IsLocked) continue;
+                    var enemies = _battleManager.GetAliveUnitsOnRoute(route, !_isLandlord);
+                    float goldThreat = 0f;
+                    foreach (var e in enemies)
+                        goldThreat += DoudizhuTower.Core.Economy.CardCostCalculator.BaseCost(e.Stats.Rank);
+                    float s = goldThreat + enemies.Count * _unitCountWeight;
+                    if (IsPlayerRoute(route)) s *= _playerWeight;
+                    if (s > secondBest) secondBest = s;
+                }
+
+                if (bestScore > 0 && secondBest > 0)
+                {
+                    float diff = Mathf.Abs(bestScore - secondBest) / bestScore;
+                    if (diff < _randomThreshold)
+                        bestIndex = UnityEngine.Random.value > 0.5f ? bestIndex : (bestIndex == 0 ? 1 : 0);
+                }
+            }
+
+            return bestIndex;
+        }
+
+        /// <summary>判断某条路线是否经过玩家基地（玩家操控的非 AI 基地）</summary>
+        private bool IsPlayerRoute(RoutePath route)
+        {
+            if (_battleManager == null) return false;
+            var bases = FindObjectsByType<CardUnit>(FindObjectsSortMode.None);
+            foreach (var b in bases)
+            {
+                if (b == null || !b._isBuilding || b._isBoss) continue;
+                if (b.IsLandlord != _isLandlord)
+                {
+                    var ai = b.GetComponent<BuildingAI>();
+                    if (ai == null || !ai.enabled)
+                    {
+                        var rg = b.GetComponent<RouteGroup>();
+                        if (rg != null)
+                        {
+                            for (int i = 0; i < rg.RouteCount; i++)
+                            {
+                                if (rg.GetRoute(i) == route)
+                                    return true;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        /// <summary>通过索引获取 RouteGroup 中的 RoutePath</summary>
+        private static RoutePath GetRouteByIndex(RouteGroup rg, int index)
+        {
+            return rg.GetRoute(index);
         }
 
         private void MakeDecision()
@@ -275,13 +401,18 @@ namespace DoudizhuTower.Gameplay.Battle
 
             foreach (var entry in playable)
             {
+                // v2.0: 仅 Master 端执行金币消耗（联机模式由 NetworkGameManager 驱动）
+                if (_networkGameManager != null && NetworkManager.Instance != null && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient) continue;
                 if (Economy.TrySpend(entry.cost))
                 {
                     Hand.RemoveRange(entry.cards);
                     _deck.Discard(entry.cards);
 
                     var routeGroup = GetComponent<RouteGroup>();
-                    int routeIndex = routeGroup != null ? routeGroup.CurrentIndex : 0;
+                    // 智能选路：根据路线压力评估选择最优进攻路线
+                    int routeIndex = ChooseLane();
+                    if (routeGroup != null)
+                        routeGroup.SetRouteIndex(routeIndex);
 
                     // 联机模式：通过 NetworkGameManager 广播出牌
                     if (_networkGameManager != null && _slotIndex >= 0)

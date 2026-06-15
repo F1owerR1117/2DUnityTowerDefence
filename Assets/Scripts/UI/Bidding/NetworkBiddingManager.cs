@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using DoudizhuTower.Config;
 using DoudizhuTower.Gameplay.Network;
@@ -81,21 +82,11 @@ namespace DoudizhuTower.UI.Bidding
                 return;
             }
 
-            var realActors = _net.GetPlayerActorNumbers();
+            // 加载原始 AI 槽位（延迟转换，等 PlayerList 同步后在 InitializeSlotWhenReady 中执行）
+            _aiSlots = new HashSet<int>(GameSession.RawAISlots);
 
-            // 确保 _actorNumbers 始终有 3 个元素（AI 槽位用 -1 填充）
-            _actorNumbers = new int[3];
-            for (int i = 0; i < 3; i++)
-                _actorNumbers[i] = i < realActors.Length ? realActors[i] : -1;
-
-            _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, _actorNumbers);
-
-            // 加载 AI 槽位
-            _aiSlots = new HashSet<int>(GameSession.AISlots);
-            Debug.Log($"[NetworkBidding] AI 槽位: [{string.Join(", ", _aiSlots)}], IsMaster={_net.IsMasterClient}, mySlot={_mySlot}, actorNumbers=[{string.Join(", ", _actorNumbers)}]");
-
-            // 分配左右槽位
-            AssignSideSlots();
+            // 等待 Photon PlayerList 同步完成后再计算槽位
+            StartCoroutine(InitializeSlotWhenReady());
 
             float duration = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
             _timer = duration;
@@ -112,11 +103,52 @@ namespace DoudizhuTower.UI.Bidding
             // 隐藏角色图标
             SetRoleIconsActive(false);
 
-            SetPlayerLabels();
-
             _net.OnCustomEvent += OnNetworkEvent;
             _net.OnPlayerLeft += OnPlayerLeft;
+        }
 
+        private IEnumerator InitializeSlotWhenReady()
+        {
+            int expectedPlayerCount = 3 - GameSession.RawAISlots.Count;
+
+            // 等待 Photon PlayerList 同步（最多等 3 秒）
+            float timeout = 3f;
+            while (timeout > 0f)
+            {
+                var actors = _net.GetPlayerActorNumbers();
+                if (actors.Length >= expectedPlayerCount)
+                {
+                    // PlayerList 已完整，计算槽位
+                    _actorNumbers = new int[3];
+                    for (int i = 0; i < 3; i++)
+                        _actorNumbers[i] = i < actors.Length ? actors[i] : -1;
+                    _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, _actorNumbers);
+
+                    // 在 PlayerList 同步后再转换 AI 槽位（避免 join 顺序导致的竞态）
+                    ConvertAISlots();
+                    break;
+                }
+                timeout -= 0.1f;
+                yield return new WaitForSeconds(0.1f);
+            }
+
+            // 兜底：如果超时仍未同步，强制计算
+            if (_mySlot < 0)
+            {
+                var actors = _net.GetPlayerActorNumbers();
+                _actorNumbers = new int[3];
+                for (int i = 0; i < 3; i++)
+                    _actorNumbers[i] = i < actors.Length ? actors[i] : -1;
+                _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, _actorNumbers);
+                ConvertAISlots();
+                Debug.LogWarning($"[NetworkBidding] 槽位计算超时，强制 mySlot={_mySlot}");
+            }
+
+            Debug.Log($"[NetworkBidding] AI 槽位: [{string.Join(", ", _aiSlots)}], IsMaster={_net.IsMasterClient}, mySlot={_mySlot}, actorNumbers=[{string.Join(", ", _actorNumbers)}]");
+
+            // 槽位确定后执行依赖槽位的初始化
+            AssignSideSlots();
+            SetPlayerLabels();
             _initialized = true;
 
             if (_net.IsMasterClient)
@@ -126,6 +158,42 @@ namespace DoudizhuTower.UI.Bidding
             UpdateTurnDisplay();
 
             Debug.Log($"[NetworkBidding] 初始化完成，本机槽位={_mySlot}, IsMaster={_net.IsMasterClient}");
+        }
+
+        /// <summary>
+        /// 将大厅原始 AI 槽位（playerSlots[] 索引）转换为 actor-number 排序后的槽位索引。
+        /// 必须在 PlayerList 同步完成后调用（_actorNumbers 已就绪）。
+        /// </summary>
+        private void ConvertAISlots()
+        {
+            var rawSlots = GameSession.RawAISlots;
+            string[] names = _net.GetPlayerNames();
+
+            // 找出所有真人玩家的 actor-number 排序槽位
+            var realPlayerSlots = new HashSet<int>();
+            int realIdx = 0;
+            for (int pos = 0; pos < 3; pos++)
+            {
+                if (rawSlots.Contains(pos)) continue; // AI 位置，跳过
+                if (realIdx < names.Length)
+                {
+                    int actorNum = _actorNumbers[realIdx];
+                    int sortedIdx = NetworkProtocol.GetPlayerSlot(actorNum, _actorNumbers);
+                    if (sortedIdx >= 0) realPlayerSlots.Add(sortedIdx);
+                    realIdx++;
+                }
+            }
+
+            // AI 槽位 = 全集 {0,1,2} - 真人玩家槽位
+            _aiSlots = new HashSet<int>();
+            for (int i = 0; i < 3; i++)
+            {
+                if (!realPlayerSlots.Contains(i))
+                    _aiSlots.Add(i);
+            }
+            GameSession.AISlots = new HashSet<int>(_aiSlots);
+
+            Debug.Log($"[NetworkBidding] AI 槽位转换: 原始=[{string.Join(", ", rawSlots)}] → 转换后=[{string.Join(", ", _aiSlots)}], 真人槽位=[{string.Join(", ", realPlayerSlots)}]");
         }
 
         private void OnDestroy()
@@ -352,6 +420,9 @@ namespace DoudizhuTower.UI.Bidding
 
         private void OnConfirm()
         {
+            Debug.Log($"[NetworkBidding] OnConfirm: IsNetworkMode={GameSession.IsNetworkMode}, " +
+                      $"NetworkSeed={GameSession.NetworkSeed}, MySlot={_mySlot}, " +
+                      $"IsMaster={_net.IsMasterClient}");
             // 所有客户端都可触发场景切换（LoadScene 内部仅 Master 执行 LoadLevel，
             // AutomaticallySyncScene 会自动同步到其他客户端）
             _net.LoadScene(SceneLoader.GAME_SCENE);

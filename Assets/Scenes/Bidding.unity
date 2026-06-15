@@ -481,6 +481,7 @@ GameObject:
   - component: {fileID: 327994272}
   - component: {fileID: 327994271}
   - component: {fileID: 327994275}
+  - component: {fileID: 327994276}
   m_Layer: 5
   m_Name: Bid1Button
   m_TagString: Untagged
@@ -622,6 +623,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &327994276
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 327994270}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &420111218
 GameObject:
   m_ObjectHideFlags: 0
@@ -1763,6 +1779,7 @@ GameObject:
   - component: {fileID: 1029422446}
   - component: {fileID: 1029422445}
   - component: {fileID: 1029422449}
+  - component: {fileID: 1029422450}
   m_Layer: 5
   m_Name: ConfirmButton
   m_TagString: Untagged
@@ -1904,6 +1921,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1029422450
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1029422444}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1050496635
 GameObject:
   m_ObjectHideFlags: 0
@@ -2138,6 +2170,7 @@ GameObject:
   - component: {fileID: 1307290646}
   - component: {fileID: 1307290645}
   - component: {fileID: 1307290649}
+  - component: {fileID: 1307290650}
   m_Layer: 5
   m_Name: Bid3Button
   m_TagString: Untagged
@@ -2279,6 +2312,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1307290650
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1307290644}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1448993174
 GameObject:
   m_ObjectHideFlags: 0
@@ -2428,6 +2476,7 @@ GameObject:
   - component: {fileID: 1477244803}
   - component: {fileID: 1477244802}
   - component: {fileID: 1477244806}
+  - component: {fileID: 1477244807}
   m_Layer: 5
   m_Name: PassButton
   m_TagString: Untagged
@@ -2569,6 +2618,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1477244807
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1477244801}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1515822046
 GameObject:
   m_ObjectHideFlags: 0
@@ -2749,6 +2813,7 @@ GameObject:
   - component: {fileID: 1604225857}
   - component: {fileID: 1604225856}
   - component: {fileID: 1604225860}
+  - component: {fileID: 1604225861}
   m_Layer: 5
   m_Name: Bid2Button
   m_TagString: Untagged
@@ -2890,6 +2955,21 @@ MonoBehaviour:
     color: {r: 1, g: 1, b: 1, a: 1}
     interactable: 1
     text: 
+--- !u!114 &1604225861
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1604225855}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 892c2c5e90f27294c80ea7443e5152d1, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  clickClip: {fileID: 0}
+  hoverClip: {fileID: 0}
+  volumeScale: 1
 --- !u!1 &1611778115
 GameObject:
   m_ObjectHideFlags: 0

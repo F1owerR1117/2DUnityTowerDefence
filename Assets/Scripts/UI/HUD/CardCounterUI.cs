@@ -65,7 +65,7 @@ namespace DoudizhuTower.UI.HUD
             {
                 int discarded = counter.GetValueOrDefault(cell.rank, 0);
                 int total = _deck.GetTotalPerRank(cell.rank);
-                int remaining = total - discarded;
+                int remaining = Mathf.Max(0, total - discarded); // 兜底：联机模式 Master/Client 牌堆不同步时防止负值
                 bool exhausted = remaining <= 0;
 
                 if (cell.countText != null)
@@ -80,7 +80,7 @@ namespace DoudizhuTower.UI.HUD
             }
 
             if (deckRemainingLabel != null)
-                deckRemainingLabel.text = $"牌堆: {_deck.Remaining}";
+                deckRemainingLabel.text = $"牌堆: {_deck.NetworkRemaining}";
             else
                 Debug.LogWarning("[CardCounter] deckRemainingLabel 为空");
         }

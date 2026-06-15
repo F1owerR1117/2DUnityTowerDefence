@@ -44,7 +44,6 @@ namespace DoudizhuTower.UI
             if (collectionButton != null)
             {
                 collectionButton.onClick.AddListener(OnCollection);
-                collectionButton.interactable = false; // 暂未实现
             }
             if (settingsButton != null)
                 settingsButton.onClick.AddListener(OnSettings);
@@ -90,8 +89,7 @@ namespace DoudizhuTower.UI
 
         private void OnCollection()
         {
-            // TODO: 图鉴场景实现后启用
-            Debug.Log("[MainMenu] 图鉴功能暂未实现");
+            SceneLoader.LoadCodex();
         }
 
         // ─── 设置面板 ───

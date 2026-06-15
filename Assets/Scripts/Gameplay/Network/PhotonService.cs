@@ -54,9 +54,9 @@ namespace DoudizhuTower.Gameplay.Network
                 // 增大断线超时，防止应用失焦时被服务端踢出
                 PhotonNetwork.NetworkingClient.LoadBalancingPeer.DisconnectTimeout = 30000;
 
-                // 固定区域：确保所有客户端连接到同一区域，避免房间不可见
+                // 固定区域：中国区（Photon China SDK）
                 if (string.IsNullOrEmpty(PhotonNetwork.PhotonServerSettings.AppSettings.FixedRegion))
-                    PhotonNetwork.PhotonServerSettings.AppSettings.FixedRegion = "jp";
+                    PhotonNetwork.PhotonServerSettings.AppSettings.FixedRegion = "cn";
 
                 PhotonNetwork.ConnectUsingSettings();
             }
@@ -175,7 +175,7 @@ namespace DoudizhuTower.Gameplay.Network
                     if (!p.CustomProperties.TryGetValue(READY_KEY, out val) || (bool)val != true)
                         return false;
                 }
-                return PhotonNetwork.PlayerList.Length >= 3;
+                return true;
             }
         }
 
@@ -239,6 +239,12 @@ namespace DoudizhuTower.Gameplay.Network
             return actors;
         }
 
+        public int GetActorNumberAtPosition(int position)
+        {
+            if (!PhotonNetwork.InRoom || position < 0 || position >= PhotonNetwork.PlayerList.Length) return -1;
+            return PhotonNetwork.PlayerList[position].ActorNumber;
+        }
+
         // ─── 事件 ───
 
         public event Action OnServerConnected;
@@ -249,7 +255,9 @@ namespace DoudizhuTower.Gameplay.Network
         public event Action<string> OnPlayerJoined;
         public event Action<string> OnPlayerLeft;
         public event Action OnAllPlayersReady;
+        public event Action OnPlayerReadyChanged;
         public event Action<string, object, int> OnCustomEvent;
+        public event Action OnMasterSwitched;
 
         // ─── Photon 回调 ───
 
@@ -325,16 +333,25 @@ namespace DoudizhuTower.Gameplay.Network
             OnPlayerLeft?.Invoke(otherPlayer.NickName);
         }
 
+        public override void OnMasterClientSwitched(Player newMasterClient)
+        {
+            Debug.Log($"[Photon] Master 切换: 新 Master = {newMasterClient.NickName} (Actor {newMasterClient.ActorNumber})");
+            OnMasterSwitched?.Invoke();
+        }
+
         public override void OnPlayerPropertiesUpdate(Player targetPlayer, ExitGames.Client.Photon.Hashtable changedProps)
         {
             if (changedProps.ContainsKey(READY_KEY))
+            {
+                OnPlayerReadyChanged?.Invoke();
                 CheckAllReady();
+            }
         }
 
         private bool _callbackRegistered;
         private bool _shouldRejoinRoom;
 
-        private void OnEnable()
+        public override void OnEnable()
         {
             if (PhotonNetwork.NetworkingClient != null)
             {
@@ -344,7 +361,7 @@ namespace DoudizhuTower.Gameplay.Network
             }
         }
 
-        private void OnDisable()
+        public override void OnDisable()
         {
             if (_callbackRegistered && PhotonNetwork.NetworkingClient != null)
             {

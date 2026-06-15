@@ -4,37 +4,26 @@ using UnityEngine;
 
 public static class CreateUnitAnimatorController
 {
-    [MenuItem("Tools/创建兵种 Animator Controller")]
-    private static void Create()
+    [MenuItem("Tools/生成兵种 Animator Controller")]
+    private static void CreateOrUpdate()
     {
         string dir = "Assets/Animations";
         string ctrlPath = $"{dir}/UnitBaseController.controller";
 
+        // 如果已存在，先删除旧的
         if (AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(ctrlPath) != null)
         {
-            Debug.Log("[Animator] UnitBaseController 已存在，跳过创建。使用 Tools → 更新兵种 Animator Controller 添加新状态");
-            Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>(ctrlPath);
-            return;
+            AssetDatabase.DeleteAsset(ctrlPath);
+            Debug.Log("[Animator] 已删除旧的 UnitBaseController，重新创建");
         }
 
         CreateInternal(dir, ctrlPath);
-    }
-
-    [MenuItem("Tools/更新兵种 Animator Controller")]
-    private static void Update()
-    {
-        string dir = "Assets/Animations";
-        string ctrlPath = $"{dir}/UnitBaseController.controller";
-
-        // 删除旧的，重新创建
-        AssetDatabase.DeleteAsset(ctrlPath);
-        CreateInternal(dir, ctrlPath);
-        Debug.Log("[Animator] UnitBaseController 已更新（含 BOSS 技能状态）");
+        Debug.Log("[Animator] UnitBaseController 已创建（含 BOSS 技能状态）");
+        Selection.activeObject = AssetDatabase.LoadAssetAtPath<Object>(ctrlPath);
     }
 
     private static void CreateInternal(string dir, string ctrlPath)
     {
-
         if (!AssetDatabase.IsValidFolder(dir))
             AssetDatabase.CreateFolder("Assets", "Animations");
 
@@ -122,7 +111,6 @@ public static class CreateUnitAnimatorController
 
         AssetDatabase.SaveAssets();
         Debug.Log($"[Animator] 已创建 {ctrlPath}，含 3 个基础状态 + {triggers.Length} 个 Trigger 特效 + {bools.Length} 个 Bool 特效");
-        Selection.activeObject = ctrl;
     }
 
     /// <summary>

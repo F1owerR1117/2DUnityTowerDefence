@@ -144,7 +144,9 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>治疗（不超过 MaxHP）</summary>
         public void Heal(float amount)
         {
-            if (!IsAlive || amount <= 0f) return;
+            // v2.0: 仅 Master 端修改 HP
+            if (!SimulatesCombat) return;
+            if (amount <= 0f) return;
             _currentHP = Mathf.Min(_currentHP + amount, Stats.HP);
             OnHPChanged?.Invoke(_unitId, _currentHP);
         }
@@ -175,11 +177,19 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>不可选取状态（BossSkillSystem 施法期间设置，免疫所有伤害）</summary>
         public bool Invulnerable { get; set; }
 
-        /// <summary>眩晕计时器（>0 时无法行动），由骑兵等技能设置</summary>
+        /// <summary>眩晕计时器（>0 时无法行动），由骑兵等技能设置。仅 Master 写入。</summary>
         public float StunTimer { get; set; }
+
+        /// <summary>Client 端视觉眩晕计时器（仅用于动画表现，不参与逻辑判断）</summary>
+        public float VisualStunTimer { get; set; }
 
         /// <summary>伤害减免乘数（0=无减免，0.5=减半），由重骑兵/铁骑兵设置</summary>
         public float DamageReduction { get; set; }
+
+        /// <summary>是否参与战斗模拟（Master=true, Client 联机=false）。Client 仅做视觉表现。</summary>
+        public bool SimulatesCombat { get; set; } = true;
+        /// <summary>新生成单位的默认 SimulatesCombat 值（由 NetworkGameManager 设置）</summary>
+        public static bool SimulatesCombatDefault { get; set; } = true;
 
         /// <summary>撕裂层数（由 UnitPassives 管理）</summary>
         public int TearStacks { get; set; }
@@ -215,6 +225,8 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>应用/更新一个命名 Buff，自动从基础属性重新计算最终 Stats。</summary>
         public void ApplyBuff(string buffId, StatBuff buff)
         {
+            // v2.0: 仅 Master 端修改 Buff 状态
+            if (!SimulatesCombat) return;
             if (!_hasBaseStats) { _baseStats = Stats; _hasBaseStats = true; }
             _buffs[buffId] = buff;
             RecalculateStats();
@@ -223,6 +235,8 @@ namespace DoudizhuTower.Gameplay.Entities
         /// <summary>移除指定 Buff。</summary>
         public void RemoveBuff(string buffId)
         {
+            // v2.0: 仅 Master 端修改 Buff 状态
+            if (!SimulatesCombat) return;
             if (_buffs.Remove(buffId))
                 RecalculateStats();
         }
@@ -243,7 +257,8 @@ namespace DoudizhuTower.Gameplay.Entities
             }
             Stats = s;
             _currentHP = Stats.HP * hpRatio;
-            OnHPChanged?.Invoke(_unitId, _currentHP);
+            // v2.0: 属性变化触发 OnStatsChanged，不触发 OnHPChanged
+            OnStatsChanged?.Invoke();
         }
 
         /// <summary>
@@ -374,6 +389,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         // 事件
         public event Action<int, float> OnHPChanged;    // unitId, newHP
+        /// <summary>属性变化事件（Buff 应用/移除/属性重算时触发）</summary>
+        public event Action OnStatsChanged;
         public event Action<int> OnDied;                // unitId
         /// <summary>IBuildingTarget 摧毁事件（仅 _isBuilding=true 时触发）</summary>
         public event Action<IBuildingTarget> OnDestroyed;
@@ -496,6 +513,7 @@ namespace DoudizhuTower.Gameplay.Entities
             Target = null;
             _enemyUnits = null;
             _enemyBuildings = null;
+            SimulatesCombat = SimulatesCombatDefault;
 
             _baseScale = transform.localScale;
             _needsFirstFrameSearch = true;
@@ -570,8 +588,8 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             if (!IsAlive) return;
 
-            // 建筑回血（仅 _isBuilding 时生效）
-            if (_isBuilding && _regenPerSecond > 0f && _currentHP < Stats.HP)
+            // v2.0: 建筑回血仅在 Master 端执行
+            if (SimulatesCombat && _isBuilding && _regenPerSecond > 0f && _currentHP < Stats.HP)
             {
                 _currentHP = Mathf.Min(Stats.HP, _currentHP + _regenPerSecond * Time.deltaTime);
                 OnHPChanged?.Invoke(_unitId, _currentHP);
@@ -599,8 +617,8 @@ namespace DoudizhuTower.Gameplay.Entities
                 }
             }
 
-            // 眩晕递减，眩晕期间不执行任何行为
-            if (StunTimer > 0f)
+            // v2.0: 眩晕递减仅在 Master 端执行
+            if (SimulatesCombat && StunTimer > 0f)
             {
                 StunTimer -= Time.deltaTime;
                 InterruptAttack();
@@ -646,9 +664,24 @@ namespace DoudizhuTower.Gameplay.Entities
             // 建筑静止：不移动、不攻击、不索敌
             if (_isBuilding) return;
 
+            // ── Client 视觉模式：只做路径行军，不做战斗决策 ──
+            if (!SimulatesCombat)
+            {
+                UpdateAnimatorState(1);
+                MoveTowardEnemyBase();
+                return;
+            }
+
             // ── 攻击中 → 等待动画和伤害都完成 ──
             if (_isAttacking)
             {
+                // 目标已死 → 立即中断攻击，防止空放动画
+                if (_attackTarget != null && !_attackTarget.IsAlive)
+                {
+                    InterruptAttack();
+                    return;
+                }
+
                 // 超时安全阀：攻击状态超过 AttackInterval×3 秒未完成 → 强制重置
                 if (_attackStateTimer > Stats.AttackInterval * 3f)
                 {
@@ -659,19 +692,23 @@ namespace DoudizhuTower.Gameplay.Entities
                 {
                     _attackStateTimer += Time.deltaTime;
 
-                    // 嘲讽可以打断当前攻击（仅当嘲讽目标与当前攻击目标不同时才打断）
-                    var tauntDuringAttack = FindNearestTauntSourceFor(this);
-                    if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
+                    // 施法期间（Invulnerable）不允许被打断
+                    if (!Invulnerable)
                     {
-                        InterruptAttack();
-                        Target = tauntDuringAttack;
-                    }
-                    // 建筑攻击期间目标超出射程 → 中断攻击，防止空挥
-                    else if (_attackTarget == null && CurrentTarget != null
-                        && (CurrentTarget.IsDestroyed || GetEdgeDistance(CurrentTarget) > Stats.Range))
-                    {
-                        InterruptAttack();
-                        CurrentTarget = null;
+                        // 嘲讽可以打断当前攻击（仅当嘲讽目标与当前攻击目标不同时才打断）
+                        var tauntDuringAttack = FindNearestTauntSourceFor(this);
+                        if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
+                        {
+                            InterruptAttack();
+                            Target = tauntDuringAttack;
+                        }
+                        // 建筑攻击期间目标超出射程 → 中断攻击，防止空挥
+                        else if (_attackTarget == null && CurrentTarget != null
+                            && (CurrentTarget.IsDestroyed || GetEdgeDistance(CurrentTarget) > Stats.Range))
+                        {
+                            InterruptAttack();
+                            CurrentTarget = null;
+                        }
                     }
                     else
                     {

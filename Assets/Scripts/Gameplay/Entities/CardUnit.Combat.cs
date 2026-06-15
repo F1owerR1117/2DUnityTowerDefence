@@ -242,9 +242,30 @@ namespace DoudizhuTower.Gameplay.Entities
             SetAnimSpeed(speed);
             UpdateAnimatorState(2);
 
+            // Master 广播攻击事件（Client 播放攻击动画）
+            BroadcastAttack(target);
+
             // 伤害由协程在 AttackInterval 秒后精确触发
             if (_hitCoroutine != null) StopCoroutine(_hitCoroutine);
             _hitCoroutine = StartCoroutine(HitFrameCoroutine(interval));
+        }
+
+        /// <summary>广播攻击事件（仅 Master 调用）</summary>
+        private void BroadcastAttack(CardUnit target)
+        {
+            if (!SimulatesCombat) return;
+            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
+            if (ngm != null)
+                ngm.BroadcastUnitAttack(UnitId, target != null ? target.UnitId : 0);
+        }
+
+        /// <summary>广播受击事件（仅 Master 调用）</summary>
+        private void BroadcastHit(float damage, DamageType type)
+        {
+            if (!SimulatesCombat) return;
+            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
+            if (ngm != null)
+                ngm.BroadcastUnitHit(UnitId, damage, VisualCenter);
         }
 
         /// <summary>
@@ -426,6 +447,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         public virtual void TakeDamage(float rawDamage, DamageType type)
         {
+            if (!SimulatesCombat) return; // Client 不处理伤害
             if (!IsAlive) return;
             if (Invulnerable) return;
 
@@ -439,6 +461,10 @@ namespace DoudizhuTower.Gameplay.Entities
                 }
                 _currentHP -= rawDamage;
                 OnHPChanged?.Invoke(_unitId, _currentHP);
+
+                // Master 广播受击事件（Client 播放受击动画+飘字）
+                BroadcastHit(rawDamage, type);
+
                 if (_currentHP <= 0f) { _currentHP = 0f; Die(); }
                 return;
             }
@@ -493,6 +519,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _currentHP -= finalDamage;
             OnHPChanged?.Invoke(_unitId, _currentHP);
 
+            // Master 广播受击事件（Client 播放受击动画+飘字）
+            BroadcastHit(finalDamage, type);
+
             if (_currentHP <= 0f)
             {
                 _currentHP = 0f;
@@ -512,6 +541,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _currentHP -= finalDamage;
             OnHPChanged?.Invoke(_unitId, _currentHP);
 
+            // Master 广播受击事件（Client 播放受击动画+飘字）
+            BroadcastHit(finalDamage, DamageType.Physical);
+
             if (_currentHP <= 0f)
             {
                 _currentHP = 0f;
@@ -523,6 +555,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         public virtual void Die()
         {
+            if (!SimulatesCombat) return; // Client 不触发死亡，由 Master 广播驱动
             _isDying = true;
 
             if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
@@ -548,6 +581,24 @@ namespace DoudizhuTower.Gameplay.Entities
                 OnDestroyed?.Invoke(this);
 
             // 播放死亡动画，动画播完后触发 OnDied（回收到对象池）
+            StartCoroutine(PlayDeathAnimCoroutine(() =>
+            {
+                OnDied?.Invoke(_unitId);
+            }));
+        }
+
+        /// <summary>
+        /// Client 端视觉死亡（仅播动画+回收，不触发战斗死亡管线）。
+        /// 由 Master 广播 UNIT_DIED 驱动。
+        /// </summary>
+        public void VisualDeath()
+        {
+            if (!IsAlive || _isDying) return;
+            _isDying = true;
+            _currentHP = 0f;
+            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
+            _isAttacking = false;
+            SetAnimSpeed(1f);
             StartCoroutine(PlayDeathAnimCoroutine(() =>
             {
                 OnDied?.Invoke(_unitId);

@@ -62,6 +62,7 @@ namespace DoudizhuTower.UI.Hand
 
         /// <summary>玩家请求出牌事件（参数：选中牌组, 牌型结果, 路线组）</summary>
         public event Action<Card[], CardTypeResult, RouteGroup> OnPlayRequest;
+        public event Action<Card> OnCardDiscarded;
 
         /// <summary>手牌变化事件（用于领域系统检查新牌封印状态）</summary>
         public event Action OnHandChanged;
@@ -114,6 +115,14 @@ namespace DoudizhuTower.UI.Hand
             bool multi = _routeGroup != null && _routeGroup.RouteCount > 1;
             if (prevRouteButton != null) prevRouteButton.interactable = multi;
             if (nextRouteButton != null) nextRouteButton.interactable = multi;
+        }
+
+        public void SetRouteUIVisible(bool visible)
+        {
+            if (prevRouteButton != null) prevRouteButton.gameObject.SetActive(visible);
+            if (nextRouteButton != null) nextRouteButton.gameObject.SetActive(visible);
+            if (routeLabel != null) routeLabel.gameObject.SetActive(visible);
+            if (routeIndicator != null) routeIndicator.gameObject.SetActive(visible);
         }
 
         public void RefreshHand(List<Card> cards)
@@ -274,6 +283,7 @@ namespace DoudizhuTower.UI.Hand
             _boundHand.RemoveRange(new[] { widget.BoundCard });
 
             _deck?.Discard(widget.BoundCard);
+            OnCardDiscarded?.Invoke(widget.BoundCard);
             _discardCount++;
 
             if (discardCounterLabel != null)

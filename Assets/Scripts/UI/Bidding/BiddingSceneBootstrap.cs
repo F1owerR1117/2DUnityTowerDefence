@@ -15,15 +15,17 @@ namespace DoudizhuTower.UI.Bidding
 
         private void Awake()
         {
-            bool isNetwork = NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom;
+            bool hasInstance = NetworkManager.Instance != null;
+            bool isInRoom = hasInstance && NetworkManager.Instance.IsInRoom;
+            bool isNetwork = hasInstance && isInRoom;
+
+            Debug.Log($"[BiddingBootstrap] NetworkManager.Instance={hasInstance}, IsInRoom={isInRoom}, 模式={(isNetwork ? "联机" : "单机")}");
 
             if (singlePlayerManager != null)
                 singlePlayerManager.gameObject.SetActive(!isNetwork);
 
             if (networkManager != null)
                 networkManager.gameObject.SetActive(isNetwork);
-
-            Debug.Log($"[BiddingBootstrap] 模式: {(isNetwork ? "联机" : "单机")}");
         }
     }
 }

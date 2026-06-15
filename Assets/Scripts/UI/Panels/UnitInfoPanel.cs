@@ -36,6 +36,7 @@ namespace DoudizhuTower.UI.Panels
             _cam = Camera.main;
 
             _unit.OnHPChanged += OnUnitHPChanged;
+            _unit.OnStatsChanged += OnUnitStatsChanged;
             _unit.OnDied += OnUnitDied;
 
             Refresh();
@@ -47,6 +48,7 @@ namespace DoudizhuTower.UI.Panels
             if (_unit != null)
             {
                 _unit.OnHPChanged -= OnUnitHPChanged;
+                _unit.OnStatsChanged -= OnUnitStatsChanged;
                 _unit.OnDied -= OnUnitDied;
                 _unit = null;
             }
@@ -106,7 +108,12 @@ namespace DoudizhuTower.UI.Panels
         private void OnUnitHPChanged(int unitId, float newHP)
         {
             if (_unit == null) return;
-            // HP 变化时刷新所有属性（Buff 改变也会触发 RecalculateStats → OnHPChanged）
+            Refresh();
+        }
+
+        private void OnUnitStatsChanged()
+        {
+            if (_unit == null) return;
             Refresh();
         }
 
