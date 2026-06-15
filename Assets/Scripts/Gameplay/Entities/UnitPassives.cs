@@ -519,7 +519,9 @@ namespace DoudizhuTower.Gameplay.Entities
                     Vector2 pushDir = enemy.VisualCenter - _owner.VisualCenter;
                     if (pushDir.sqrMagnitude < 0.001f)
                         pushDir = Random.insideUnitCircle.normalized;
-                    StartCoroutine(KnockbackCoroutine(enemy, pushDir.normalized));
+                    // v2.0: 仅 Master 端执行击退
+                    if (_owner.SimulatesCombat)
+                        StartCoroutine(KnockbackCoroutine(enemy, pushDir.normalized));
                 }
             }
         }
@@ -694,8 +696,12 @@ namespace DoudizhuTower.Gameplay.Entities
                 Vector2 pushDir = enemy.VisualCenter - _owner.VisualCenter;
                 if (pushDir.sqrMagnitude < 0.001f)
                     pushDir = Random.insideUnitCircle.normalized;
-                enemy.transform.position += (Vector3)(pushDir.normalized);
-                enemy.TakeDamage(_owner.Stats.ATK * shockwaveDamagePct, DamageType.Physical);
+                // v2.0: 仅 Master 端执行击退和伤害
+                if (_owner.SimulatesCombat)
+                {
+                    enemy.transform.position += (Vector3)(pushDir.normalized);
+                    enemy.TakeDamage(_owner.Stats.ATK * shockwaveDamagePct, DamageType.Physical);
+                }
             }
         }
 

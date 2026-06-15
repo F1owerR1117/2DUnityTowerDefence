@@ -22,6 +22,8 @@ namespace DoudizhuTower.Gameplay.Battle
 
         [Header("BOSS 路线")]
         [SerializeField] private RoutePath _bossRoute;
+        [Tooltip("玩家主堡到 BOSS 的路线（BOSS 激活后解锁，使玩家可派兵攻打 BOSS）")]
+        [SerializeField] private RoutePath _playerRouteToBoss;
 
         [Header("召唤师能力（需手动挂载 BuildingAI + SpawnPool + RouteGroup）")]
         [Tooltip("启用后 BOSS 会自动出牌生成兵种")]
@@ -132,6 +134,10 @@ namespace DoudizhuTower.Gameplay.Battle
         {
             if (_activated || _battleManager == null || _bossUnit == null) return;
             _activated = true;
+
+            // 0. 解锁 BOSS 相关路线（玩家可手动切换选择）
+            if (_bossRoute != null) _bossRoute.Unlock();
+            if (_playerRouteToBoss != null) _playerRouteToBoss.Unlock();
 
             // 1. 激活 BOSS 战斗行为，注入路径/目标
             _battleManager.ActivateBoss(_bossUnit, _bossRoute);

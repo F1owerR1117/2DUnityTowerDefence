@@ -157,7 +157,7 @@ namespace DoudizhuTower.Gameplay.Entities
                 if (clip != null)
                     _animator.SetTrigger(name);
             }
-            // 如果没有配置，不触发，避免动画异常
+            // 没有配置时不触发，避免动画异常
         }
 
         /// <summary>
@@ -178,6 +178,33 @@ namespace DoudizhuTower.Gameplay.Entities
                     _animator.SetBool(name, value);
             }
             // 如果没有配置，不设置，避免动画异常
+        }
+
+        /// <summary>
+        /// 获取指定动画的长度（秒）。
+        /// 用于 BOSS 技能施法时间自动同步。
+        /// </summary>
+        public float GetClipLength(string name)
+        {
+            if (_clipMap == null) return 0f;
+
+            string nameLower = name.ToLower();
+            if (_clipMap.TryGetValue(nameLower, out var clip) && clip != null)
+                return clip.length;
+
+            return 0f;
+        }
+
+        /// <summary>
+        /// 获取当前播放的动画状态名称。
+        /// </summary>
+        public string GetCurrentStateName()
+        {
+            if (_animator == null || !_animator.isActiveAndEnabled) return "";
+
+            var stateInfo = _animator.GetCurrentAnimatorStateInfo(0);
+            // 简化处理：返回默认状态名称
+            return "Idle";
         }
     }
 }

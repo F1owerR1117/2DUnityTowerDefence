@@ -147,7 +147,7 @@ namespace DoudizhuTower.Gameplay.Entities
             var vfx = VFXManager.Instance?.SpawnVFX(shockwaveVFX, position, null, shockwaveDuration);
             if (vfx != null)
             {
-                float scale = radius / 3f;
+                float scale = radius / 2f;
                 vfx.transform.localScale = Vector3.one * scale;
             }
         }
@@ -164,18 +164,20 @@ namespace DoudizhuTower.Gameplay.Entities
         }
 
         /// <summary>
-        /// 播放君王光环特效。
+        /// 播放君王光环特效（跟随释放者）。
         /// 由 UnitPassives 调用。
         /// </summary>
-        /// <param name="position">光环中心位置</param>
+        /// <param name="target">跟随目标</param>
         /// <param name="radius">光环半径（用于缩放特效）</param>
-        public void PlayKingAura(Vector3 position, float radius = 3f)
+        public void PlayKingAura(Transform target, float radius = 3f)
         {
-            var vfx = VFXManager.Instance?.SpawnVFX(kingAuraVFX, position, null, kingAuraDuration);
+            var vfx = VFXManager.Instance?.SpawnVFX(kingAuraVFX, target.position, target, kingAuraDuration);
             if (vfx != null)
             {
-                float scale = radius / 3f;
+                float scale = radius / 2f;
                 vfx.transform.localScale = Vector3.one * scale;
+                var follower = vfx.AddComponent<FollowTarget>();
+                follower.Initialize(target, Vector3.zero);
             }
         }
 
@@ -200,10 +202,16 @@ namespace DoudizhuTower.Gameplay.Entities
         /// 由 UnitPassives 调用。
         /// </summary>
         /// <param name="position">燃烧位置</param>
+        /// <param name="radius">火海半径（用于缩放特效）</param>
         /// <param name="duration">持续时间</param>
-        public void PlayBurn(Vector3 position, float duration = 3f)
+        public void PlayBurn(Vector3 position, float radius = 2f, float duration = 3f)
         {
-            VFXManager.Instance?.SpawnVFX(burnVFX, position, null, duration);
+            var vfx = VFXManager.Instance?.SpawnVFX(burnVFX, position, null, duration);
+            if (vfx != null)
+            {
+                float scale = radius / 2f;
+                vfx.transform.localScale = Vector3.one * scale;
+            }
         }
 
         /// <summary>
@@ -262,7 +270,7 @@ namespace DoudizhuTower.Gameplay.Entities
             var vfx = VFXManager.Instance?.SpawnVFX(tauntAuraVFX, target.position, target, 0f, false);
             if (vfx != null)
             {
-                float scale = radius / 3f;
+                float scale = radius / 2f;
                 vfx.transform.localScale = Vector3.one * scale;
                 var follower = vfx.AddComponent<FollowTarget>();
                 follower.Initialize(target, Vector3.zero);

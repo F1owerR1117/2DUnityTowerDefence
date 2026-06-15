@@ -127,6 +127,12 @@ namespace DoudizhuTower.Gameplay.Network
 
         public int LocalActorNumber => _actorNumber;
         public int[] GetPlayerActorNumbers() => LocalNetworkHub.GetAllActorNumbers();
+        public int GetActorNumberAtPosition(int position)
+        {
+            var actors = GetPlayerActorNumbers();
+            if (position < 0 || position >= actors.Length) return -1;
+            return actors[position];
+        }
 
         // ─── 事件 ───
 
@@ -138,6 +144,7 @@ namespace DoudizhuTower.Gameplay.Network
         public event Action<string> OnPlayerJoined;
         public event Action<string> OnPlayerLeft;
         public event Action OnAllPlayersReady;
+        public event Action OnPlayerReadyChanged;
         public event Action<string, object, int> OnCustomEvent;
         public event Action OnMasterSwitched;
     }

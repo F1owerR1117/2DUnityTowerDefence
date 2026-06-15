@@ -1,3 +1,4 @@
+using System;
 using DoudizhuTower.Core.Cards;
 
 namespace DoudizhuTower.Gameplay.Network
@@ -24,7 +25,8 @@ namespace DoudizhuTower.Gameplay.Network
         public const string PLAY_REJECTED = "PLAY_REJECTED";
 
         // 抽牌
-        public const string DRAW_CARD = "DRAW_CARD";
+        public const string DRAW_CARD = "DRAW_CARD";            // 客户端 → Master：请求摸牌
+        public const string DRAW_CARD_RESULT = "DRAW_CARD_RESULT"; // Master → 所有客户端：摸牌结果
 
         // 领域系统
         public const string DOMAIN_ACTIVATE = "DOMAIN_ACTIVATE";
@@ -59,6 +61,28 @@ namespace DoudizhuTower.Gameplay.Network
         public const string HP_CHECKSUM = "HP_CHECKSUM";             // Master 定期广播 HP 校验和
         public const string HP_CORRECTION = "HP_CORRECTION";         // Master 广播完整 HP 修正数据
         public const string UNIT_DIED = "UNIT_DIED";                 // Master 广播单位死亡（Client 播放死亡动画+回收）
+
+        // 战斗表现事件（Master → Client，仅用于视觉表现）
+        public const string UNIT_ATTACK = "UNIT_ATTACK";             // Master 广播单位攻击（Client 播放攻击动画）
+        public const string UNIT_HIT = "UNIT_HIT";                   // Master 广播单位受击（Client 播放受击动画+飘字）
+        public const string UNIT_STUN = "UNIT_STUN";                 // Master 广播眩晕状态（Client 播放眩晕特效）
+        public const string UNIT_KNOCKBACK = "UNIT_KNOCKBACK";       // Master 广播击退（Client 播放击退动画）
+
+        // 快照同步
+        public const string SNAPSHOT_PUSH = "SNAPSHOT_PUSH";
+
+        // 弃牌同步
+        public const string CARD_DISCARDED = "CARD_DISCARDED";
+
+        // 新牌堆
+        public const string NEW_DECK = "NEW_DECK";
+
+        // 游戏开始（收敛门）
+        public const string GAME_START = "GAME_START";
+
+        // 运行期自愈
+        public const string RECONCILE_REQUEST = "RECONCILE_REQ";
+        public const string SNAPSHOT_RESPONSE = "SNAPSHOT_RESP";
 
         // 房间管理
         public const string ADD_AI = "ADD_AI";
@@ -114,6 +138,14 @@ namespace DoudizhuTower.Gameplay.Network
             }
             return result;
         }
+
+        // ─── 安全拆箱工具 ───
+
+        public static int SafeInt(object o) => Convert.ToInt32(o ?? 0);
+        public static float SafeFloat(object o) => Convert.ToSingle(o ?? 0f);
+
+        /// <summary>Tick 有效性校验（必须 > 0）</summary>
+        public static bool IsValidTick(this int tick) => tick > 0;
 
         // ─── 玩家槽位工具 ───
 

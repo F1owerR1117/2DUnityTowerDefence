@@ -105,6 +105,16 @@ namespace DoudizhuTower.Gameplay.Entities
 
         #endregion
 
+        #region 公开访问器
+
+        /// <summary>获取受击音效 Clip（供网络同步使用）</summary>
+        public AudioClip GetHitClip() => hitClip;
+
+        /// <summary>获取死亡音效 Clip（供网络同步使用）</summary>
+        public AudioClip GetDeathClip() => deathClip;
+
+        #endregion
+
         #region 生命周期
 
         private void Awake()
@@ -178,6 +188,51 @@ namespace DoudizhuTower.Gameplay.Entities
         private void OnDeath()
         {
             // 死亡不检查可见性，走高优先级
+            var audio = AudioManager.Instance;
+            if (audio == null) return;
+
+            if (deathClip != null)
+                audio.PlayCombatHigh(deathClip, volumeScale);
+        }
+
+        #endregion
+
+        #region 网络事件播放（Client 端使用）
+
+        /// <summary>Client 端播放攻击音效（由 NetworkGameManager.HandleUnitAttack 调用）</summary>
+        public void PlayAttackNetwork()
+        {
+            if (_unit != null && !_unit.SimulatesCombat)
+            {
+                // Client 端：检查可见性后播放
+                if (!CanPlay()) return;
+            }
+
+            if (_unit != null && _unit.IsRanged)
+            {
+                PlayWithLimit(attackRangedClip, SfxChannel.CombatLow);
+            }
+            else if (attackMeleeClips != null && attackMeleeClips.Length > 0)
+            {
+                int frame = _unit != null ? _unit.CurrentHitFrame : 0;
+                int index = Mathf.Clamp(frame, 0, attackMeleeClips.Length - 1);
+                PlayWithLimit(attackMeleeClips[index], SfxChannel.CombatLow);
+            }
+        }
+
+        /// <summary>Client 端播放受击音效（由 NetworkGameManager.HandleUnitHit 调用）</summary>
+        public void PlayHitNetwork()
+        {
+            var audio = AudioManager.Instance;
+            if (audio == null) return;
+
+            if (hitClip != null)
+                audio.PlayCombat(hitClip, hitVolumeScale * volumeScale);
+        }
+
+        /// <summary>Client 端播放死亡音效（由 NetworkGameManager.HandleUnitDied 调用）</summary>
+        public void PlayDeathNetwork()
+        {
             var audio = AudioManager.Instance;
             if (audio == null) return;
 

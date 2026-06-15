@@ -80,7 +80,7 @@ namespace DoudizhuTower.UI.HUD
             }
 
             if (deckRemainingLabel != null)
-                deckRemainingLabel.text = $"牌堆: {_deck.Remaining}";
+                deckRemainingLabel.text = $"牌堆: {_deck.NetworkRemaining}";
             else
                 Debug.LogWarning("[CardCounter] deckRemainingLabel 为空");
         }

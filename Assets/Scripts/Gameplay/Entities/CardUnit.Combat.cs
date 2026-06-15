@@ -242,9 +242,30 @@ namespace DoudizhuTower.Gameplay.Entities
             SetAnimSpeed(speed);
             UpdateAnimatorState(2);
 
+            // Master 广播攻击事件（Client 播放攻击动画）
+            BroadcastAttack(target);
+
             // 伤害由协程在 AttackInterval 秒后精确触发
             if (_hitCoroutine != null) StopCoroutine(_hitCoroutine);
             _hitCoroutine = StartCoroutine(HitFrameCoroutine(interval));
+        }
+
+        /// <summary>广播攻击事件（仅 Master 调用）</summary>
+        private void BroadcastAttack(CardUnit target)
+        {
+            if (!SimulatesCombat) return;
+            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
+            if (ngm != null)
+                ngm.BroadcastUnitAttack(UnitId, target != null ? target.UnitId : 0);
+        }
+
+        /// <summary>广播受击事件（仅 Master 调用）</summary>
+        private void BroadcastHit(float damage, DamageType type)
+        {
+            if (!SimulatesCombat) return;
+            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
+            if (ngm != null)
+                ngm.BroadcastUnitHit(UnitId, damage, VisualCenter);
         }
 
         /// <summary>
@@ -440,6 +461,10 @@ namespace DoudizhuTower.Gameplay.Entities
                 }
                 _currentHP -= rawDamage;
                 OnHPChanged?.Invoke(_unitId, _currentHP);
+
+                // Master 广播受击事件（Client 播放受击动画+飘字）
+                BroadcastHit(rawDamage, type);
+
                 if (_currentHP <= 0f) { _currentHP = 0f; Die(); }
                 return;
             }
@@ -494,6 +519,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _currentHP -= finalDamage;
             OnHPChanged?.Invoke(_unitId, _currentHP);
 
+            // Master 广播受击事件（Client 播放受击动画+飘字）
+            BroadcastHit(finalDamage, type);
+
             if (_currentHP <= 0f)
             {
                 _currentHP = 0f;
@@ -512,6 +540,9 @@ namespace DoudizhuTower.Gameplay.Entities
 
             _currentHP -= finalDamage;
             OnHPChanged?.Invoke(_unitId, _currentHP);
+
+            // Master 广播受击事件（Client 播放受击动画+飘字）
+            BroadcastHit(finalDamage, DamageType.Physical);
 
             if (_currentHP <= 0f)
             {

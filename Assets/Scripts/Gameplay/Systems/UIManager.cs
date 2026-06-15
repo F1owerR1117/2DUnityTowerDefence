@@ -93,18 +93,32 @@ namespace DoudizhuTower.Gameplay.Systems
         /// </summary>
         public static IEnumerator WaitForReady()
         {
+            bool sceneLoaded = IsUISceneLoaded();
+            Debug.Log($"[UIManager] WaitForReady: sceneLoaded={sceneLoaded}, Instance={Instance != null}");
+
             // 场景已加载且 Instance 有效 → 直接返回
-            if (IsUISceneLoaded() && Instance != null) yield break;
+            if (sceneLoaded && Instance != null) yield break;
 
             // 场景被卸载了 → 重新加载
             var op = EnsureSceneLoaded();
+            Debug.Log($"[UIManager] WaitForReady: EnsureSceneLoaded returned {(op != null ? "AsyncOp" : "null")}");
             if (op != null) yield return op;
 
             // 等一帧让 UIManager.Awake / PauseMenu.Awake 执行
             yield return null;
 
+            Debug.Log($"[UIManager] WaitForReady: after wait, sceneLoaded={IsUISceneLoaded()}, Instance={Instance != null}");
+
+            // 超时保护：最多等 10 秒
+            float timeout = 10f;
+            while (Instance == null && timeout > 0f)
+            {
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+
             if (Instance == null)
-                Debug.LogError("[UIManager] UI_Scene 加载后仍未找到 UIManager.Instance，请检查 UI_Scene 场景中是否挂载了 UIManager 脚本");
+                Debug.LogError("[UIManager] UI_Scene 加载超时，UIManager.Instance 仍为 null。跳过等待继续初始化。");
         }
 
         private void CleanupDuplicateEventSystems()

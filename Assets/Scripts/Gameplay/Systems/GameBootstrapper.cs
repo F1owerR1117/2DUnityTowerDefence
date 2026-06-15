@@ -153,6 +153,13 @@ namespace DoudizhuTower.Gameplay.Systems
             // ── Step 3: 发初始手牌 ──────────────────
             int handCapacity = playerIsLandlord ? 20 : 17;
             var playerHand = new CardHand(handCapacity);
+            if (_isNetworkMode)
+            {
+                // 联机模式：按本机槽位跳过前面玩家的牌，与 Master HandlePlayerReady 的偏移一致
+                int skip = GameSession.LocalPlayerId * 7;
+                if (skip > 0)
+                    _mainDeck.Deal(skip, new CardHand(skip));
+            }
             _mainDeck.Deal(7, playerHand);
 
             // 为每个 AI 基地创建独立手牌
@@ -280,6 +287,11 @@ namespace DoudizhuTower.Gameplay.Systems
                     _onPlayRequestHandler = (cards, result, routeGroup) =>
                     {
                         _networkGameManager?.RequestPlayCards(cards, result, routeGroup);
+                    };
+                    // 联机模式：弃牌广播到所有客户端（记牌器同步）
+                    handArea.OnCardDiscarded += (card) =>
+                    {
+                        _networkGameManager?.BroadcastCardDiscarded(card.DeckIndex);
                     };
                 }
                 else
@@ -464,6 +476,7 @@ namespace DoudizhuTower.Gameplay.Systems
                         teammateTempSlotUI?.gameObject.SetActive(false);
                     } else {
                         laneArea?.SetActive(false);
+                        handArea?.SetRouteUIVisible(false);
                     }
                 }
             }

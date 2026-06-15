@@ -12,10 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: deceb9b9ece3270438a01f8727aab9dc, type: 3}
   m_Name: Level_02
   m_EditorClassIdentifier: 
-  levelName: "\u6574\u5907"
-  description: "\u5173\u5361\u63CF\u8FF02"
+  levelName: "\u5173\u5361\u4E8C"
+  description: "\u8FD9\u5173\u662F\u5173\u5361\u4E8C\u3002"
   difficulty: 1
   sceneName: Level_2
-  thumbnail: {fileID: 0}
+  thumbnail: {fileID: -3571278149730965589, guid: af8f1a7e84ca705409ab64436650fee9, type: 3}
   isUnlocked: 1
   sortOrder: 2

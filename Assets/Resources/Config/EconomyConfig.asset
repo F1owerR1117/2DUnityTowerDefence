@@ -12,9 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b815d796a4080ab4c873153b6320cd16, type: 3}
   m_Name: EconomyConfig
   m_EditorClassIdentifier: 
-  initialGold: 50
+  initialGold: 100
   farmerBaseIncome: 5
-  landlordBonusIncome: 2
+  landlordBonusIncome: 5
   incomeStepPerMinute: 1
   suddenDeathMultiplier: 2
   baseCostC3: 10

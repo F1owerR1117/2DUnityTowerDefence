@@ -95,6 +95,9 @@ namespace DoudizhuTower.Core.Cards
             return card;
         }
 
+        /// <summary>UI 显示用的剩余牌数。唯一真相源为 Remaining（TotalCards - _cursor）。</summary>
+        public int NetworkRemaining => Remaining;
+
         public int Deal(int count, CardHand targetHand)
         {
             int dealt = 0;

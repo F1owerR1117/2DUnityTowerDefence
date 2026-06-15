@@ -1,15 +1,17 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Systems
 {
     /// <summary>
     /// 存档系统（基于 PlayerPrefs）。
-    /// 存储玩家金币、首次胜利状态等持久化数据。
+    /// 存储玩家金币、首次胜利状态、图鉴解锁等持久化数据。
     ///
     /// 使用方法：
     /// - SaveSystem.Load() 在游戏启动时调用
     /// - SaveSystem.Save() 在游戏结束/退出时调用
     /// - 通过 SaveSystem.Data 访问当前存档数据
+    /// - SaveSystem.UnlockCodexEntry(id) 解锁图鉴条目
     /// </summary>
     public static class SaveSystem
     {
@@ -17,9 +19,13 @@ namespace DoudizhuTower.Gameplay.Systems
         private const string KEY_FIRST_WIN = "Save_FirstWin";
         private const string KEY_GAMES_PLAYED = "Save_GamesPlayed";
         private const string KEY_GAMES_WON = "Save_GamesWon";
+        private const string CODEX_KEY_PREFIX = "Codex_";
 
         /// <summary>当前存档数据（运行时缓存）</summary>
         public static SaveData Data;
+
+        /// <summary>已解锁的图鉴条目 ID 集合（运行时缓存）</summary>
+        private static readonly HashSet<string> _unlockedCodexEntries = new();
 
         /// <summary>从 PlayerPrefs 加载存档</summary>
         public static void Load()
@@ -69,6 +75,48 @@ namespace DoudizhuTower.Gameplay.Systems
             }
             Save();
         }
+
+        // ─── 图鉴解锁 ───────────────────────────────
+
+        /// <summary>解锁图鉴条目。已解锁时直接返回，不触发写盘。</summary>
+        public static void UnlockCodexEntry(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return;
+            if (_unlockedCodexEntries.Contains(id)) return;
+
+            _unlockedCodexEntries.Add(id);
+            PlayerPrefs.SetInt(CODEX_KEY_PREFIX + id, 1);
+            // 不立即 Save()，由调用方在适当时机批量写盘
+        }
+
+        /// <summary>查询图鉴条目是否已解锁</summary>
+        public static bool IsCodexEntryUnlocked(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return false;
+            return _unlockedCodexEntries.Contains(id)
+                   || PlayerPrefs.GetInt(CODEX_KEY_PREFIX + id, 0) == 1;
+        }
+
+        /// <summary>将指定条目标记为已缓存（Load 时调用）</summary>
+        public static void LoadCodexEntry(string id)
+        {
+            if (!string.IsNullOrEmpty(id) && PlayerPrefs.GetInt(CODEX_KEY_PREFIX + id, 0) == 1)
+                _unlockedCodexEntries.Add(id);
+        }
+
+        /// <summary>批量加载图鉴解锁状态（启动时调用一次）</summary>
+        public static void LoadAllCodexEntries(IEnumerable<string> allIds)
+        {
+            _unlockedCodexEntries.Clear();
+            foreach (var id in allIds)
+            {
+                if (PlayerPrefs.GetInt(CODEX_KEY_PREFIX + id, 0) == 1)
+                    _unlockedCodexEntries.Add(id);
+            }
+        }
+
+        /// <summary>获取已解锁数量</summary>
+        public static int GetUnlockedCodexCount() => _unlockedCodexEntries.Count;
     }
 
     /// <summary>存档数据结构</summary>

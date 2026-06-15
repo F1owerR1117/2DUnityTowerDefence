@@ -1,6 +1,7 @@
 using System;
 using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Config;
+using DoudizhuTower.Gameplay.Network;
 using TMPro;
 using UnityEngine;
 
@@ -69,6 +70,10 @@ namespace DoudizhuTower.Gameplay.Systems
         {
             if (_coreEconomy == null) return false;
 
+            // v2.0: 仅 Master 端执行金币消耗（Client 端由 Snapshot 覆盖）
+            if (NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient)
+                return false;
+
             float goldBefore = _coreEconomy.CurrentGold;
             bool success = _coreEconomy.TrySpend(amount);
             float goldAfter = _coreEconomy.CurrentGold;
@@ -91,6 +96,11 @@ namespace DoudizhuTower.Gameplay.Systems
         public void AddGold(float amount)
         {
             if (_coreEconomy == null) return;
+
+            // v2.0: 仅 Master 端执行金币增加（Client 端由 Snapshot 覆盖）
+            if (NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient)
+                return;
+
             _coreEconomy.AddGold(amount);
             if (amount > 0f) OnGoldEarned?.Invoke(amount);
         }
@@ -179,7 +189,18 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void Update()
         {
-            _coreEconomy?.UpdateEconomy(Time.deltaTime);
+            // v2.0: 仅 Master 端执行经济增长，Client 端由 Snapshot 覆盖
+            // 如果 _coreEconomy 未注入（联机模式），跳过
+            if (_coreEconomy != null && NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom)
+            {
+                // 联机模式：由 NetworkGameManager._slotEconomies 驱动
+                // 此处不调用 UpdateEconomy()
+            }
+            else
+            {
+                // 单人模式：正常驱动
+                _coreEconomy?.UpdateEconomy(Time.deltaTime);
+            }
             UpdateGoldFlash();
         }
 

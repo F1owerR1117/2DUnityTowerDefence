@@ -15,6 +15,7 @@ namespace DoudizhuTower.Gameplay.Systems
         public const string ONLINE_LOBBY_SCENE = "OnlineLobby";
         public const string BIDDING_SCENE = "Bidding";
         public const string GAME_SCENE = "DoudizhuTower_Game";
+        public const string CODEX_SCENE = "Codex";
 
         // ── 关卡跟踪 ──
         public static int CurrentLevelIndex { get; private set; } = -1;
@@ -88,6 +89,17 @@ namespace DoudizhuTower.Gameplay.Systems
                 return;
             }
             LoadSceneWithFade(GAME_SCENE);
+        }
+
+        public static void LoadCodex()
+        {
+            Time.timeScale = 1f;
+            if (!IsSceneInBuild(CODEX_SCENE))
+            {
+                Debug.LogWarning($"[SceneLoader] 场景 '{CODEX_SCENE}' 未添加到 Build Settings");
+                return;
+            }
+            LoadSceneWithFade(CODEX_SCENE);
         }
 
         public static void RestartGame()

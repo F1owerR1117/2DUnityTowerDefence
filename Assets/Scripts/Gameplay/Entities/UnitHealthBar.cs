@@ -12,12 +12,27 @@ namespace DoudizhuTower.Gameplay.Entities
         [SerializeField] private Color friendlyColor = Color.green;
         [SerializeField] private Color enemyColor = Color.red;
 
+        [Header("平滑动画")]
+        [Tooltip("HP 条过渡速度（越大越快）")]
+        [SerializeField] private float smoothSpeed = 8f;
+        [Tooltip("受击闪烁持续时间（秒）")]
+        [SerializeField] private float hitFlashDuration = 0.15f;
+        [Tooltip("受击闪烁颜色")]
+        [SerializeField] private Color hitFlashColor = Color.white;
+
         private CardUnit _owner;
         private Vector3 _initialScale;
         private float _initFillLocalX;
         private float _halfWorldWidth;
         private bool _initialized;
         private bool _metricsCached;
+
+        // 平滑动画状态
+        private float _currentRatio;
+        private float _targetRatio;
+        private float _hitFlashTimer;
+        private Color _originalColor;
+        private bool _skipFirstHPChange;  // 跳过初始化后的第一次 HP 变化（防止闪烁）
 
         private void CacheFillMetrics()
         {
@@ -48,9 +63,19 @@ namespace DoudizhuTower.Gameplay.Entities
             _owner.OnHPChanged += OnHPChanged;
 
             if (fillRenderer != null)
-                fillRenderer.color = owner.IsLandlord == CardUnit.PlayerIsLandlord ? friendlyColor : enemyColor;
+            {
+                _originalColor = owner.IsLandlord == CardUnit.PlayerIsLandlord ? friendlyColor : enemyColor;
+                fillRenderer.color = _originalColor;
+            }
 
-            OnHPChanged(0, owner.CurrentHP);
+            // 初始化 HP 比例（不触发闪烁）
+            float ratio = _owner.Stats.HP > 0f ? _owner.CurrentHP / _owner.Stats.HP : 0f;
+            _currentRatio = Mathf.Clamp01(ratio);
+            _targetRatio = _currentRatio;
+            UpdateHPBarVisual(_currentRatio);
+
+            // 跳过初始化后的第一次 HP 变化（防止闪烁）
+            _skipFirstHPChange = true;
         }
 
         private void Start()
@@ -68,17 +93,49 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             if (_owner == null || fillTransform == null) return;
             float ratio = _owner.Stats.HP > 0f ? currentHP / _owner.Stats.HP : 0f;
-            ratio = Mathf.Clamp01(ratio);
+            _targetRatio = Mathf.Clamp01(ratio);
 
-            fillTransform.localScale = new Vector3(_initialScale.x * ratio, _initialScale.y, _initialScale.z);
-            Vector3 pos = fillTransform.localPosition;
-            fillTransform.localPosition = new Vector3(_initFillLocalX + _halfWorldWidth * (1f - ratio), pos.y, pos.z);
+            // 跳过初始化后的第一次 HP 变化（防止闪烁）
+            if (_skipFirstHPChange)
+            {
+                _currentRatio = _targetRatio;
+                UpdateHPBarVisual(_currentRatio);
+                _skipFirstHPChange = false;
+                return;
+            }
+
+            // 触发受击闪烁（仅在实际 HP 变化时）
+            _hitFlashTimer = hitFlashDuration;
         }
 
         private void LateUpdate()
         {
             if (_owner == null || !_owner.IsAlive) return;
             transform.rotation = Quaternion.identity;
+
+            // 平滑过渡 HP 条
+            if (!Mathf.Approximately(_currentRatio, _targetRatio))
+            {
+                _currentRatio = Mathf.Lerp(_currentRatio, _targetRatio, Time.deltaTime * smoothSpeed);
+                UpdateHPBarVisual(_currentRatio);
+            }
+
+            // 受击闪烁
+            if (_hitFlashTimer > 0f && fillRenderer != null)
+            {
+                _hitFlashTimer -= Time.deltaTime;
+                fillRenderer.color = (_hitFlashTimer > 0f) ? hitFlashColor : _originalColor;
+            }
+        }
+
+        private void UpdateHPBarVisual(float ratio)
+        {
+            if (fillTransform == null) return;
+
+            // 右对齐：HP 减少时从右往左扣减
+            fillTransform.localScale = new Vector3(_initialScale.x * ratio, _initialScale.y, _initialScale.z);
+            Vector3 pos = fillTransform.localPosition;
+            fillTransform.localPosition = new Vector3(_initFillLocalX - _halfWorldWidth * (1f - ratio), pos.y, pos.z);
         }
 
         private void OnDisable()
@@ -90,6 +147,9 @@ namespace DoudizhuTower.Gameplay.Entities
                 _owner = null;
             }
             _initialized = false;
+            _currentRatio = 0f;
+            _targetRatio = 0f;
+            _hitFlashTimer = 0f;
         }
 
         private void OnDestroy()

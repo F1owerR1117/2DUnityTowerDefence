@@ -38,7 +38,10 @@ namespace DoudizhuTower.Gameplay.Entities
             public float cooldown = 15f;
 
             [Header("-- 施法设置 --")]
-            [Tooltip("施法持续时间（秒，0=瞬发）")]
+            [Tooltip("是否使用动画长度作为施法时间（勾选后 castDuration 自动同步）")]
+            public bool useAnimLength = true;
+
+            [Tooltip("施法持续时间（秒，0=使用动画长度）")]
             public float castDuration;
 
             [Tooltip("施法期间是否不可选取")]
@@ -103,6 +106,13 @@ namespace DoudizhuTower.Gameplay.Entities
         private float _castTimer;
         private BossSkill _currentSkill;
         private bool _effectFired;
+        private float _effectiveCastDuration;
+
+        /// <summary>BOSS 是否正在施法（供 CardUnit 检查，防止被打断）</summary>
+        public bool IsCasting => _isCasting;
+
+        /// <summary>当前施法的技能（只读）</summary>
+        public BossSkill CurrentSkill => _currentSkill;
 
         // 冲刺状态
         private bool _isDashing;
@@ -204,9 +214,35 @@ namespace DoudizhuTower.Gameplay.Entities
             // 打断当前攻击
             _owner.InterruptAttack();
 
-            // 播放动画
+            // 播放动画，并调整速度匹配施法时间
+            float effectiveCastDuration = skill.castDuration;
             if (!string.IsNullOrEmpty(skill.animTrigger))
+            {
                 _owner.TriggerAnim(skill.animTrigger);
+
+                // 如果 useAnimLength=true，从动画长度获取施法时间
+                if (skill.useAnimLength)
+                {
+                    var simpleAnimator = _owner.GetComponentInChildren<SimpleAnimator>();
+                    if (simpleAnimator != null)
+                    {
+                        float animLength = simpleAnimator.GetClipLength(skill.animTrigger);
+                        if (animLength > 0f)
+                        {
+                            // 使用动画长度作为施法时间（如果 castDuration=0 或 useAnimLength=true）
+                            effectiveCastDuration = animLength;
+
+                            // 调整动画速度匹配 castDuration（如果手动配置了 castDuration）
+                            if (skill.castDuration > 0f)
+                            {
+                                float speedMult = animLength / skill.castDuration;
+                                _owner.SetAnimSpeed(speedMult);
+                                effectiveCastDuration = skill.castDuration;
+                            }
+                        }
+                    }
+                }
+            }
 
             // 播放音效
             if (skill.sfxClip != null)
@@ -218,11 +254,16 @@ namespace DoudizhuTower.Gameplay.Entities
                 _effectFired = true;
                 ExecuteEffect(skill);
             }
-            // 瞬发技能：立即触发效果
-            else if (skill.castDuration <= 0f)
+            // 瞬发技能：立即触发效果（仅当有效施法时间 <= 0 时）
+            else if (effectiveCastDuration <= 0f)
             {
                 ExecuteEffect(skill);
                 EndCast(skill, index);
+            }
+            else
+            {
+                // 保存有效施法时间供 UpdateCast 使用
+                _effectiveCastDuration = effectiveCastDuration;
             }
         }
 
@@ -253,9 +294,16 @@ namespace DoudizhuTower.Gameplay.Entities
                 return;
             }
 
-            // 普通施法结束
-            if (_castTimer >= _currentSkill.castDuration)
+            // 普通施法结束（使用有效施法时间）
+            if (_castTimer >= _effectiveCastDuration)
             {
+                // 确保效果已触发（防止 effectDelay > castDuration 导致效果丢失）
+                if (!_effectFired && _currentSkill.effectType != SkillEffectType.Dash)
+                {
+                    _effectFired = true;
+                    ExecuteEffect(_currentSkill);
+                }
+
                 int index = Array.IndexOf(skills, _currentSkill);
                 EndCast(_currentSkill, index >= 0 ? index : 0);
             }
@@ -267,6 +315,9 @@ namespace DoudizhuTower.Gameplay.Entities
             _isDashing = false;
             _owner.Invulnerable = false;
             _currentSkill = null;
+
+            // 恢复动画速度
+            _owner.SetAnimSpeed(1f);
 
             // 重置冷却
             if (skill.trigger == SkillTrigger.OnTimer)
@@ -323,6 +374,9 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void ExecuteAoeStun(BossSkill skill)
         {
+            // v2.0: 仅 Master 端执行眩晕
+            if (!_owner.SimulatesCombat) return;
+
             int count = Physics2D.OverlapCircle(_owner.VisualCenter, skill.effectRadius, _overlapFilter, _overlapBuffer);
             for (int i = 0; i < count; i++)
             {
@@ -343,6 +397,9 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void ExecuteKnockback(BossSkill skill)
         {
+            // v2.0: 仅 Master 端执行击退
+            if (!_owner.SimulatesCombat) return;
+
             int count = Physics2D.OverlapCircle(_owner.VisualCenter, skill.effectRadius, _overlapFilter, _overlapBuffer);
             for (int i = 0; i < count; i++)
             {
@@ -366,6 +423,9 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void ExecuteDash(BossSkill skill)
         {
+            // v2.0: 仅 Master 端执行冲刺
+            if (!_owner.SimulatesCombat) return;
+
             // 冲刺方向：朝当前目标方向，无目标则朝移动方向
             Vector2 dir = Vector2.right; // 默认向右
             if (_owner.Target != null)
@@ -401,6 +461,8 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void ClearCC()
         {
+            // v2.0: 仅 Master 端清除 CC
+            if (!_owner.SimulatesCombat) return;
             _owner.StunTimer = 0f;
             _owner.SlowRestoreTimer = 0f;
             _owner.RemoveBuff("slow_aura");

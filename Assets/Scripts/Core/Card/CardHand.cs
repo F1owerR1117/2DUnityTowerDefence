@@ -116,5 +116,8 @@ namespace DoudizhuTower.Core.Cards
         }
 
         private void NotifyChanged() => OnHandChanged?.Invoke(_cards);
+
+        /// <summary>手动触发手牌变更通知（供网络同步直接操作列表后调用）</summary>
+        public void NotifyHandModified() => NotifyChanged();
     }
 }
