@@ -150,17 +150,24 @@ namespace DoudizhuTower.Gameplay.Battle
             return result;
         }
 
+        /// <summary>统一门禁：判断 target 是否是 unit 的合法战斗目标</summary>
+        public bool IsValidCombatTarget(CardUnit unit, CardUnit target)
+        {
+            if (target == null || !target.IsAlive || target == unit) return false;
+            var boss = target.GetComponent<BossController>();
+            if (boss != null && !boss.IsActive) return false;
+            if (target.IsLandlord == unit.IsLandlord) return false;
+            if (unit.Lane != Lane.None && target.Lane != Lane.None && target.Lane != unit.Lane) return false;
+            return true;
+        }
+
         public List<CardUnit> GetEnemiesFor(CardUnit unit)
         {
             var result = new List<CardUnit>();
             foreach (var other in _allUnits)
             {
-                if (other == null || !other.IsAlive || other == unit) continue;
-                if (other.IsLandlord != unit.IsLandlord)
-                {
-                    if (unit.Lane == Lane.None || other.Lane == Lane.None || other.Lane == unit.Lane)
-                        result.Add(other);
-                }
+                if (!IsValidCombatTarget(unit, other)) continue;
+                result.Add(other);
             }
             return result;
         }
@@ -275,7 +282,6 @@ namespace DoudizhuTower.Gameplay.Battle
             var economy = new EconomySystem(initialGold, incomeRate);
             var hand = new CardHand(20);
             ai.Initialize(hand, economy, this, deck, maxSelection, drawInterval);
-            Debug.Log($"[BattleManager] RegisterBossAsSummoner: {boss.name}(ID={boss.UnitId}), ai.enabled={ai.enabled}, hand={hand.Count}, gold={economy.CurrentGold}");
         }
 
         private bool HasAliveEnemyBoss(bool playerIsLandlord)

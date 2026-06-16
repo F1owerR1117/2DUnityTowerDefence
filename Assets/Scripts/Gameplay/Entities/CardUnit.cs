@@ -366,18 +366,28 @@ namespace DoudizhuTower.Gameplay.Entities
             _isAttacking = false;
             _attackTarget = null;
             _animDone = false;
+            _hitTimelineDone = false;
+            _nextHitIndex = 0;
+            _attackTimer = 0f;
+            _hitTimes = null;
             _hitCountDealt = 0;
             _projectileSpawned = false;
             _attackStateTimer = 0f;
-            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
+            _pendingTauntTarget = null;
+            _attackSnapshotTargets = null;
             SetAnimSpeed(1f);
             UpdateAnimatorState(0); // 回到 Idle
         }
         private float _cachedHitNormalizedTime = -1f;
-        private Coroutine _hitCoroutine;
         private bool _animDone;
+        private bool _hitTimelineDone;
+        private int _nextHitIndex;
+        private float _attackTimer;
+        private float[] _hitTimes;
         private bool _projectileSpawned;
         private float _attackStateTimer;
+        private CardUnit _pendingTauntTarget;
+        private List<CardUnit> _attackSnapshotTargets;
 
         /// <summary>首帧安全阀：出生第一帧强制索敌，跳过移动，防止盲跑</summary>
         private bool _needsFirstFrameSearch;
@@ -397,7 +407,12 @@ namespace DoudizhuTower.Gameplay.Entities
 
         // ─── IBuildingTarget 实现 ─────────────────────
         bool IBuildingTarget.IsDestroyed => !IsAlive;
-        void IBuildingTarget.TakeDamage(float rawDamage) => TakeDamage(rawDamage, DamageType.Physical);
+        void IBuildingTarget.TakeDamage(float rawDamage)
+        {
+            // [诊断] 主堡受击追踪
+            Debug.LogWarning($"[BUILDING DAMAGE] {name} damage={rawDamage} stack={System.Environment.StackTrace}");
+            TakeDamage(rawDamage, DamageType.Physical);
+        }
         Collider2D IBuildingTarget.BuildingCollider => _collider;
         Vector2 IBuildingTarget.LogicCenter => VisualCenter;
 
@@ -472,9 +487,6 @@ namespace DoudizhuTower.Gameplay.Entities
             _lane = lane;
             _isLandlord = isLandlord;
 
-            if (wasInitialized)
-                Debug.Log($"[CardUnit] {name}(ID={unitId}) 被重复 Initialize，isLandlord={isLandlord}");
-
             _spriteRenderer = GetComponentInChildren<SpriteRenderer>();
             _animator = GetComponentInChildren<Animator>(true);
             _simpleAnimator = GetComponentInChildren<SimpleAnimator>();
@@ -507,8 +519,14 @@ namespace DoudizhuTower.Gameplay.Entities
             _attackTarget = null;
             _hitCountDealt = 0;
             _animDone = false;
+            _hitTimelineDone = false;
+            _nextHitIndex = 0;
+            _attackTimer = 0f;
+            _hitTimes = null;
             _projectileSpawned = false;
             _justFinishedAttack = false;
+            _pendingTauntTarget = null;
+            _attackSnapshotTargets = null;
             _pathDistance = 0f;
             Target = null;
             _enemyUnits = null;
@@ -672,59 +690,49 @@ namespace DoudizhuTower.Gameplay.Entities
                 return;
             }
 
-            // ── 攻击中 → 等待动画和伤害都完成 ──
+            // ── 攻击中 → Timeline 驱动攻击帧 ──
             if (_isAttacking)
             {
-                // 目标已死 → 立即中断攻击，防止空放动画
-                if (_attackTarget != null && !_attackTarget.IsAlive)
+                // 1. 超时安全阀 → 强制中断（仅防卡死，不参与正常退出）
+                if (_attackStateTimer > Stats.AttackInterval * 3f)
                 {
+                    Debug.LogWarning($"[AttackStuck] {name} 攻击超时重置: hitDealt={_hitCountDealt}/{Stats.HitCount}, animDone={_animDone}, timelineDone={_hitTimelineDone}, target={_attackTarget != null}");
                     InterruptAttack();
                     return;
                 }
 
-                // 超时安全阀：攻击状态超过 AttackInterval×3 秒未完成 → 强制重置
-                if (_attackStateTimer > Stats.AttackInterval * 3f)
-                {
-                    Debug.LogWarning($"[AttackStuck] {name} 攻击超时重置: hitDealt={_hitCountDealt}/{Stats.HitCount}, animDone={_animDone}, target={_attackTarget != null}");
-                    InterruptAttack();
-                }
-                else
-                {
-                    _attackStateTimer += Time.deltaTime;
+                _attackStateTimer += Time.deltaTime;
 
-                    // 施法期间（Invulnerable）不允许被打断
-                    if (!Invulnerable)
-                    {
-                        // 嘲讽可以打断当前攻击（仅当嘲讽目标与当前攻击目标不同时才打断）
-                        var tauntDuringAttack = FindNearestTauntSourceFor(this);
-                        if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
-                        {
-                            InterruptAttack();
-                            Target = tauntDuringAttack;
-                        }
-                        // 建筑攻击期间目标超出射程 → 中断攻击，防止空挥
-                        else if (_attackTarget == null && CurrentTarget != null
-                            && (CurrentTarget.IsDestroyed || GetEdgeDistance(CurrentTarget) > Stats.Range))
-                        {
-                            InterruptAttack();
-                            CurrentTarget = null;
-                        }
-                    }
-                    else
-                    {
-                        if (IsAttackAnimDone()) _animDone = true;
+                // 2. Timeline 驱动攻击帧
+                UpdateAttackTimeline();
 
-                        if (_animDone && _hitCountDealt >= Stats.HitCount)
-                        {
-                            _isAttacking = false;
-                            _attackTarget = null;
-                            _attackStateTimer = 0f;
-                            SetAnimSpeed(1f);
-                            UpdateAnimatorState(0);
-                            _justFinishedAttack = true;
-                        }
-                    }
+                // 3. 非 Invulnerable：嘲讽记录（不中断，攻击结束后切换）
+                if (!Invulnerable)
+                {
+                    var tauntDuringAttack = FindNearestTauntSourceFor(this);
+                    if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
+                        _pendingTauntTarget = tauntDuringAttack;
                 }
+
+                // 4. 攻击正常完成：动画播完 + Timeline 完成
+                if (IsAttackAnimDone()) _animDone = true;
+                if (_animDone && _hitTimelineDone)
+                {
+                    _isAttacking = false;
+                    _attackTarget = null;
+                    _attackStateTimer = 0f;
+                    SetAnimSpeed(1f);
+                    UpdateAnimatorState(0);
+                    _justFinishedAttack = true;
+                    _animDone = false;
+                    _hitTimelineDone = false;
+                    _nextHitIndex = 0;
+                    _attackTimer = 0f;
+                    _hitTimes = null;
+                    _attackSnapshotTargets = null;
+                    return;
+                }
+
                 return;
             }
 
@@ -732,6 +740,17 @@ namespace DoudizhuTower.Gameplay.Entities
             if (_justFinishedAttack)
             {
                 _justFinishedAttack = false;
+
+                // 嘲讽延迟切换：攻击结束后优先攻击嘲讽目标
+                if (_pendingTauntTarget != null && _pendingTauntTarget.IsAlive)
+                {
+                    Target = _pendingTauntTarget;
+                    _pendingTauntTarget = null;
+                }
+                else
+                {
+                    _pendingTauntTarget = null;
+                }
                 return;
             }
 
@@ -817,14 +836,23 @@ namespace DoudizhuTower.Gameplay.Entities
                         _attackTarget = null;
                         _hitCountDealt = 0;
                         _animDone = false;
+                        _hitTimelineDone = false;
+                        _nextHitIndex = 0;
+                        _attackTimer = 0f;
+                        _hitTimes = null;
                         _projectileSpawned = false;
+                        _pendingTauntTarget = null;
+                        _attackSnapshotTargets = null;
                         float interval = Stats.AttackInterval;
                         float clipLen = GetAttackClipLength();
                         float speed = clipLen > 0f ? Mathf.Min(clipLen / interval, 4f) : 1f;
                         SetAnimSpeed(speed);
                         UpdateAnimatorState(2);
-                        if (_hitCoroutine != null) StopCoroutine(_hitCoroutine);
-                        _hitCoroutine = StartCoroutine(HitFrameCoroutine(interval));
+                        // Timeline 已在 TryAttack 中创建（此路径为建筑攻击，手动设置 Timeline）
+                        _hitTimes = new float[] { 1f };
+                        _nextHitIndex = 0;
+                        _attackTimer = 0f;
+                        _hitTimelineDone = false;
                     }
                     return;
                 }

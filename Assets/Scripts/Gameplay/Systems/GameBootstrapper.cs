@@ -83,9 +83,6 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void Awake()
         {
-            Debug.Log($"[Bootstrapper] Awake: HasResult={GameSession.HasResult}, IsNetworkMode={GameSession.IsNetworkMode}, " +
-                      $"NetworkSeed={GameSession.NetworkSeed}, LocalPlayerId={GameSession.LocalPlayerId}, " +
-                      $"PlayerBaseMapping={GameSession.PlayerBaseMapping != null}");
 
             // 读取叫分结果（如果有），否则使用 Inspector 默认值
             if (GameSession.HasResult)
@@ -119,10 +116,10 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private IEnumerator Start()
         {
-            Debug.Log("[Bootstrapper] Start() 协程已进入");
+
             // ── Step 0: 确保 UI_Scene 已加载 ────────
             yield return UIManager.WaitForReady();
-            Debug.Log("[Bootstrapper] Step 0 完成: UI_Scene 已就绪");
+
 
             // ── 新局开始：清除上一局静态状态，防止跨局泄漏 ──
             UnitAudio.ClearClipCounts();
@@ -373,6 +370,10 @@ namespace DoudizhuTower.Gameplay.Systems
                         // 队友暂存槽：联机模式下初始化为可交互（玩家需要从这里取牌）
                         if (teammateTempSlotUI != null)
                             teammateTempSlotUI.Initialize(_mainDeck, handArea, playerHand);
+
+                        // 农民：隐藏 LaneArea（联机模式下农民不需要分路选择）
+                        laneArea?.SetActive(false);
+                        handArea?.SetRouteUIVisible(false);
                     }
                 }
                 else
@@ -424,12 +425,12 @@ namespace DoudizhuTower.Gameplay.Systems
                             if (teammateTempSlotUI != null)
                             {
                                 teammateTempSlotUI.ReceiveCard(card);
-                                Debug.Log($"[飞筒] 已传送 {card} 到队友暂存槽");
+
                             }
                             else
                             {
                                 _mainDeck.Discard(card);
-                                Debug.Log($"[飞筒] 无队友暂存槽，牌进入弃牌堆: {card}");
+
                             }
                         };
                     }
@@ -699,11 +700,11 @@ namespace DoudizhuTower.Gameplay.Systems
             }
 
             // ── Step 11: 联机模式初始化 NetworkGameManager ──
-            Debug.Log($"[Bootstrapper] Step 11: _isNetworkMode={_isNetworkMode}, NetworkManager.Instance={NetworkManager.Instance != null}");
+
             if (_isNetworkMode)
             {
                 var net = NetworkManager.Instance?.Service;
-                Debug.Log($"[Bootstrapper] Step 11: net={net != null}, IsInRoom={NetworkManager.Instance?.IsInRoom}");
+
                 if (net != null)
                 {
                     var ngo = new GameObject("NetworkGameManager");
@@ -738,7 +739,7 @@ namespace DoudizhuTower.Gameplay.Systems
                                 ai.SetNetworkContext(_networkGameManager, slot);
                                 _networkGameManager.RegisterSlotEconomy(slot, ai.Economy);
                             }
-                            Debug.Log($"[Bootstrapper] 槽位 {slot} → 基地 {baseIdx}, BuildingAI {(isAI ? "启用" : "禁用")}");
+
                         }
                     }
                     else
@@ -784,7 +785,7 @@ namespace DoudizhuTower.Gameplay.Systems
                         if (teammateTempSlotUI != null)
                         {
                             teammateTempSlotUI.ReceiveCard(card);
-                            Debug.Log($"[飞筒联机] 收到队友 {senderSlot} 传来的 {card}");
+
                         }
                     };
 
@@ -792,7 +793,7 @@ namespace DoudizhuTower.Gameplay.Systems
                     _networkGameManager.OnCardTaken += (takerSlot) =>
                     {
                         teammateTempSlotUI?.Clear();
-                        Debug.Log($"[飞筒联机] 暂存槽已清空");
+
                     };
                 }
 

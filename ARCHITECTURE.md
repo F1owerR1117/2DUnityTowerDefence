@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v7.2
+# DoudizhuTower — 架构落地规范 v7.4
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -37,6 +37,7 @@
 25. [Event+Snapshot+Tick 三层确定性模型 v2.0](#25-event-snapshot-tick-三层确定性模型-v20final-lock)
 26. [Truth Source Convergence（真相源收敛）](#26-truth-source-convergence真相源收敛)
 27. [Client 战斗表现层（Event-Driven Presentation）](#27-client-战斗表现层event-driven-presentation)
+28. [Combat Gate System（战斗统一门禁）](#28-combat-gate-system战斗统一门禁)
 
 ---
 
@@ -73,7 +74,7 @@
 | `DomainSystem` | 领域系统 | Gameplay/Battle | 要不起领域 + 反制护盾 + 炸弹破封 + 封印手牌牌型 |
 | `SealRuleEngine` | 封印规则引擎 | Gameplay/Battle | 判定手牌中可反制指定牌型的卡牌 |
 | `CardTypeCompare` | 牌型比较器 | Gameplay/Battle | HasCounterInHand + CanCounter 两张牌型对比 |
-| `BossController` | BOSS 控制器 | Gameplay/Battle | BOSS 生命周期（OnStart/OnTimer/OnBuildingDestroyed 触发），初始隐藏+Inject 恢复显示，阵营自动纠正，召唤师能力，BuildingAI 保护 |
+| `BossController` | BOSS 控制器 | Gameplay/Battle | BOSS 生命周期（OnStart/OnTimer/OnBuildingDestroyed 触发），初始隐藏（Renderer/Collider/HealthBar/BossSkillSystem 全部禁用），ActivateBoss 恢复显示，IsActive 供门禁查询，阵营自动纠正，召唤师能力 |
 | `BossSkillSystem` | BOSS 技能系统 | Gameplay/Entities | HP 阶段/定时/击杀触发，6 种效果（AoeDamage/AoeStun/Heal/Knockback/Buff/Dash），施法不可选取+清除 CC，冲刺用碰撞箱宽度扫描 |
 | `UnitAudio` | 兵种音频 | Gameplay/Entities | 挂载子物体（解耦），`GetComponentInParent<CardUnit>` 获取引用，订阅事件 + 按 Clip 并发限制 + 屏幕可见性裁剪 |
 | `UnitVFX` | 兵种特效 | Gameplay/Entities | 调用 VFXManager 对象池生成粒子特效 |
@@ -255,7 +256,7 @@
 | 召唤物路线修复 | SpawnSummonedUnit 直接继承 summoner.FollowPath，删除 FindBaseFor，修复基地切换分路后召唤物走错路 | BattleManager.Spawning.cs |
 | UnitAudio 解耦 | UnitAudio 移至子物体，`RequireComponent` 移除，`GetComponent` → `GetComponentInParent`，UnitPassives 改用 `GetComponentInChildren` | UnitAudio.cs + UnitPassives.cs |
 | BOSS 阵营自动纠正 | `GameBootstrapper` Step 5b 强制 `SetLandlord(!PlayerIsLandlord)` + 血条颜色刷新，解决 Awake 执行顺序不确定导致的阵营错误 | GameBootstrapper.cs |
-| BOSS 初始隐藏 | `BossController.Awake` 禁用 Renderer/Collider（排除 UnitHealthBar），`Inject` 时恢复，解决 OnStart 触发时序问题 | BossController.cs |
+| BOSS 初始隐藏 | `BossController.Awake` 禁用 Renderer/Collider/HealthBar/BossSkillSystem，`ActivateBoss` 时恢复，未激活 BOSS 不参与战斗 | BossController.cs |
 | BOSS BuildingAI 保护 | `GameBootstrapper` Awake/联机模式中跳过 `_isBoss` 单位的 BuildingAI 禁用，Step 5b 显式启用 BuildingAI 后再 Inject | GameBootstrapper.cs |
 | BuildingAI 空手牌兼容 | `Update` 在 `Hand.Count == 0` 时仍执行摸牌和经济逻辑，不再直接 return，解决 BOSS 空手牌无法出兵 | BuildingAI.cs |
 | 全局唯一 UnitId | `BattleManager` 统一分配 `_globalUnitId`，`RegisterUnit` 调用 `SetUnitId`，`OnUnitDied` 改用 `Dictionary<int, CardUnit>` O(1) 查找，消除场景预置单位与工厂单位 ID 冲突 | BattleManager.cs + CardUnit.cs |
@@ -2180,8 +2181,9 @@ NetworkBiddingManager.HandleBidResult()
 场景加载
   → BossController.Awake()
     ├─ _isBoss = true
-    ├─ 缓存 Renderer/Collider（排除 UnitHealthBar）
-    └─ 禁用 Renderer/Collider（初始隐藏）
+    ├─ 缓存 Renderer/Collider/HealthBar
+    ├─ 禁用 Renderer/Collider/HealthBar（初始隐藏）
+    └─ 禁用 BossSkillSystem（激活时恢复）
   → CardUnit.Start()
     └─ Initialize(0, Rank.Three, Lane.None, Inspector._isLandlord)
   → GameBootstrapper.Start() 协程
@@ -2191,8 +2193,8 @@ NetworkBiddingManager.HandleBidResult()
     │   ├─ 刷新血条颜色
     │   ├─ 启用 BuildingAI（确保 enabled=true）
     │   └─ boss.Inject(battleManager, deck)
-    │       ├─ 恢复 Renderer/Collider
     │       └─ OnStart → ActivateBoss()
+    │           ├─ 恢复 Renderer/Collider/HealthBar/BossSkillSystem
     │           ├─ BattleManager.ActivateBoss(route)
     │           └─ RegisterBossAsSummoner()
     │               └─ BuildingAI.Initialize(hand, economy, ...)
@@ -2224,6 +2226,7 @@ BossGiantBird / BossSword (CardUnit, BossController, BuildingAI, SpawnPool, Rout
 | BossController | `_bossRoute` | BOSS 行进路线（RoutePath） |
 | BossController | `_playerRouteToBoss` | 玩家主堡到 BOSS 的路线（BOSS 激活后解锁） |
 | BossController | `_enableSummoner` | 启用召唤师能力 |
+| BossController | `IsActive` | 只读属性，`_activated` 的公开访问。供 BattleManager.GetEnemiesFor 检查 |
 | BuildingAI | `decisionInterval` | 出牌判定间隔（秒） |
 | SpawnPool | `_rankPrefabs[13]` | 按点数映射的召唤物预制体 |
 | SpawnPool | `_spawnPoint` | 召唤物生成位置（应为 BOSS 子物体） |
@@ -2272,6 +2275,15 @@ BOSS 的 RoutePath 需要**取消勾选 `_cachePositions`**，使路径点实时
 - 碰撞检测：使用 Boss 碰撞箱实际宽度扫描路径上的敌人
 - 每个敌人每次冲刺只受一次伤害（`HashSet` 去重）
 
+**门禁过滤：**
+- 所有 OverlapCircle 伤害/控制效果均经过 `IsValidCombatTarget()` 过滤
+- 涉及方法：`ExecuteAoeDamage`、`ExecuteAoeStun`、`ExecuteKnockback`、`UpdateDash`
+- 未激活 BOSS 不会被自身技能误伤
+
+**特效缩放：**
+- 特效根据 `effectRadius` 缩放：`scale = effectRadius / 2f`
+- 与 Projectile 爆炸特效缩放规则一致
+
 **生命周期：**
 ```
 Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndCast()
@@ -2286,7 +2298,8 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 - BOSS 死亡后由 `UnitFactory.Despawn` 回收（`SourcePrefab = null` → `Destroy`）
 - BOSS 的 UnitId 由 `BattleManager.RegisterUnit` 统一分配，不使用 `CardUnit.Start` 的默认值
 - `Invulnerable` 状态在 BOSS 死亡时由 `ForceEndCast()` 自动清除，防止残留
-- 嘲讽打断攻击仅在嘲讽目标变化时生效，防止多个嘲讽光环导致攻击卡死
+- **BOSS 未激活时完全不参与战斗**：Renderer/Collider/HealthBar/BossSkillSystem 全部禁用，GetEnemiesFor 排除未激活 BOSS
+- **BossSkillSystem 组件级禁用**：Awake 禁用 → ActivateBoss 启用，确保 Update 不执行
 - 攻击状态超时安全阀：`AttackInterval×3` 秒未完成自动重置
 - 多个 HP 阶段技能可共用同一个 `animTrigger`（如 75%/50%/25% 都填 "Dash"），动画相同但效果参数独立配置
 
@@ -2697,3 +2710,173 @@ VisualStunTimer → 表现层，Client 用于视觉效果
 | 音效系统重构 | ✅ 完成 |
 | 攻击特效 | ⏳ P1 待实现 |
 | 技能特效 | ⏳ P1 待实现 |
+
+---
+
+## 28. Combat Gate System（战斗统一门禁）
+
+### 28.1 设计目标
+
+统一所有战斗相关逻辑的入口判断，解决：
+- 未激活 BOSS 参与战斗（卡单位/空挥/移动异常）
+- GetEnemiesFor 直接污染目标列表
+- 战斗逻辑与"是否可参与战斗"混在一起
+- 嘲讽/死亡/距离判断互相打架
+- 溅射/多目标单位被错误中断攻击
+- 攻击状态机被"目标变化"强行打断导致重复动画
+
+### 28.2 核心门禁函数
+
+```csharp
+// BattleManager.cs
+public bool IsValidCombatTarget(CardUnit unit, CardUnit target)
+{
+    if (target == null || !target.IsAlive || target == unit) return false;
+    var boss = target.GetComponent<BossController>();
+    if (boss != null && !boss.IsActive) return false;
+    if (target.IsLandlord == unit.IsLandlord) return false;
+    if (unit.Lane != Lane.None && target.Lane != Lane.None && target.Lane != unit.Lane) return false;
+    return true;
+}
+```
+
+**唯一入口**：所有"是否能被选为目标"的判断必须通过此函数。
+
+### 28.3 三层架构
+
+| 层 | 职责 | 入口 |
+|:---|:---|:---|
+| 门禁层 | 是否能参与战斗 | `IsValidCombatTarget()` |
+| 战斗状态机 | 攻击生命周期 | `_animDone && _hitTimelineDone` |
+| 控制层 | 打断攻击 | `InterruptAttack()`（仅眩晕/死亡/强制控制） |
+
+### 28.4 攻击状态机（最终版）
+
+```
+TryAttack()
+  → _isAttacking = true
+  → 创建 AttackTimeline（hitTimes[] 数组）
+  → _attackSnapshotTargets = FindAllTargets()（多目标单位）
+  → 播放动画（纯表现）
+
+OnUpdate() 攻击中:
+  → 超时安全阀（3×AttackInterval，仅防卡死）
+  → UpdateAttackTimeline()（时间驱动攻击帧）
+  → 嘲讽记录（_pendingTauntTarget，不中断攻击）
+  → _animDone && _hitTimelineDone → FinishAttack()
+
+攻击结束后:
+  → 检查 _pendingTauntTarget → 切换目标
+```
+
+**唯一退出条件**：`_animDone && _hitTimelineDone`
+
+**禁止中断**：
+- 目标死亡
+- 目标超范围
+- 目标消失
+
+**允许中断**：
+- 眩晕（Stun）
+- 死亡（Die）
+- 强制控制效果（BossSkillSystem 中断等）
+
+### 28.5 嘲讽延迟切换
+
+```csharp
+// 攻击中：记录嘲讽目标，不中断
+if (tauntDuringAttack != null && tauntDuringAttack != _attackTarget)
+    _pendingTauntTarget = tauntDuringAttack;
+
+// 攻击结束后：切换到嘲讽目标
+if (_pendingTauntTarget != null && _pendingTauntTarget.IsAlive)
+    Target = _pendingTauntTarget;
+```
+
+### 28.6 溅射目标快照
+
+```csharp
+// TryAttack()：攻击开始时锁定目标
+if (_maxTargets > 1)
+    _attackSnapshotTargets = FindAllTargets();
+
+// OnAttackHitFrame()：使用快照，不重新搜索
+var targets = _attackSnapshotTargets ?? FindAllTargets();
+```
+
+### 28.7 修改点汇总
+
+| 位置 | 改动 |
+|:---|:---|
+| `BattleManager.IsValidCombatTarget()` | 新增统一门禁函数 |
+| `BattleManager.GetEnemiesFor()` | 替换为使用门禁 |
+| `CardUnit.OnUpdate()` | 嘲讽改为延迟记录 |
+| `CardUnit.OnUpdate()` 攻击结束 | 检查 _pendingTauntTarget |
+| `CardUnit.TryAttack()` | 多目标单位创建快照 |
+| `CardUnit.OnAttackHitFrame()` | 多目标使用快照 |
+| `CardUnit.InterruptAttack()` | 重置新字段 |
+| 6 处重置点 | 补齐 _pendingTauntTarget/_attackSnapshotTargets 重置 |
+
+### 28.8 AttackTimeline 系统（替代 Animation Event + HitFrameCoroutine）
+
+**核心思想**：攻击帧由时间驱动，不再依赖 Animation Event。
+
+**数据结构**：
+```csharp
+float[] _hitTimes;    // normalized 0~1，如 [0.5, 1.0] 表示 50% 和 100% 时触发
+float _attackTimer;   // 当前攻击已过时间
+int _nextHitIndex;    // 下一个待触发的攻击帧索引
+bool _hitTimelineDone; // Timeline 是否完成
+```
+
+**TryAttack() 创建 Timeline**：
+```csharp
+float interval = Stats.AttackInterval;
+int hitCount = Mathf.Max(1, Stats.HitCount);
+_hitTimes = new float[hitCount];
+for (int i = 0; i < hitCount; i++)
+    _hitTimes[i] = (float)(i + 1) / hitCount;
+```
+
+**UpdateAttackTimeline() 每帧执行**：
+```csharp
+float t = _attackTimer / interval;
+while (_nextHitIndex < _hitTimes.Length && t >= _hitTimes[_nextHitIndex])
+{
+    ExecuteHit(_nextHitIndex);
+    _nextHitIndex++;
+}
+if (_nextHitIndex >= _hitTimes.Length)
+    _hitTimelineDone = true;
+```
+
+**ExecuteHit() → OnAttackHitFrame()**：
+- ExecuteHit 负责授权验证（BossController.IsActive、IsValidCombatTarget）
+- OnAttackHitFrame 负责纯伤害逻辑
+
+### 28.9 Animation Event 授权验证
+
+Animation Event 仍可能残留触发（旧动画未清理）。为防止未激活单位通过 Event 造成伤害：
+
+```csharp
+// OnAttackHitFrame() 入口
+var boss = GetComponent<BossController>();
+if (boss != null && !boss.IsActive) return;
+```
+
+**双重防护**：
+- Timeline 路径：`UpdateAttackTimeline()` 检查 IsActive → InterruptAttack
+- Event 路径：`OnAttackHitFrame()` 检查 IsActive → return
+
+### 28.10 UnitHealthBar 死亡帧闪烁修复
+
+**问题**：单位死亡同一帧触发受击闪烁，`LateUpdate` 因 `_owner.IsAlive=false` 直接返回，闪烁颜色永远不重置。
+
+**修复**：`LateUpdate` 中移除 `_owner.IsAlive` 检查，闪烁逻辑始终执行：
+```csharp
+// 修复前
+if (_owner == null || !_owner.IsAlive) return;
+
+// 修复后
+if (_owner == null) return;
+```

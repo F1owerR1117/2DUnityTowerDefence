@@ -227,16 +227,33 @@ namespace DoudizhuTower.Gameplay.Entities
         {
             if (_isAttacking) return;
             if (target == null || target == this) return;
-            if (target.IsLandlord == IsLandlord) return;
+
+            // 统一门禁：合法性检查（含 BOSS 激活状态）
+            var bm = BattleManager.Instance;
+            if (bm != null && !bm.IsValidCombatTarget(this, target)) return;
 
             _isAttacking = true;
             _attackTarget = target;
             _hitCountDealt = 0;
             _animDone = false;
+            _hitTimelineDone = false;
+            _nextHitIndex = 0;
+            _attackTimer = 0f;
             _projectileSpawned = false;
             _attackStateTimer = 0f;
 
+            // 创建攻击 Timeline（时间驱动攻击帧）
             float interval = Stats.AttackInterval;
+            int hitCount = Mathf.Max(1, Stats.HitCount);
+            _hitTimes = new float[hitCount];
+            for (int i = 0; i < hitCount; i++)
+                _hitTimes[i] = (float)(i + 1) / hitCount;
+
+            // 多目标单位：攻击开始时锁定目标快照
+            if (_maxTargets > 1)
+                _attackSnapshotTargets = FindAllTargets();
+
+            // 播放动画（纯表现）
             float clipLen = GetAttackClipLength();
             float speed = clipLen > 0f ? Mathf.Min(clipLen / interval, 4f) : 1f;
             SetAnimSpeed(speed);
@@ -244,10 +261,6 @@ namespace DoudizhuTower.Gameplay.Entities
 
             // Master 广播攻击事件（Client 播放攻击动画）
             BroadcastAttack(target);
-
-            // 伤害由协程在 AttackInterval 秒后精确触发
-            if (_hitCoroutine != null) StopCoroutine(_hitCoroutine);
-            _hitCoroutine = StartCoroutine(HitFrameCoroutine(interval));
         }
 
         /// <summary>广播攻击事件（仅 Master 调用）</summary>
@@ -278,7 +291,6 @@ namespace DoudizhuTower.Gameplay.Entities
             OnAttackEvent?.Invoke(_attackTarget);
             OnAttack(_attackTarget);
             float total = CurrentATK + _bonusDamage;
-            Debug.Log($"[DmgCalc] {gameObject.name} baseATK={_baseStats.ATK} Stats.ATK={Stats.ATK} CurrentATK={CurrentATK} bonusDmg={_bonusDamage} total={total}");
             return total;
         }
 
@@ -311,18 +323,22 @@ namespace DoudizhuTower.Gameplay.Entities
         }
 
         /// <summary>
-        /// Animation Event 回调：攻击动画打击帧触发。
-        /// 近程：直接施加伤害。远程：生成弹丸。
+        /// 攻击帧伤害逻辑（纯伤害执行，授权由 ExecuteHit 负责）。
+        /// 不再由 Animation Event 触发。
         /// </summary>
         public void OnAttackHitFrame()
         {
             if (_isDying) return;
             if (!_isAttacking) return;
 
-            // 多目标模式
+            // 门禁：未激活 BOSS 不允许造成伤害（拦截 Animation Event 残留触发）
+            var boss = GetComponent<BossController>();
+            if (boss != null && !boss.IsActive) return;
+
+            // 多目标模式：使用攻击开始时锁定的快照
             if (_maxTargets > 1)
             {
-                var targets = FindAllTargets();
+                var targets = _attackSnapshotTargets ?? FindAllTargets();
                 if (targets.Count == 0) { _hitCountDealt++; return; }
 
                 // 一次性计算基础伤害 + 被动加成（人海/冲锋等）
@@ -353,13 +369,11 @@ namespace DoudizhuTower.Gameplay.Entities
                     }
                 }
             }
-            // 单目标模式（原有逻辑）
+            // 单目标模式
             else
             {
                 if (_isRanged && _projectilePrefab != null)
                 {
-                    if (_projectileSpawned) { _hitCountDealt++; return; }
-                    _projectileSpawned = true;
                     float totalDmg = ComputeAndConsumePassiveDamage();
                     SpawnProjectile(totalDmg);
                 }
@@ -404,23 +418,63 @@ namespace DoudizhuTower.Gameplay.Entities
         }
 
         /// <summary>
-        /// 攻击协程：等待 Animation Event 触发伤害，超时则兜底触发。
+        /// 攻击 Timeline 更新：时间驱动攻击帧，替代 Animation Event + HitFrameCoroutine。
+        /// 由 OnUpdate() 每帧调用。
         /// </summary>
-        private IEnumerator HitFrameCoroutine(float attackInterval)
+        private void UpdateAttackTimeline()
         {
-            // 等待 Animation Event 触发所有打击帧
-            float elapsed = 0f;
-            while (_hitCountDealt < Stats.HitCount && elapsed < attackInterval)
+            if (_hitTimes == null || _hitTimes.Length == 0) { _hitTimelineDone = true; return; }
+
+            // 门禁：未激活 BOSS 停止 Timeline
+            var boss = GetComponent<BossController>();
+            if (boss != null && !boss.IsActive)
             {
-                elapsed += Time.deltaTime;
-                yield return null;
+                InterruptAttack();
+                return;
             }
 
-            // 兜底：Animation Event 未全部触发时补足
-            while (_hitCountDealt < Stats.HitCount)
+            // InterruptAttack 可能已清空 _hitTimes
+            if (_hitTimes == null) return;
+
+            float interval = Stats.AttackInterval;
+            _attackTimer += Time.deltaTime;
+            float t = interval > 0f ? _attackTimer / interval : 1f;
+
+            // 触发所有已到达的攻击帧
+            while (_nextHitIndex < _hitTimes.Length && t >= _hitTimes[_nextHitIndex])
             {
-                OnAttackHitFrame();
+                ExecuteHit(_nextHitIndex);
+                _nextHitIndex++;
             }
+
+            // Timeline 完成
+            if (_nextHitIndex >= _hitTimes.Length)
+                _hitTimelineDone = true;
+        }
+
+        /// <summary>
+        /// 执行单次攻击帧：验证 + 造成伤害。
+        /// 由 UpdateAttackTimeline 调用，不再由 Animation Event 触发。
+        /// </summary>
+        private void ExecuteHit(int hitIndex)
+        {
+            if (_isDying || !_isAttacking) return;
+
+            // 战斗系统授权验证
+            var bm = BattleManager.Instance;
+            if (bm != null)
+            {
+                var ownerBoss = GetComponent<BossController>();
+                if (ownerBoss != null && !ownerBoss.IsActive) return;
+                if (_attackTarget != null && !bm.IsValidCombatTarget(this, _attackTarget))
+                {
+                    InterruptAttack();
+                    return;
+                }
+            }
+
+            // 委托给 OnAttackHitFrame 执行实际伤害逻辑
+            OnAttackHitFrame();
         }
 
         /// <summary>攻击事件（供外部组件监听，每次攻击触发一次）</summary>
@@ -450,6 +504,12 @@ namespace DoudizhuTower.Gameplay.Entities
             if (!SimulatesCombat) return; // Client 不处理伤害
             if (!IsAlive) return;
             if (Invulnerable) return;
+
+            // [诊断] 伤害来源追踪
+            var src = LastAttacker;
+            var srcBoss = src != null ? src.GetComponent<BossController>() : null;
+            if (srcBoss != null && !srcBoss.IsActive)
+                Debug.LogWarning($"[DAMAGE] target={name} source={src.name} bossActive=false damage={rawDamage} stack={System.Environment.StackTrace}");
 
             // 真实伤害：无视屏障、盾墙减免、伤害减免
             if (type == DamageType.True)
@@ -558,13 +618,18 @@ namespace DoudizhuTower.Gameplay.Entities
             if (!SimulatesCombat) return; // Client 不触发死亡，由 Master 广播驱动
             _isDying = true;
 
-            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             _isAttacking = false;
             _attackTarget = null;
             _hitCountDealt = 0;
             _animDone = false;
+            _hitTimelineDone = false;
+            _nextHitIndex = 0;
+            _attackTimer = 0f;
+            _hitTimes = null;
             _projectileSpawned = false;
             _justFinishedAttack = false;
+            _pendingTauntTarget = null;
+            _attackSnapshotTargets = null;
             SetAnimSpeed(1f);
 
             // 清除召唤帧事件，防止死亡后仍触发生效
@@ -596,7 +661,6 @@ namespace DoudizhuTower.Gameplay.Entities
             if (!IsAlive || _isDying) return;
             _isDying = true;
             _currentHP = 0f;
-            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             _isAttacking = false;
             SetAnimSpeed(1f);
             StartCoroutine(PlayDeathAnimCoroutine(() =>

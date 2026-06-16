@@ -110,7 +110,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void LateUpdate()
         {
-            if (_owner == null || !_owner.IsAlive) return;
+            if (_owner == null) return;
             transform.rotation = Quaternion.identity;
 
             // 平滑过渡 HP 条
@@ -120,7 +120,7 @@ namespace DoudizhuTower.Gameplay.Entities
                 UpdateHPBarVisual(_currentRatio);
             }
 
-            // 受击闪烁
+            // 受击闪烁（即使单位死亡也要完成闪烁重置）
             if (_hitFlashTimer > 0f && fillRenderer != null)
             {
                 _hitFlashTimer -= Time.deltaTime;
