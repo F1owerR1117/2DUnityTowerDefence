@@ -318,15 +318,20 @@ namespace DoudizhuTower.Gameplay.Entities
             Target = null;
             _enemyUnits = null;
             _enemyBuildings = null;
-            if (_hitCoroutine != null) { StopCoroutine(_hitCoroutine); _hitCoroutine = null; }
             _isDying = false;
             ClearHeightOverride();
             _isAttacking = false;
             _attackTarget = null;
             _hitCountDealt = 0;
             _animDone = false;
+            _hitTimelineDone = false;
+            _nextHitIndex = 0;
+            _attackTimer = 0f;
+            _hitTimes = null;
             _projectileSpawned = false;
             _justFinishedAttack = false;
+            _pendingTauntTarget = null;
+            _attackSnapshotTargets = null;
             _cachedHitNormalizedTime = -1f;
             SetAnimSpeed(1f);
             _pathDistance = 0f;

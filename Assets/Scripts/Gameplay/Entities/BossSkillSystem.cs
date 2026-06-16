@@ -1,5 +1,6 @@
 using System;
 using DoudizhuTower.Core.Battle;
+using DoudizhuTower.Gameplay.Battle;
 using DoudizhuTower.Gameplay.Systems;
 using UnityEngine;
 
@@ -350,21 +351,27 @@ namespace DoudizhuTower.Gameplay.Entities
                     break;
             }
 
-            // 播放特效
+            // 播放特效（根据效果半径缩放）
             if (skill.vfxPrefab != null)
             {
-                VFXManager.Instance?.SpawnVFX(skill.vfxPrefab, _owner.VisualCenter, null, skill.vfxDuration);
+                var vfx = VFXManager.Instance?.SpawnVFX(skill.vfxPrefab, _owner.VisualCenter, null, skill.vfxDuration);
+                if (vfx != null && skill.effectRadius > 0f)
+                {
+                    float scale = skill.effectRadius / 2f;
+                    vfx.transform.localScale = Vector3.one * scale;
+                }
             }
         }
 
         private void ExecuteAoeDamage(BossSkill skill)
         {
+            var bm = BattleManager.Instance;
             int count = Physics2D.OverlapCircle(_owner.VisualCenter, skill.effectRadius, _overlapFilter, _overlapBuffer);
             for (int i = 0; i < count; i++)
             {
                 var enemy = _overlapBuffer[i].GetComponentInParent<CardUnit>();
-                if (enemy == null || !enemy.IsAlive || enemy == _owner) continue;
-                if (enemy.IsLandlord == _owner.IsLandlord) continue;
+                if (enemy == null) continue;
+                if (bm != null && !bm.IsValidCombatTarget(_owner, enemy)) continue;
                 if (!_owner.CanAttackHeight(enemy.UnitHeight)) continue;
 
                 float damage = _owner.Stats.ATK * skill.effectValue;
@@ -377,12 +384,13 @@ namespace DoudizhuTower.Gameplay.Entities
             // v2.0: 仅 Master 端执行眩晕
             if (!_owner.SimulatesCombat) return;
 
+            var bm = BattleManager.Instance;
             int count = Physics2D.OverlapCircle(_owner.VisualCenter, skill.effectRadius, _overlapFilter, _overlapBuffer);
             for (int i = 0; i < count; i++)
             {
                 var enemy = _overlapBuffer[i].GetComponentInParent<CardUnit>();
-                if (enemy == null || !enemy.IsAlive || enemy == _owner) continue;
-                if (enemy.IsLandlord == _owner.IsLandlord) continue;
+                if (enemy == null) continue;
+                if (bm != null && !bm.IsValidCombatTarget(_owner, enemy)) continue;
                 if (!_owner.CanAttackHeight(enemy.UnitHeight)) continue;
 
                 enemy.StunTimer = Mathf.Max(enemy.StunTimer, skill.effectValue);
@@ -400,12 +408,13 @@ namespace DoudizhuTower.Gameplay.Entities
             // v2.0: 仅 Master 端执行击退
             if (!_owner.SimulatesCombat) return;
 
+            var bm = BattleManager.Instance;
             int count = Physics2D.OverlapCircle(_owner.VisualCenter, skill.effectRadius, _overlapFilter, _overlapBuffer);
             for (int i = 0; i < count; i++)
             {
                 var enemy = _overlapBuffer[i].GetComponentInParent<CardUnit>();
-                if (enemy == null || !enemy.IsAlive || enemy == _owner) continue;
-                if (enemy.IsLandlord == _owner.IsLandlord) continue;
+                if (enemy == null) continue;
+                if (bm != null && !bm.IsValidCombatTarget(_owner, enemy)) continue;
 
                 Vector2 pushDir = (enemy.VisualCenter - _owner.VisualCenter);
                 if (pushDir.sqrMagnitude < 0.001f)
@@ -503,8 +512,9 @@ namespace DoudizhuTower.Gameplay.Entities
                 for (int i = 0; i < count; i++)
                 {
                     var enemy = _overlapBuffer[i].GetComponentInParent<CardUnit>();
-                    if (enemy == null || !enemy.IsAlive || enemy == _owner) continue;
-                    if (enemy.IsLandlord == _owner.IsLandlord) continue;
+                    if (enemy == null) continue;
+                    var bm = BattleManager.Instance;
+                    if (bm != null && !bm.IsValidCombatTarget(_owner, enemy)) continue;
                     if (!_owner.CanAttackHeight(enemy.UnitHeight)) continue;
                     if (!_dashHitTargets.Add(enemy)) continue; // 已命中过，跳过
 

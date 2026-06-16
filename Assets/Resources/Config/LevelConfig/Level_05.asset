@@ -12,8 +12,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: deceb9b9ece3270438a01f8727aab9dc, type: 3}
   m_Name: Level_05
   m_EditorClassIdentifier: 
-  levelName: "\u201C\u8D24\u8005\u201D"
-  description: "\u5173\u5361\u63CF\u8FF05"
+  levelName: "\u74E6\u7247\u5730\u56FE"
+  description: "BOSS\u62182"
   difficulty: 1
   sceneName: Level_5
   thumbnail: {fileID: 0}

@@ -2603,13 +2603,13 @@ MonoBehaviour:
   - sceneName: OnlineLobby
     music: {fileID: 0}
   - sceneName: DoudizhuTower_Game
-    music: {fileID: 8300000, guid: a5739518b2a38ac45a4985efa1fd0cb4, type: 3}
+    music: {fileID: 8300000, guid: 01c2c5fef9531ea428613a76ac5c8345, type: 3}
   - sceneName: Level_1
     music: {fileID: 8300000, guid: 454b890e5f57f954b814b9a7f791cec4, type: 3}
   - sceneName: Level_2
     music: {fileID: 8300000, guid: 58983c8d1e065d44ea16b13ee896bd16, type: 3}
   - sceneName: Level_3
-    music: {fileID: 0}
+    music: {fileID: 8300000, guid: 37ad46a04c73764448ce7224754017fc, type: 3}
   - sceneName: Level_4
     music: {fileID: 8300000, guid: 926c277dafc97334f8c5ea23d1a5653e, type: 3}
   - sceneName: Level_5

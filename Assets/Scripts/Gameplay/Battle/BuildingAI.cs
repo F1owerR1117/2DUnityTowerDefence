@@ -85,7 +85,7 @@ namespace DoudizhuTower.Gameplay.Battle
             // 获取 DomainSystem
             _domainSystem = FindFirstObjectByType<DomainSystem>();
 
-            Debug.Log($"[BuildingAI] {name} Initialize: hand={hand.Count}, gold={economy.CurrentGold}, bm={battleManager != null}, enabled={enabled}");
+
 
         }
 
@@ -100,7 +100,7 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void OnEnable()
         {
-            Debug.Log($"[BuildingAI] {name} OnEnable");
+
         }
 
         private void Update()
@@ -128,7 +128,7 @@ namespace DoudizhuTower.Gameplay.Battle
                         {
                             var card = _deck.Draw();
                             Hand.Add(card);
-                            Debug.Log($"[BuildingAI] {name} 摸牌: hand={Hand.Count}");
+
                         }
                     }
                 }
@@ -305,7 +305,7 @@ namespace DoudizhuTower.Gameplay.Battle
                 Debug.LogWarning($"[BuildingAI] {name} MakeDecision 阻止: bm={_battleManager != null}, baseCtl={_baseCtl != null}");
                 return;
             }
-            Debug.Log($"[BuildingAI] {name} MakeDecision: hand={Hand.Count}, gold={Economy.CurrentGold:F0}");
+
 
             // ── 领域/反击决策 ──
             if (_domainSystem != null)

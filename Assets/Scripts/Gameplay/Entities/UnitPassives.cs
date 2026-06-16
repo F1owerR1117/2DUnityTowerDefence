@@ -598,7 +598,6 @@ namespace DoudizhuTower.Gameplay.Entities
 
             // 冲锋伤害加成
             float chargeBonus = _owner.Stats.ATK * (chargeMultiplier - 1f);
-            Debug.Log($"[Charge] {gameObject.name} Stats.ATK={_owner.Stats.ATK} chargeMult={chargeMultiplier} chargeBonus={chargeBonus}");
             _owner._bonusDamage += chargeBonus;
             _unitVFX?.PlayCharge(_owner.transform);
 

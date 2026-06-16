@@ -652,6 +652,9 @@ MonoBehaviour:
   fillRenderer: {fileID: 4997910722608960335}
   friendlyColor: {r: 0, g: 1, b: 0, a: 1}
   enemyColor: {r: 1, g: 0, b: 0, a: 1}
+  smoothSpeed: 8
+  hitFlashDuration: 0.15
+  hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &5077993778303220711
 GameObject:
   m_ObjectHideFlags: 0

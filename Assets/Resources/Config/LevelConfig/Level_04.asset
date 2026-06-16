@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Level_04
   m_EditorClassIdentifier: 
   levelName: "\u6B63\u9762\u4EA4\u950B"
-  description: "\u738B\u56FD\u96C7\u4F63\u7684\u77E5\u540D\u5251\u58EB\u4E0E\u5176\u7387\u9886\u7684\u76FE\u536B\u5C0F\u961F\u5DF2\u53D1\u73B0\u4F60\u7684\u8E2A\u8FF9\uFF0C\u907F\u65E0\u53EF\u907F\u3002"
+  description: "BOSS\u62181"
   difficulty: 1
   sceneName: Level_4
   thumbnail: {fileID: 5049059679262521404, guid: 752b4da0f46dd4d4fb705b526ea4798a, type: 3}

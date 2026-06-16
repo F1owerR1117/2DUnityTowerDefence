@@ -303,19 +303,19 @@ MonoBehaviour:
   - {fileID: 0}
   - {fileID: 0}
   _bombPrefabs:
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
-  - {fileID: 0}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
+  - {fileID: 7356763192880271334, guid: 2d22e6c44ec2f014f8bb6ca537907794, type: 3}
   _tankPrefabs:
   - {fileID: 0}
   - {fileID: 0}

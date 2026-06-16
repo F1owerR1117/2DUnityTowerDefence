@@ -121,7 +121,6 @@ namespace DoudizhuTower.Gameplay.Network
         {
             string role = _net.IsMasterClient ? "M" : "C";
             string slotStr = slot >= 0 ? $" slot={slot}" : "";
-            Debug.Log($"[NET][{role}][{_traceSeq++}][{msg}]{slotStr}");
         }
 
         private bool _initialized;
@@ -188,6 +187,10 @@ namespace DoudizhuTower.Gameplay.Network
 
             if (_net.IsMasterClient)
             {
+                // Master: 注册自身经济到 _slotEconomies（确保 Snapshot 包含 Master 金币）
+                if (_economyManager?.CoreEconomy != null)
+                    _slotEconomies[_mySlot] = _economyManager.CoreEconomy;
+
                 // Master: 生成快照 → 存入 Room.Properties → 推进状态机
                 _playerReadyReceived.Add(_mySlot);
                 StoreSnapshot();
@@ -207,7 +210,7 @@ namespace DoudizhuTower.Gameplay.Network
             _debugPanel = gameObject.AddComponent<NetworkDebugPanel>();
             _debugPanel.Initialize(_mySlot, _net.IsMasterClient);
 
-            Debug.Log($"[NetworkGame] 初始化完成，本机槽位={_mySlot}, IsMaster={_net.IsMasterClient}");
+
         }
 
         // ─── L0: 快照存储（Event + Snapshot + Tick 三层模型） ───
@@ -628,8 +631,6 @@ namespace DoudizhuTower.Gameplay.Network
                 }
             }
 
-            if (corrected > 0)
-                Debug.Log($"[NetworkGame] HP 修正: {corrected} 个单位");
         }
 
         /// <summary>Client 处理 Master 广播的单位死亡（播放视觉死亡动画+音效）</summary>
@@ -768,7 +769,7 @@ namespace DoudizhuTower.Gameplay.Network
         {
             if (!_initialized) return;
 
-            Debug.Log("[NetworkGame] 本机成为新 Master，等待旧 Master 状态广播...");
+
 
             // 新 Master 上任后，请求一次时间同步
             SyncGameTime();
@@ -963,7 +964,7 @@ namespace DoudizhuTower.Gameplay.Network
                 routeGroup.SetRouteIndex(routeIndex);
             _battleManager?.DeployCards(cards, result, routeGroup, sourceBase);
 
-            Debug.Log($"[NetworkGame] BroadcastAIPlay: 槽位={slot}, baseIndex={baseIndex}, cards={cards.Length}");
+
 
             // 广播给所有客户端
             _net.SendToAll(NetworkProtocol.PLAY_APPROVED, new object[]
@@ -1084,7 +1085,7 @@ namespace DoudizhuTower.Gameplay.Network
                     break;
 
                 case NetworkProtocol.PLAY_APPROVED:
-                    Debug.Log($"[NetworkGame] 收到 PLAY_APPROVED 事件, IsMaster={_net.IsMasterClient}");
+
                     HandlePlayApproved(SafeArray(value));
                     break;
 
@@ -1353,7 +1354,7 @@ namespace DoudizhuTower.Gameplay.Network
 
             // 经济同步验证日志（观察 Master 与 Client 金币是否长期一致）
             if (playerSlot != _mySlot && targetEconomy != null)
-                Debug.Log($"[ECON SYNC] slot={playerSlot} client={clientGold:F0} master={targetEconomy.CurrentGold:F0} cost={cost:F0}");
+
 
             // 远程玩家：自动创建经济追踪（PLAYER_READY 可能延迟到达）
             if (playerSlot != _mySlot && !_slotEconomies.ContainsKey(playerSlot))
@@ -1363,7 +1364,7 @@ namespace DoudizhuTower.Gameplay.Network
                 float initGold = clientGold >= 0f ? clientGold : (econConfig != null ? econConfig.initialGold : 50f);
                 targetEconomy = new EconomySystem(initGold, incomeRate);
                 _slotEconomies[playerSlot] = targetEconomy;
-                Debug.Log($"[NetworkGame] 自动创建槽位 {playerSlot} 经济: 金币={initGold}");
+
             }
 
             // Master 使用自己追踪的金币（已在 Update 中自动累加收入），不信任客户端报告
@@ -1414,7 +1415,7 @@ namespace DoudizhuTower.Gameplay.Network
             if (_net.IsMasterClient) return;
             Trace("PLAY_APPROVED_RECV", playerSlot);
 
-            Debug.Log($"[NetworkGame] HandlePlayApproved: 收到槽位={playerSlot} 的出牌广播, baseIndex={baseIndex}");
+
             Card[] cards = NetworkProtocol.DeserializeCards(cardIndices, _deck);
             CardTypeResult result = NetworkProtocol.DeserializeCardTypeResult(typeData);
             ExecutePlayApproved(playerSlot, cards, result, routeIndex, baseIndex, cost);
@@ -1430,15 +1431,13 @@ namespace DoudizhuTower.Gameplay.Network
             if (sourceBase == null && playerSlot >= 0 && playerSlot < _baseBuildings.Length)
             {
                 sourceBase = _baseBuildings[playerSlot];
-                Debug.Log($"[NetworkGame] baseIndex=-1, 按槽位 {playerSlot} 回退查找基地: {sourceBase?.name ?? "null"}");
+
             }
 
             RouteGroup routeGroup = sourceBase?.GetComponent<RouteGroup>();
             if (routeGroup != null && routeIndex >= 0)
                 routeGroup.SetRouteIndex(routeIndex);
 
-            Debug.Log($"[NetworkGame] ExecutePlayApproved: 槽位={playerSlot}, baseIndex={baseIndex}, sourceBase={sourceBase?.name ?? "null"}, " +
-                      $"routeGroup={routeGroup != null}, cards={cards.Length}, IsMaster={_net.IsMasterClient}");
 
             // 扣费：仅本机玩家在非 Master 客户端扣费（Master 已在 MasterValidateAndPlay 中扣过）
             if (!_net.IsMasterClient && playerSlot == _mySlot && _economyManager != null)
@@ -1465,7 +1464,7 @@ namespace DoudizhuTower.Gameplay.Network
             if (_battleManager != null)
             {
                 _battleManager.DeployCards(cards, result, routeGroup, sourceBase);
-                Debug.Log($"[NetworkGame] DeployCards 执行完成: 槽位={playerSlot}, 兵种数={cards.Length}");
+
             }
             else
             {
@@ -1513,7 +1512,7 @@ namespace DoudizhuTower.Gameplay.Network
                 return;
             }
 
-            Debug.Log($"[NetworkGame] RequestDrawCard: 槽位={_mySlot}, IsMaster={_net.IsMasterClient}, cost={cost}");
+
             if (_net.IsMasterClient)
             {
                 MasterDrawCard(_mySlot, cost);
@@ -1546,7 +1545,7 @@ namespace DoudizhuTower.Gameplay.Network
                 return;
             }
 
-            Debug.Log($"[NetworkGame] HandleDrawCard: 槽位={targetSlot}, remain={networkRemaining}, counter={_cardCounter != null}");
+
 
             // 客户端：将卡牌添加到本地手牌
             if (targetSlot == _mySlot)
@@ -1556,9 +1555,9 @@ namespace DoudizhuTower.Gameplay.Network
                     _economyManager.TrySpendGold(drawCost);
 
                 Card card = _deck.GetCardByIndex(cardIndex);
-                Debug.Log($"[NetworkGame] HandleDrawCard: 槽位={targetSlot}, DeckIndex={cardIndex}, Card={card}, cost={drawCost}, HandCount={_playerHand.Count}");
+
                 bool added = _playerHand.Add(card);
-                Debug.Log($"[NetworkGame] HandleDrawCard: Add结果={added}, HandCount={_playerHand.Count}");
+
                 _handArea?.NotifyHandChanged();
                 AudioManager.Instance?.PlayDrawCard();
             }
@@ -1611,7 +1610,7 @@ namespace DoudizhuTower.Gameplay.Network
             if (!_slotDecks.ContainsKey(targetSlot))
             {
                 // 自动创建同步牌堆（处理 PLAYER_READY 还未到达的竞态）
-                Debug.Log($"[NetworkGame] MasterDrawCard: 槽位 {targetSlot} 同步牌堆不存在，自动创建");
+
                 var syncDeck = new DoudizhuTower.Core.Cards.CardDeck(GameSession.NetworkSeed);
                 syncDeck.Deal(targetSlot * 7, new DoudizhuTower.Core.Cards.CardHand(17)); // 跳过
                 syncDeck.Deal(7, new DoudizhuTower.Core.Cards.CardHand(17)); // 消耗初始手牌
@@ -1633,10 +1632,10 @@ namespace DoudizhuTower.Gameplay.Network
                 // 新一副完整牌堆，54 张全部可用
                 _currentDeckId++;
                 _net.SendToAll(NetworkProtocol.NEW_DECK, _currentDeckId);
-                Debug.Log($"[NetworkGame] MasterDrawCard: 牌堆重洗 deckId={_currentDeckId}，共享池重置为 54");
+
             }
             cardIndex = card.DeckIndex;
-            Debug.Log($"[NetworkGame] MasterDrawCard: 槽位={targetSlot}, DeckIndex={cardIndex}, Card={card}");
+
 
             if (targetSlot == _mySlot)
             {
@@ -1652,7 +1651,7 @@ namespace DoudizhuTower.Gameplay.Network
             // 共享池剩余：由 _deck.Remaining 自动计算
             _cardCounter?.Refresh();
 
-            Debug.Log($"[NetworkGame] MasterDrawCard: 广播 pool={_sharedPoolRemaining}, counter={_cardCounter != null}");
+
 
             // 广播摸牌结果（含 rank + 共享池剩余 + deckId，供客户端记牌器使用 + 防旧包污染）
             _net.SendToAll(NetworkProtocol.DRAW_CARD_RESULT, new object[] { targetSlot, cardIndex, cost, (int)card.Rank, _sharedPoolRemaining, _currentDeckId });
@@ -1748,14 +1747,14 @@ namespace DoudizhuTower.Gameplay.Network
                 ExecuteCardArrive(senderSlot, card);
             }
 
-            // 如果 Master 是发送方，本地也要移除手牌
+            // 发送方手牌 UI 刷新（所有发送方均需刷新，不仅限 Master）
             if (senderSlot == _mySlot)
             {
                 Card card = _deck.GetCardByIndex(cardIndex);
                 _playerHand.Remove(card);
-                _cardCounter?.Refresh();
-                _handArea?.NotifyHandChanged();
             }
+            _cardCounter?.Refresh();
+            _handArea?.NotifyHandChanged();
         }
 
         private void HandleCardArrive(object[] data)
@@ -2047,7 +2046,7 @@ namespace DoudizhuTower.Gameplay.Network
             if (_playerIsLandlord == winnerIsLandlord)
                 localWon = true;
 
-            Debug.Log($"[NetworkGame] 游戏结束: 赢家是地主={winnerIsLandlord}, 赢家槽位={winnerSlot}, 本机胜利={localWon}");
+
 
             // v2.0: 进入 END 阶段
             TransitPhase(GameSyncPhase.END);
@@ -2079,7 +2078,7 @@ namespace DoudizhuTower.Gameplay.Network
                 if (!stillConnected) { disconnectedSlot = i; break; }
             }
 
-            Debug.Log($"[NetworkGame] 玩家断线: {playerName}, 槽位={disconnectedSlot}");
+
 
             if (disconnectedSlot >= 0 && disconnectedSlot < _baseBuildings.Length)
             {
@@ -2125,7 +2124,7 @@ namespace DoudizhuTower.Gameplay.Network
                         ai.SetNetworkContext(this, disconnectedSlot);
                         ai.enabled = true;
 
-                        Debug.Log($"[NetworkGame] 槽位 {disconnectedSlot} 已转为 AI 控制");
+
                     }
                 }
             }
@@ -2138,7 +2137,7 @@ namespace DoudizhuTower.Gameplay.Network
         {
             string playerName = (string)data[0];
             int slot = data.Length > 1 ? SafeInt(data[1]) : -1;
-            Debug.Log($"[NetworkGame] 收到断线通知: {playerName}, 槽位={slot}");
+
             // 客户端：标记该槽位为 AI（UI 可选显示）
         }
 
@@ -2170,7 +2169,7 @@ namespace DoudizhuTower.Gameplay.Network
                 float localStartTime = Time.time - (float)networkElapsed - elapsed;
 
                 _gameStateMachine.SyncGameStartTime(localStartTime);
-                Debug.Log($"[NetworkGame] 时间同步: elapsed={elapsed:F2}s, localStart={localStartTime:F2}");
+
             }
         }
 
@@ -2187,7 +2186,7 @@ namespace DoudizhuTower.Gameplay.Network
             {
                 // 重连：更新金币为客户端报告的值
                 _slotEconomies[slot].SetGold(initGold);
-                Debug.Log($"[NetworkGame] 更新玩家 {slot} 经济: 金币={initGold}");
+
             }
             else
             {
@@ -2195,7 +2194,7 @@ namespace DoudizhuTower.Gameplay.Network
                 float incomeRate = econConfig != null ? econConfig.farmerBaseIncome : 5f;
                 var economy = new EconomySystem(initGold, incomeRate);
                 _slotEconomies[slot] = economy;
-                Debug.Log($"[NetworkGame] 注册玩家 {slot} 经济: 初始金币={initGold}");
+
             }
 
             // 标记该玩家已就绪（允许后续摸牌请求）
@@ -2211,7 +2210,7 @@ namespace DoudizhuTower.Gameplay.Network
                 syncDeck.Deal(7, hand);
                 _slotHands[slot] = hand;
                 _slotDecks[slot] = syncDeck;
-                Debug.Log($"[NetworkGame] 注册玩家 {slot} 手牌: {hand.Count} 张, 跳过={slot * 7}");
+
             }
         }
     }
