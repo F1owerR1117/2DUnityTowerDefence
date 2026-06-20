@@ -71,7 +71,7 @@ namespace DoudizhuTower.Gameplay.Systems
             if (_coreEconomy == null) return false;
 
             // v2.0: 仅 Master 端执行金币消耗（Client 端由 Snapshot 覆盖）
-            if (NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient)
+            if (GameSession.IsNetworkMode && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient)
                 return false;
 
             float goldBefore = _coreEconomy.CurrentGold;
@@ -98,7 +98,7 @@ namespace DoudizhuTower.Gameplay.Systems
             if (_coreEconomy == null) return;
 
             // v2.0: 仅 Master 端执行金币增加（Client 端由 Snapshot 覆盖）
-            if (NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient)
+            if (GameSession.IsNetworkMode && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient)
                 return;
 
             _coreEconomy.AddGold(amount);
@@ -191,7 +191,9 @@ namespace DoudizhuTower.Gameplay.Systems
         {
             // v2.0: 仅 Master 端执行经济增长，Client 端由 Snapshot 覆盖
             // 如果 _coreEconomy 未注入（联机模式），跳过
-            if (_coreEconomy != null && NetworkManager.Instance != null && NetworkManager.Instance.IsInRoom)
+            // Fusion 迁移：PUN 冻结时按单机模式运行
+            bool isNetworkActive = GameSession.IsNetworkMode && !NetworkGameManager.PUNFrozen && NetworkFacade.IsInRoom;
+            if (_coreEconomy != null && isNetworkActive)
             {
                 // 联机模式：由 NetworkGameManager._slotEconomies 驱动
                 // 此处不调用 UpdateEconomy()
@@ -220,8 +222,30 @@ namespace DoudizhuTower.Gameplay.Systems
             }
         }
 
+        private void OnEnable()
+        {
+            GameSession.OnRuntimeReset += ResetRuntime;
+        }
+
+        private void OnDisable()
+        {
+            GameSession.OnRuntimeReset -= ResetRuntime;
+        }
+
+        private void ResetRuntime()
+        {
+            if (_coreEconomy != null)
+            {
+                _coreEconomy.SetGold(0f);
+                _coreEconomy.SetIncomeRate(0f);
+            }
+            UpdateGoldUI(0f);
+            UpdateIncomeUI(0f);
+        }
+
         private void OnDestroy()
         {
+            GameSession.OnRuntimeReset -= ResetRuntime;
             if (_coreEconomy != null)
             {
                 _coreEconomy.OnGoldChanged -= UpdateGoldUI;

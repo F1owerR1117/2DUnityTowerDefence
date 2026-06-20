@@ -7,49 +7,63 @@ namespace DoudizhuTower.Gameplay.Systems
     /// 跨场景游戏会话数据（纯静态，无 MonoBehaviour）。
     /// 存储叫分期的结果，供游戏场景读取。
     ///
-    /// 支持单机模式（1 玩家 + 2 AI）和联机模式（3 玩家）。
-    /// 联机改造时，只需扩展玩家 ID 分配逻辑，基地映射结构不变。
+    /// Phase 5：GameSession 降级为数据缓存，不再参与身份/逻辑。
+    /// 身份系统由 FusionGameManager.OnPlayerJoined 分配 slot。
     /// </summary>
     public static class GameSession
     {
+        /// <summary>运行时重置事件</summary>
+        public static event System.Action OnRuntimeReset;
+
+        // ─── 保留（数据缓存）───
+
         /// <summary>叫分倍数（1/2/3）</summary>
         public static float BidMultiplier = 1f;
 
-        /// <summary>是否有有效的叫分结果（false = 跳过叫分直接启动）</summary>
+        /// <summary>是否有有效的叫分结果</summary>
         public static bool HasResult;
-
-        /// <summary>本机玩家在 3 人中的 ID（0/1/2）。单机模式固定为 0。</summary>
-        public static int LocalPlayerId;
 
         /// <summary>是否为联机模式</summary>
         public static bool IsNetworkMode;
 
-        /// <summary>联机模式下共享的牌组 RNG 种子，保证所有客户端抽牌一致</summary>
+        /// <summary>联机模式下共享的牌组 RNG 种子</summary>
         public static int NetworkSeed;
 
-        /// <summary>联机模式下 AI 槽位集合（actor-number 排序后的 slot index）</summary>
+        /// <summary>地主的 slot（由叫分结果确定）</summary>
+        public static int LandlordSlot = -1;
+
+        /// <summary>联机模式下 AI 槽位集合</summary>
         public static HashSet<int> AISlots = new HashSet<int>();
 
-        /// <summary>大厅阶段的原始 AI 槽位（playerSlots[] 数组索引），由 OnStartGame 存储，由 NetworkBiddingManager 转换</summary>
+        /// <summary>大厅阶段的原始 AI 槽位</summary>
         public static HashSet<int> RawAISlots = new HashSet<int>();
 
-        /// <summary>判断指定槽位是否为 AI</summary>
-        public static bool IsAISlot(int slot) => AISlots.Contains(slot);
+        // ─── 废弃（Phase 5 不再使用）───
 
-        /// <summary>
-        /// 玩家 ID → 基地索引映射（长度 3）。
-        /// PlayerBaseMapping[playerId] = baseBuildings 数组索引。
-        ///
-        /// 示例：[2, 0, 1]
-        ///   → 玩家0操控 baseBuildings[2]（LandLord）
-        ///   → 玩家1操控 baseBuildings[0]（FarmerA）
-        ///   → 玩家2操控 baseBuildings[1]（FarmerB）
-        /// </summary>
+        [System.Obsolete("Phase 5 废弃：身份由 FusionGameManager.OnPlayerJoined 分配")]
+        public static int LocalPlayerId;
+
+        [System.Obsolete("Phase 5 废弃：slot 推导由 WorldState 替代")]
         public static int[] PlayerBaseMapping;
 
-        // ─── 便捷属性 ───
+        [System.Obsolete("Phase 5 废弃：slot 推导由 WorldState 替代")]
+        public static Dictionary<int, int> PlayerSlotMap = new();
 
-        /// <summary>本机玩家操控的基地索引</summary>
+        [System.Obsolete("Phase 5 废弃：身份由 FusionGameManager.OnPlayerJoined 分配")]
+        public static int LocalActorNumber;
+
+        [System.Obsolete("Phase 5 废弃：slot 推导由 WorldState 替代")]
+        public static int LandlordPlayerId = -1;
+
+        [System.Obsolete("Phase 5 废弃：由 WorldState 替代")]
+        public static bool SlotReady;
+
+        [System.Obsolete("Phase 5 废弃：由 WorldState 替代")]
+        public static event System.Action OnSlotReady;
+
+        // ─── 便捷属性（保留，但内部不再依赖推导）───
+
+        [System.Obsolete("Phase 5 废弃：由 WorldState 替代")]
         public static int MyBaseIndex
         {
             get
@@ -60,69 +74,65 @@ namespace DoudizhuTower.Gameplay.Systems
             }
         }
 
-        /// <summary>本机玩家是否是地主</summary>
-        public static bool PlayerIsLandlord
-        {
-            get
-            {
-                if (PlayerBaseMapping == null) return false;
-                // 地主的基地索引是 PlayerBaseMapping 中唯一的那个
-                // 通过 GameBootstrapper 传入地主基地索引来判断
-                return _localPlayerIsLandlord;
-            }
-        }
-
-        // 内部缓存，由 SetResult 设置
+        public static bool PlayerIsLandlord => _localPlayerIsLandlord;
         private static bool _localPlayerIsLandlord;
 
         // ─── 方法 ───
 
-        /// <summary>重置会话数据（每次新游戏前调用）</summary>
+        public static void MarkSlotReady()
+        {
+            if (SlotReady) return;
+            SlotReady = true;
+            OnSlotReady?.Invoke();
+        }
+
         public static void Reset()
         {
             BidMultiplier = 1f;
             HasResult = false;
-            LocalPlayerId = 0;
-            PlayerBaseMapping = null;
-            _localPlayerIsLandlord = false;
             IsNetworkMode = false;
             NetworkSeed = 0;
+            LandlordSlot = -1;
             AISlots = new HashSet<int>();
             RawAISlots = new HashSet<int>();
+            _localPlayerIsLandlord = false;
+
+            // 废弃字段也重置（兼容旧代码）
+            LocalPlayerId = 0;
+            PlayerBaseMapping = null;
+            PlayerSlotMap = new Dictionary<int, int>();
+            LocalActorNumber = -1;
+            LandlordPlayerId = -1;
+            SlotReady = false;
+
+            OnRuntimeReset?.Invoke();
         }
 
         /// <summary>
         /// 写入叫分结果（单机模式）。
-        /// 自动构建基地映射：地主分配到地主基地，农民随机分配到农民基地。
+        /// 保留原始逻辑：地主分配到地主基地，农民随机分配到农民基地。
         /// </summary>
-        /// <param name="localIsLandlord">本机玩家是否是地主</param>
-        /// <param name="multiplier">叫分倍数</param>
-        /// <param name="landlordBaseIndex">地主基地在 baseBuildings 中的索引</param>
-        /// <param name="farmerBaseIndices">农民基地在 baseBuildings 中的索引数组</param>
         public static void SetResult(bool localIsLandlord, float multiplier, int landlordBaseIndex, int[] farmerBaseIndices)
         {
             _localPlayerIsLandlord = localIsLandlord;
             BidMultiplier = multiplier;
-            LocalPlayerId = 0;
             HasResult = true;
             IsNetworkMode = false;
+            LandlordSlot = 0;
 
-            // 构建 3 人映射：[玩家0, AI1, AI2]
+            LocalPlayerId = 0;
             PlayerBaseMapping = new int[3];
 
             if (localIsLandlord)
             {
-                // 玩家是地主 → 玩家操控地主基地，AI 操控农民基地
                 PlayerBaseMapping[0] = landlordBaseIndex;
                 ShuffleAndAssign(farmerBaseIndices, 1);
             }
             else
             {
-                // 玩家是农民 → 随机分配农民基地，AI 操控地主基地 + 剩余农民基地
                 int playerFarmerIdx = Random.Range(0, farmerBaseIndices.Length);
                 PlayerBaseMapping[0] = farmerBaseIndices[playerFarmerIdx];
 
-                // AI 分配：地主 + 剩余农民
                 int aiSlot = 1;
                 PlayerBaseMapping[aiSlot++] = landlordBaseIndex;
                 for (int i = 0; i < farmerBaseIndices.Length; i++)
@@ -135,33 +145,31 @@ namespace DoudizhuTower.Gameplay.Systems
 
         /// <summary>
         /// 写入叫分结果（联机模式）。
-        /// 由网络层调用，直接传入完整的基地映射。
         /// </summary>
-        public static void SetResultNetwork(int localId, int[] baseMapping, float multiplier)
+        public static void SetResultNetwork(int landlordSlot, float multiplier)
         {
-            LocalPlayerId = localId;
-            PlayerBaseMapping = baseMapping;
+            LandlordSlot = landlordSlot;
             BidMultiplier = multiplier;
             HasResult = true;
             IsNetworkMode = true;
+            _localPlayerIsLandlord = false; // 由调用方设置
 
-            // 判断本机玩家是否是地主（地主基地只有一个，且是 landlord 身份）
-            // 需要通过 base index 对应的 CardUnit.IsLandlord 判断
-            // 此处简化：联机模式下由调用方设置 _localPlayerIsLandlord
+            // 兼容旧代码
+            LocalPlayerId = 0;
         }
 
-        /// <summary>联机模式下设置本机是否地主</summary>
+        /// <summary>设置本机是否地主</summary>
         public static void SetLocalPlayerIsLandlord(bool isLandlord)
         {
             _localPlayerIsLandlord = isLandlord;
         }
 
-        // ─── 辅助 ───
+        /// <summary>判断指定槽位是否为 AI</summary>
+        public static bool IsAISlot(int slot) => AISlots.Contains(slot);
 
-        /// <summary>将 farmerBaseIndices 随机打乱后从 PlayerBaseMapping 的指定位置开始填充</summary>
+        /// <summary>将 farmerBaseIndices 随机打乱后从指定位置开始填充</summary>
         private static void ShuffleAndAssign(int[] indices, int startSlot)
         {
-            // Fisher-Yates 洗牌
             int[] shuffled = (int[])indices.Clone();
             for (int i = shuffled.Length - 1; i > 0; i--)
             {

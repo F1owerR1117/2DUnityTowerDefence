@@ -91,6 +91,8 @@ namespace DoudizhuTower.Gameplay.Systems
                 playerBaseIndex = GameSession.MyBaseIndex;
             }
 
+            Debug.Log($"[Bootstrapper] HasResult={GameSession.HasResult}, PlayerIsLandlord={GameSession.PlayerIsLandlord}, _playerIsLandlord={_playerIsLandlord}");
+
             // 禁用所有预置 BuildingAI，防止在阵营纠正前出牌
             // 跳过 BOSS（BOSS 的 BuildingAI 由 BossController 管理）
             // 记录原本启用的 BuildingAI，后续只恢复这些
@@ -152,12 +154,14 @@ namespace DoudizhuTower.Gameplay.Systems
             var playerHand = new CardHand(handCapacity);
             if (_isNetworkMode)
             {
-                // 联机模式：按本机槽位跳过前面玩家的牌，与 Master HandlePlayerReady 的偏移一致
-                int skip = GameSession.LocalPlayerId * 7;
-                if (skip > 0)
-                    _mainDeck.Deal(skip, new CardHand(skip));
+                // 联机模式：不自己发牌，等待 Master 通过 HAND_SYNC 广播手牌
+                // 客户端只创建空手牌容器，由 HandleHandSync 填充
+                // Master 的初始手牌由 NetworkGameManager.Initialize() 补发
             }
-            _mainDeck.Deal(7, playerHand);
+            else
+            {
+                _mainDeck.Deal(7, playerHand);
+            }
 
             // 为每个 AI 基地创建独立手牌
             var playerBaseRef = GetPlayerBase();
@@ -181,7 +185,8 @@ namespace DoudizhuTower.Gameplay.Systems
             }
             else
             {
-                // 联机模式：为 AI 槽位的基地创建 AI 手牌（用独立牌堆，每个槽位跳过前面玩家的牌）
+                // 联机模式：为 AI 槽位的基地创建 AI 手牌
+                // PlayerBaseMapping = 叫分结果数据（哪个 slot 控制哪个基地），不是 slot 计算
                 foreach (var aiSlot in GameSession.AISlots)
                 {
                     if (aiSlot < 0 || aiSlot >= GameSession.PlayerBaseMapping.Length) continue;
@@ -221,6 +226,14 @@ namespace DoudizhuTower.Gameplay.Systems
             if (battleManager != null && economyManager != null)
                 battleManager.SetEconomyManager(economyManager);
 
+            // 演出系统：BattleManager 暂停/恢复
+            var presentationMgr = DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance;
+            if (presentationMgr != null && battleManager != null)
+            {
+                presentationMgr.OnPresentationStart += () => battleManager.IsPresentationActive = true;
+                presentationMgr.OnPresentationEnd += () => battleManager.IsPresentationActive = false;
+            }
+
             // ── Step 5b: BOSS 控制器注入 ────────────────
             if (battleManager != null)
             {
@@ -241,7 +254,30 @@ namespace DoudizhuTower.Gameplay.Systems
                     var bossAI = boss.GetComponent<BuildingAI>();
                     if (bossAI != null) bossAI.enabled = true;
 
+                    // 演出系统：Event + State 双保险
+                    var bossSequence = Resources.Load<DoudizhuTower.Gameplay.Presentation.PresentationSequence>("Presentation/BossAwaken");
+                    bool bossAwakenedFired = false;
+
+                    // Event：监听激活事件（必须在 Inject 之前注册）
+                    if (bossSequence != null)
+                    {
+                        boss.OnBossAwakened += (controller) =>
+                        {
+                            bossAwakenedFired = true;
+                            Debug.Log($"[Presentation] Event fired at {Time.time:F2}s");
+                            DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance?.PlaySequence(bossSequence);
+                        };
+                    }
+
                     boss.Inject(battleManager, _mainDeck);
+
+                    // State：Inject 后检查是否已激活（防止事件丢失）
+                    // 仅当 Event 未触发时才兜底（避免重复播放）
+                    if (boss.IsActive && bossSequence != null && !bossAwakenedFired)
+                    {
+                        Debug.Log($"[Presentation] State fallback at {Time.time:F2}s");
+                        DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance?.PlaySequence(bossSequence);
+                    }
                 }
             }
 
@@ -703,7 +739,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
             if (_isNetworkMode)
             {
-                var net = NetworkManager.Instance?.Service;
+                var net = NetworkFacade.Service;
 
                 if (net != null)
                 {
@@ -810,7 +846,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void OnQuitToLobby()
         {
-            NetworkManager.Instance?.Service?.LeaveRoom();
+            NetworkFacade.LeaveRoom();
             SceneLoader.LoadOnlineLobby();
         }
 

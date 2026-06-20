@@ -31,10 +31,13 @@ namespace DoudizhuTower.Gameplay.Network
         void SetPlayerReady(bool ready);
         bool AreAllPlayersReady { get; }
 
-        // ─── 消息同步 ───
+        [System.Obsolete("Phase 5 废弃：Fusion 使用 WorldState + Host Simulation，不再支持事件广播")]
         void SendToAll(string key, object value);
+        [System.Obsolete("Phase 5 废弃：Fusion 使用 WorldState + Host Simulation，不再支持事件广播")]
         void SendToMaster(string key, object value);
+        [System.Obsolete("Phase 5 废弃：Fusion 使用 WorldState + Host Simulation，不再支持事件广播")]
         void SendToPlayer(int actorNumber, string key, object value);
+
         void SetRoomProperty(string key, object value);
         object GetRoomProperty(string key);
 

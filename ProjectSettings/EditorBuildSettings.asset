@@ -41,5 +41,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Codex.unity
     guid: 4656207c4e28ba44c80b75d11fa09491
+  - enabled: 1
+    path: Assets/Scenes/TestScene.unity
+    guid: ad6406858e53ea64591db2e5704f1e3a
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

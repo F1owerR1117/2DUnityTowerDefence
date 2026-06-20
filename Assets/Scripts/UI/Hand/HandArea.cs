@@ -500,8 +500,31 @@ namespace DoudizhuTower.UI.Hand
             OnSelectionChanged();
         }
 
+        private void OnEnable()
+        {
+            GameSession.OnRuntimeReset += ResetRuntime;
+        }
+
+        private void OnDisable()
+        {
+            GameSession.OnRuntimeReset -= ResetRuntime;
+        }
+
+        private void ResetRuntime()
+        {
+            if (_boundHand != null)
+                _boundHand.OnHandChanged -= RefreshHand;
+            _boundHand = null;
+            foreach (var widget in _cardWidgets)
+            {
+                if (widget != null) Destroy(widget.gameObject);
+            }
+            _cardWidgets.Clear();
+        }
+
         private void OnDestroy()
         {
+            GameSession.OnRuntimeReset -= ResetRuntime;
             _validator?.ClearSelection();
             if (_boundHand != null)
                 _boundHand.OnHandChanged -= RefreshHand;

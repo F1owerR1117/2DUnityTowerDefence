@@ -97,26 +97,15 @@ namespace DoudizhuTower.Gameplay.Network
 
         public string[] GetPlayerNames() => LocalNetworkHub.GetAllPlayerNames();
 
-        public void SetPlayerReady(bool ready) { /* 本地模式立即就绪 */ }
+        public void SetPlayerReady(bool ready) { }
 
         public bool AreAllPlayersReady => true;
 
-        public void SendToAll(string key, object value)
-        {
-            LocalNetworkHub.SendToAll(key, value, _actorNumber);
-        }
+        [System.Obsolete] public void SendToAll(string key, object value) { }
+        [System.Obsolete] public void SendToMaster(string key, object value) { }
+        [System.Obsolete] public void SendToPlayer(int actorNumber, string key, object value) { }
 
-        public void SendToMaster(string key, object value)
-        {
-            LocalNetworkHub.SendToMaster(key, value, _actorNumber);
-        }
-
-        public void SendToPlayer(int actorNumber, string key, object value)
-        {
-            LocalNetworkHub.SendToPlayer(actorNumber, key, value, _actorNumber);
-        }
-
-        public void SetRoomProperty(string key, object value) { /* 本地模式不需要 */ }
+        public void SetRoomProperty(string key, object value) { }
         public object GetRoomProperty(string key) => null;
 
         public void LoadScene(string sceneName)

@@ -1,3 +1,4 @@
+using System;
 using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Gameplay.Entities;
 using DoudizhuTower.Gameplay.Systems;
@@ -132,11 +133,16 @@ namespace DoudizhuTower.Gameplay.Battle
         }
 
         /// <summary>激活 BOSS（可重复调用但只生效一次）</summary>
+        /// <summary>BOSS 激活事件（供演出系统监听）</summary>
+        public event Action<BossController> OnBossAwakened;
+
         public void ActivateBoss()
         {
             if (_activated || _battleManager == null || _bossUnit == null) return;
             _activated = true;
-            Debug.Log($"[BOSS STATE] {_bossUnit.name} Activate frame={Time.frameCount}");
+
+            // 广播激活事件（演出系统在此处介入）
+            OnBossAwakened?.Invoke(this);
 
             // 0. 恢复显示、碰撞、血条和技能系统（Inject 时延迟到这里）
             if (_renderers != null)

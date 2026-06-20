@@ -1,0 +1,46 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f2bb8e7a3b1c2d4ba2e1863cc68d471, type: 3}
+  m_Name: BossAwaken
+  m_EditorClassIdentifier: 
+  pauseBattle: 1
+  allowSkip: 1
+  cameraActions:
+  - type: 0
+    target: {fileID: 0}
+    duration: 1.5
+    delay: 0
+    shakeIntensity: 0
+    zoomSize: 0
+  - type: 2
+    target: {fileID: 0}
+    duration: 1
+    delay: 0
+    shakeIntensity: 0
+    zoomSize: 0
+  dialogues:
+  - lines:
+    - speaker: BossKing
+      content: "\u2026\u2026"
+      duration: 0
+      waitForClick: 1
+    - speaker: Bossking
+      content: "\u4F60\u7ADF\u7136\u80FD\u8D70\u5230\u8FD9\u91CC"
+      duration: 0
+      waitForClick: 1
+  - lines:
+    - speaker: BossKing
+      content: "\u4F46\u4F60\u7684\u597D\u8FD0\u5230\u6B64\u4E3A\u6B62\u4E86\u3002"
+      duration: 0
+      waitForClick: 1
+  announcements: []
+  effects: []

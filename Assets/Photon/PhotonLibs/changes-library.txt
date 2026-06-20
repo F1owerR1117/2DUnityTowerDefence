@@ -3,22 +3,6 @@ Photon C# Client Library - Changelog
 www.photonengine.com  -  Join our Discord Server: https://dashboard.photonengine.com/account/profile
 
 
-Version 4.1.8.20 (4. June 2026)
-    No notable changes.
-
-Version 4.1.8.19 (1. June 2026)
-    Updated: UDP and WebSocket error handling to ignore most temporary error codes.
-    Changed: PhotonClientWebSocket for Unity to make sure it works well in async code. This now controls the SynchronizationConext as needed.
-    Fixed: EnetPeer.CreateAndEnqueueCommand() now locks the channel if a range of fragments needs to be sent. This should prevent other commands from being written to the channel concurrently (which in turn would mess with the sequence numbering), fixing a problem where the first fragment's sequence number was not matching the "first fragment" value.
-    Changed: PhotonPeer.EstablishEncryption() now passes the enqueueLock object for locking. This is the correct lock-object, as opposed to the sendOutgoingLockObject (which is for send calls done by the game logic/realtime).
-    Added: Check for payload size when initializing an NCommand from a byte-buffer coming from the network.
-    Changed: SocketUdp and SocketUdpAsync will use a ThreadPool WorkerItem for DNS resolution and connecting.
-    Changed: SocketUdpAsync to avoid allocations and use the SocketAsyncEventArgs.
-
-Version 4.1.8.18 (30. March 2026 - rev8338)
-    Removed: ITrafficRecorder.Enabled property. As long as a Traffic Recorder is assigned to the Peer, it will call Record().
-    Fixed: ReadInt64() in Protocol18Read.cs. It was fetching 4 bytes instead of expected 8.
-
 Version 4.1.8.17 (10. November 2025 - rev8151)
     Updated: Error handling and logging in PhotonPeer.InitDatagramEncryption(). It now disconnects the client with a respective status callback (in case there is no Datagram Encryption implementation, etc.).
     Changed: Replaced a NullReferenceException in InitDatagramEncryption() with a more suitable disconnect via StatusCode.EncryptionFailedToEstablish.

@@ -398,8 +398,8 @@ MonoBehaviour:
   chargeMultiplier: 1.1
   chargeCooldown: 1
   chargeSpeedMultiplier: 3
-  chargeHeightOverride: 0
-  chargeBlockableByHeight: 0
+  chargeHeightOverride: 1
+  chargeBlockableByHeight: 1
   enableKingAura: 0
   kingInterval: 5
   kingRadius: 3

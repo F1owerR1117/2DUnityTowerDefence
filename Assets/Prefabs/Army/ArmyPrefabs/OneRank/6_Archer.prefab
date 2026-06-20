@@ -339,7 +339,7 @@ MonoBehaviour:
   _projectilePrefab: {fileID: 4214787501192246094, guid: 3c2c3ea0977069240ae5f2a219204b33, type: 3}
   _hp: 100
   _atk: 25
-  _attackInterval: 0.3
+  _attackInterval: 0.25
   _moveSpeed: 50
   _range: 80
   _hitCount: 1

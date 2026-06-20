@@ -24,7 +24,8 @@ namespace DoudizhuTower.Core.Cards
             _cards = new List<Card>(capacity);
         }
 
-        public bool Add(Card card)
+        /// <summary>内部方法 - Phase 2 废弃，由 FusionGameManager.WorldState 替代</summary>
+        internal bool Add(Card card)
         {
             if (IsFull) return false;
             if (_cards.Contains(card)) return false; // 防止同一张物理牌重复加入
@@ -33,7 +34,8 @@ namespace DoudizhuTower.Core.Cards
             return true;
         }
 
-        public bool Remove(Card card)
+        /// <summary>内部方法 - Phase 2 废弃，由 FusionGameManager.WorldState 替代</summary>
+        internal bool Remove(Card card)
         {
             if (_cards.Remove(card))
             {
@@ -43,7 +45,8 @@ namespace DoudizhuTower.Core.Cards
             return false;
         }
 
-        public void RemoveRange(IEnumerable<Card> cards)
+        /// <summary>内部方法 - Phase 2 废弃，由 FusionGameManager.WorldState 替代</summary>
+        internal void RemoveRange(IEnumerable<Card> cards)
         {
             bool changed = false;
             foreach (var card in cards)
@@ -67,7 +70,8 @@ namespace DoudizhuTower.Core.Cards
             return copy;
         }
 
-        public void Clear()
+        /// <summary>内部方法 - Phase 2 废弃</summary>
+        internal void Clear()
         {
             _cards.Clear();
             _sealedCards.Clear();
