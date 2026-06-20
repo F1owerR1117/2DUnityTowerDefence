@@ -599,7 +599,7 @@ MonoBehaviour:
   _firePoint: {fileID: 0}
   _projectilePrefab: {fileID: 0}
   _hp: 400
-  _atk: 13
+  _atk: 15
   _attackInterval: 0.2
   _moveSpeed: 30
   _range: 70

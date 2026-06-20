@@ -26,8 +26,11 @@ namespace DoudizhuTower.Gameplay.Entities
     /// - CardUnit.Combat.cs    : 攻击和索敌逻辑
     /// - CardUnit.Animation.cs : 动画控制、对象池管理
     /// </summary>
-    public partial class CardUnit : MonoBehaviour, IBuildingTarget
+    public partial class CardUnit : MonoBehaviour, IBuildingTarget, Core.Lifecycle.IRuntimeReady
     {
+        /// <summary>运行时就绪：已初始化 + Stats 已赋值</summary>
+        public bool IsRuntimeReady => _initialized && Stats.HP > 0f;
+
         /// <summary>玩家所属阵营，血条根据此判断颜色</summary>
         public static bool PlayerIsLandlord = true;
 
@@ -36,6 +39,9 @@ namespace DoudizhuTower.Gameplay.Entities
         [SerializeField] private float _currentHP;
         [SerializeField] private Lane _lane;
         [SerializeField] private bool _isLandlord;
+
+        /// <summary>拥有此单位的玩家 PlayerId（网络身份，由 GameSession 分配）</summary>
+        public int OwnerPlayerId { get; set; } = -1;
 
         [Header("远程攻击设置")]
         [SerializeField] private bool _isRanged;
@@ -409,8 +415,6 @@ namespace DoudizhuTower.Gameplay.Entities
         bool IBuildingTarget.IsDestroyed => !IsAlive;
         void IBuildingTarget.TakeDamage(float rawDamage)
         {
-            // [诊断] 主堡受击追踪
-            Debug.LogWarning($"[BUILDING DAMAGE] {name} damage={rawDamage} stack={System.Environment.StackTrace}");
             TakeDamage(rawDamage, DamageType.Physical);
         }
         Collider2D IBuildingTarget.BuildingCollider => _collider;
@@ -529,6 +533,7 @@ namespace DoudizhuTower.Gameplay.Entities
             _attackSnapshotTargets = null;
             _pathDistance = 0f;
             Target = null;
+            CurrentTarget = null;
             _enemyUnits = null;
             _enemyBuildings = null;
             SimulatesCombat = SimulatesCombatDefault;
@@ -604,6 +609,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         protected virtual void Update()
         {
+            if (!IsRuntimeReady) return;
             if (!IsAlive) return;
 
             // v2.0: 建筑回血仅在 Master 端执行
@@ -647,6 +653,7 @@ namespace DoudizhuTower.Gameplay.Entities
             if (_needsFirstFrameSearch)
             {
                 _needsFirstFrameSearch = false;
+                Debug.Log($"[FIRST_FRAME] {name} lane={_lane} enemyUnitsNull={_enemyUnits == null} currentTarget={CurrentTarget?.GetType().Name} target={Target?.name}");
                 UpdateTarget();
                 return;
             }
@@ -690,11 +697,14 @@ namespace DoudizhuTower.Gameplay.Entities
                 return;
             }
 
+            // ── Stats 未初始化：跳过战斗逻辑 ──
+            if (Stats.HP <= 0f) return;
+
             // ── 攻击中 → Timeline 驱动攻击帧 ──
             if (_isAttacking)
             {
                 // 1. 超时安全阀 → 强制中断（仅防卡死，不参与正常退出）
-                if (_attackStateTimer > Stats.AttackInterval * 3f)
+                if (Stats.HP > 0f && _attackStateTimer > Stats.AttackInterval * 3f)
                 {
                     Debug.LogWarning($"[AttackStuck] {name} 攻击超时重置: hitDealt={_hitCountDealt}/{Stats.HitCount}, animDone={_animDone}, timelineDone={_hitTimelineDone}, target={_attackTarget != null}");
                     InterruptAttack();
@@ -833,7 +843,6 @@ namespace DoudizhuTower.Gameplay.Entities
                     if (!_isAttacking)
                     {
                         _isAttacking = true;
-                        _attackTarget = null;
                         _hitCountDealt = 0;
                         _animDone = false;
                         _hitTimelineDone = false;

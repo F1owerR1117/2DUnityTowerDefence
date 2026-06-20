@@ -50,17 +50,14 @@ namespace DoudizhuTower.UI.Online
         private const float MATCH_TIMEOUT = 30f;
 
         private HashSet<int> _aiSlots = new HashSet<int>();
-        private int _mySlot;
+        private int _mySlot = -1;
 
         private void Start()
         {
-            // 获取网络服务
-            Debug.Log($"[OnlineLobby] NetworkManager.Instance = {NetworkManager.Instance}");
-            if (NetworkManager.Instance != null)
-            {
-                _net = NetworkManager.Instance.Service;
-                Debug.Log($"[OnlineLobby] Service = {_net}, IsConnected = {_net?.IsConnected}");
-            }
+            // 使用 NetworkFacade 获取网络服务
+            Debug.Log($"[OnlineLobby] NetworkFacade.Service = {NetworkFacade.Service}");
+            _net = NetworkFacade.Service;
+            Debug.Log($"[OnlineLobby] IsConnected = {_net?.IsConnected}");
 
             ShowLobby();
 
@@ -94,6 +91,7 @@ namespace DoudizhuTower.UI.Online
             if (_net != null)
             {
                 _net.OnServerConnected += OnServerConnected;
+                _net.OnRoomCreateSuccess += OnRoomCreateSuccess;  // 添加这行
                 _net.OnRoomJoinSuccess += OnRoomJoinSuccess;
                 _net.OnRoomJoinError += OnRoomJoinError;
                 _net.OnPlayerJoined += OnPlayerJoined;
@@ -117,6 +115,7 @@ namespace DoudizhuTower.UI.Online
             if (_net != null)
             {
                 _net.OnServerConnected -= OnServerConnected;
+                _net.OnRoomCreateSuccess -= OnRoomCreateSuccess;  // 添加这行
                 _net.OnRoomJoinSuccess -= OnRoomJoinSuccess;
                 _net.OnRoomJoinError -= OnRoomJoinError;
                 _net.OnPlayerJoined -= OnPlayerJoined;
@@ -236,8 +235,7 @@ namespace DoudizhuTower.UI.Online
         {
             if (_net != null && _net.IsInRoom)
                 _net.LeaveRoom();
-            if (_net != null)
-                _net.Disconnect();
+            // 不调用 Disconnect()，保留 NetworkManager
             _isInLobby = false;
             GameSession.Reset();
             SceneLoader.LoadMainMenu();
@@ -326,9 +324,9 @@ namespace DoudizhuTower.UI.Online
             // 房主同步跳转到叫分场景
             GameSession.Reset();
 
-            // 存储原始大厅 AI 槽位（playerSlots[] 索引），
-            // 转换延迟到 NetworkBiddingManager 等 PlayerList 同步后再执行
+            // Phase 5：直接写入 GameSession（Fusion 不支持房间属性同步）
             GameSession.RawAISlots = new HashSet<int>(_aiSlots);
+            GameSession.AISlots = new HashSet<int>(_aiSlots);
 
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }
@@ -371,6 +369,20 @@ namespace DoudizhuTower.UI.Online
             _isInLobby = false;
             ShowLobby();
             Debug.Log("[OnlineLobby] 已断开连接");
+        }
+
+        private void OnRoomCreateSuccess(string roomName)
+        {
+            _isMatching = false;
+            _isInLobby = false;
+
+            // 计算本机槽位（房主是第一个玩家）
+            _mySlot = 0;
+
+            if (roomCodeText != null)
+                roomCodeText.text = $"房间号: {roomName}";
+            ShowRoom();
+            Debug.Log($"[OnlineLobby] 房间创建成功: {roomName}");
         }
 
         private void OnRoomJoinSuccess(string roomName)
@@ -478,9 +490,11 @@ namespace DoudizhuTower.UI.Online
         private void ApplyAddAI(int slot)
         {
             _aiSlots.Add(slot);
-            SyncAISlotsToRoom();
+            // Phase 5：直接写入 GameSession（Fusion 不支持 SetRoomProperty）
+            GameSession.AISlots = new HashSet<int>(_aiSlots);
+            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
             UpdateRoomUI();
-            Debug.Log($"[OnlineLobby] 添加 AI 到槽位 {slot}");
+            Debug.Log($"[OnlineLobby] 添加 AI 到槽位 {slot}, AISlots=[{string.Join(",", _aiSlots)}]");
         }
 
         private void OnKickPlayer(int slot)

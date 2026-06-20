@@ -89,6 +89,10 @@ namespace DoudizhuTower.Gameplay.Network
         public const string REMOVE_AI = "REMOVE_AI";
         public const string KICK_PLAYER = "KICK_PLAYER";
 
+        // ─── 初始化同步 ───
+        public const string PLAYER_LIST_LOCKED = "PLAYER_LIST_LOCKED";
+        public const string HAND_SYNC = "HAND_SYNC";  // Master → Client：同步初始手牌
+
         // ─── Card 序列化 ───
 
         public static int[] SerializeCards(Card[] cards)

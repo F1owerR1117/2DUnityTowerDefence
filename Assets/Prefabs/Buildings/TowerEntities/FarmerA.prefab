@@ -198,6 +198,9 @@ MonoBehaviour:
   fillRenderer: {fileID: 255188178174632665}
   friendlyColor: {r: 0, g: 1, b: 0, a: 1}
   enemyColor: {r: 1, g: 0, b: 0, a: 1}
+  smoothSpeed: 8
+  hitFlashDuration: 0.15
+  hitFlashColor: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &6656633532620204187
 GameObject:
   m_ObjectHideFlags: 0
@@ -557,6 +560,10 @@ MonoBehaviour:
   domainUseChance: 0
   counterUseChance: 1
   takeCardDelay: 0.5
+  _playerWeight: 1.1
+  _defenseThreshold: 0.3
+  _randomThreshold: 0.15
+  _unitCountWeight: 2
 --- !u!114 &523840160991556819
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -577,6 +584,7 @@ MonoBehaviour:
   _unitHeight: -1
   _canAttackHeight: -1
   _canBlockHeight: -1
+  _detectionRange: 0
   _isBuilding: 1
   _regenPerSecond: 0
   _isBoss: 0
@@ -588,6 +596,8 @@ MonoBehaviour:
   _moveSpeed: 0
   _range: 0
   _hitCount: 1
+  _maxTargets: 1
+  _multiTargetRadius: 0
 --- !u!1 &8223491460059501930
 GameObject:
   m_ObjectHideFlags: 0
@@ -606,25 +616,21 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!224 &5408811300654385763
-RectTransform:
+--- !u!4 &5408811300654385763
+Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8223491460059501930}
+  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0.27, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 1
+  m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2633100946229157151}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0.27}
-  m_SizeDelta: {x: 100, y: 100}
-  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &549674882973005503
 CanvasRenderer:
   m_ObjectHideFlags: 0
