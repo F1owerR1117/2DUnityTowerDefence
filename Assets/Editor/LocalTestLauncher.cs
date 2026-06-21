@@ -46,8 +46,8 @@ namespace DoudizhuTower.Editor
             GUILayout.Space(10);
             EditorGUILayout.HelpBox(
                 "启动后会在场景中创建 LocalTestRunner 对象，\n" +
-                "为每个玩家创建独立的 LocalNetworkService + NetworkGameManager。\n" +
-                "Master (slot 0) 运行战斗模拟，Client 只做视觉。",
+                "为每个玩家创建独立的 LocalNetworkService。\n" +
+                "用于测试网络层消息路由，不包含游戏逻辑模拟。",
                 MessageType.Info);
         }
 
@@ -82,7 +82,6 @@ namespace DoudizhuTower.Editor
         public bool AutoStart = true;
 
         private readonly List<LocalNetworkService> _services = new();
-        private readonly List<NetworkGameManager> _managers = new();
         private bool _started;
 
         private void Start()
@@ -132,41 +131,15 @@ namespace DoudizhuTower.Editor
                 if (i == 0) incomeRate += 2f; // 地主加成
                 var economy = new EconomySystem(50f, incomeRate);
 
-                // 创建 NetworkGameManager
-                var go = new GameObject($"[Player {i}] {(service.IsMasterClient ? "Master" : "Client")}");
-                go.transform.SetParent(transform);
-                var ngm = go.AddComponent<NetworkGameManager>();
-
-                // 初始化（部分依赖可以为 null）
-                var bm = (i == 0 && battleManagers.Length > 0) ? battleManagers[0] : null;
-                ngm.Initialize(
-                    service,
-                    bm,
-                    null,  // economyManager — 本地测试用 CoreEconomy
-                    null,  // domainSystem
-                    deck,
-                    hand,
-                    null,  // handArea
-                    null,  // cardCounter
-                    buildingList.Count > 0 ? buildingList[0] : null,
-                    i == 0, // playerIsLandlord
-                    buildingList.ToArray()
-                );
-
-                _managers.Add(ngm);
-
                 Debug.Log($"[LocalTest] Player {i}: ActorNumber={service.LocalActorNumber}, " +
                           $"IsMaster={service.IsMasterClient}, Hand={hand.Count}, Gold={economy.CurrentGold}");
             }
 
-            Debug.Log($"[LocalTest] 全部就绪。Master=simulatesCombat, Client=visualOnly");
+            Debug.Log($"[LocalTest] 全部就绪。LocalNetworkService 已创建 {PlayerCount} 个玩家");
         }
 
         private void OnDestroy()
         {
-            foreach (var m in _managers)
-                if (m != null) Destroy(m.gameObject);
-            _managers.Clear();
             _services.Clear();
             LocalNetworkHub.Clear();
         }
