@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v7.5
+# DoudizhuTower — 架构落地规范 v8.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -120,6 +120,12 @@
 | `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
 | `LocalNetworkService` | 本地联机服务 | Gameplay/Network | INetworkService 本地实现，零网络延迟，用于单进程多玩家测试 |
 | `LocalTestLauncher` | 本地联机测试启动器 | Editor | Editor 窗口（Tools → 本地联机测试），创建多玩家 LocalNetworkService |
+| `GameSnapshot` | Snapshot 层 | Gameplay/Network | 某 Tick 下的完整权威状态（§25），可完全重建游戏，不依赖 Event 历史 |
+| `GameEvent` | Event 层 | Gameplay/Network | 不可变操作记录（§25），append-only，必须携带 Tick，不可直接修改状态 |
+| `CodexUIController` | 图鉴 UI | UI/Codex | 图鉴浏览界面（分类/搜索/详情展示） |
+| `CodexEntry` | 图鉴条目 | Config | ScriptableObject，存储单个图鉴条目（Id/DisplayName/Category/Icon/Description） |
+| `CodexDatabase` | 图鉴数据库 | Config | ScriptableObject，按分类组织 CodexEntry 条目，支持运行时查询 |
+| `UnitDebugToolWindow` | 兵种调试工具 | Editor | Editor 窗口（Tools → 技能可视化 → 综合调试工具），整合属性/被动/音效/特效/动画配置 |
 
 ## 实施状态总览
 
@@ -267,12 +273,6 @@
 | Invulnerable 状态 | `CardUnit.Invulnerable` 属性，`TakeDamage`/`ApplyDamage` 开头检查，免疫所有伤害 | CardUnit.cs + CardUnit.Combat.cs |
 | Heal 方法 | `CardUnit.Heal(amount)` 治疗方法，不超过 MaxHP | CardUnit.cs |
 | 嘲讽多目标修复 | 攻击中嘲讽打断仅在嘲讽目标变化时生效，防止多个嘲讽光环导致无法攻击 | CardUnit.cs |
-| Master 初始手牌修复 | `NetworkGameManager.Initialize()` 中 Master 补发 7 张初始手牌 + `Debug.Assert` 防复发 + HAND_SYNC 广播入口保护 | NetworkGameManager.cs |
-| CardHand 生命周期规则 | `HandlePlayerReady`/`MasterDrawCard`/断线兜底：`ContainsKey` 守护，禁止替换已有 CardHand 引用 | NetworkGameManager.cs |
-| CardHand 容量修正 | `GetHandCapacity(slot)` 根据 `_baseBuildings[slot].IsLandlord` 返回 20（地主）或 17（农民），替换所有硬编码 17 | NetworkGameManager.cs |
-| HandleHandSync 引用保护 | 已有 hand 时 `Clear()` + `Add()` 填充，不替换引用（保护 HandArea UI 绑定） | NetworkGameManager.cs |
-| 多目标建筑攻击 | `OnAttackHitFrame()` 中：`_attackTarget == null && CurrentTarget != null` 时将建筑加入 targets 列表 | CardUnit.Combat.cs |
-| Animation Event 伤害路径 | `AttackEventRelay.OnAttackHitFrame()` 恢复为伤害触发源，`ExecuteHit()` 仅做授权验证不触发伤害 | AttackEventRelay.cs + CardUnit.Combat.cs |
 | 攻击超时安全阀 | `_attackStateTimer` 计时，`AttackInterval×3` 秒未完成强制重置，防止攻击状态卡死 | CardUnit.cs |
 | BOSS 技能动画 | SimpleAnimator 新增 dashClip/bossSkill1-3Clip，Animator Controller 新增 Dash/BossSkill1-3 Trigger 状态，更新菜单 `Tools → 更新兵种 Animator Controller` | SimpleAnimator.cs + CardUnit.Animation.cs + CreateUnitAnimatorController.cs |
 | 动画优先级文档 | Any State Trigger 内部顺序：Death > Shockwave > Splash > StunHit > KingAura > DeathExplosion > Burn > Summon > Dash > BossSkill1-3 | ARCHITECTURE.md |
@@ -304,15 +304,13 @@
 | 系统 | 章节 | 说明 |
 |:---|:---|:---|
 | 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
-| 图鉴/索引系统 | — | SaveSystem 图鉴解锁 API 已实现（`UnlockCodexEntry`/`IsCodexEntryUnlocked`），SceneLoader.LoadCodex 已预留，场景/逻辑未完全实现 |
 
 ### P2（增强/可视化）
 
 | 功能 | 章节 | 状态 |
 |:---|:---|:---|
 | 索敌可视化标记 | §3.3(4) | ❌ 未实现 |
-| 被动范围叠加 Gizmos | Editor | ✅ UnitPassivesGizmosOverlay（逻辑范围实线 + VFX 覆盖虚线） |
-| 被动技能调试窗口 | Editor | ✅ UnitPassivesEditorWindow（编辑/运行时参数调整 + 场景预览） |
+| 兵种综合调试工具 | Editor | ✅ UnitDebugToolWindow（整合属性/被动/音效/特效/动画配置 + 批量应用） |
 
 ## 费用与牌值常量参考
 
@@ -434,6 +432,8 @@ Assets/Scripts/
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
 │   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── GameSnapshot.cs             # ★ Snapshot 层（某 Tick 下的完整权威状态，可完全重建游戏）
+│   │   ├── GameEvent.cs                # ★ Event 层（不可变操作记录，append-only，必须携带 Tick）
 │   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
 │   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
 │
@@ -460,6 +460,8 @@ Assets/Scripts/
 │   │   └── LevelCard.cs               # ★ 关卡卡片组件（缩略图 + 信息 + 动态缩放）
 │   ├── Online/                         # 联机 UI
 │   │   └── OnlineLobbyController.cs    # ★ 联机大厅（单排/创建房间/加入房间 + 匹配 + 房间管理）
+│   ├── Codex/                          # 图鉴系统
+│   │   └── CodexUIController.cs        # 图鉴 UI 控制器（分类浏览/搜索/详情展示）
 │   ├── Components/
 │   │   ├── CoolDownEffect.cs          # ★ 可复用钟表式冷却视觉（Image.fillAmount Radial 360）
 │   │   └── ButtonEffect.cs            # ★ 按钮悬停放大 + 按压缩小动画
@@ -482,7 +484,9 @@ Assets/Scripts/
 │   ├── BiddingConfig.cs               # ★ 叫分配置（叫分时长/AI 策略/超时处理）
 │   ├── LevelConfig.cs                 # ★ 关卡配置（关卡名称/描述/缩略图/场景名/难度）
 │   ├── UnitStatsConfig.cs             # ★ 兵种数值汇总（CSV 管线中间层，预制体引用+属性）
-│   └── CardSpriteDB.cs                # 卡牌精灵图数据库
+│   ├── CardSpriteDB.cs                # 卡牌精灵图数据库
+│   ├── CodexEntry.cs                  # 图鉴条目 ScriptableObject（Id/DisplayName/Category/Icon/Description）
+│   └── CodexDatabase.cs              # 图鉴数据库 ScriptableObject（按分类组织条目，支持运行时查询）
 │
 └── _DisabledTests/                     # 已禁用的测试目录
     └── CardTypeDetectorTests.cs
@@ -497,12 +501,10 @@ Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线�
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
 ├── ReplaceAllTMPFonts.cs              # 批量替换 TextMeshPro 字体工具
-├── DestroyAllSubMeshUI.cs             # 清理 TMP_SubMeshUI 组件
 ├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
-├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
-├── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
 ├── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+├── UnitDebugToolWindow.cs            # ★ 兵种综合调试工具（属性编辑/被动配置/音效预览/批量应用）
 └── LocalTestLauncher.cs              # ★ 本地联机测试启动器（Tools → 本地联机测试，单进程多玩家）
 ```
 
@@ -842,12 +844,10 @@ CardUnit 拆分为 4 个文件：
 **多目标攻击：**
 - `_maxTargets`：同时攻击的最大目标数（1=单目标，>1=多目标），`MaxTargets` 属性公开
 - `_multiTargetRadius`：多目标搜索半径（0=使用攻击范围）
-- `FindAllTargets()`：返回范围内最多 `_maxTargets` 个敌方单位（跳过 `_isBuilding`），嘲讽目标优先，按距离排序
+- `FindAllTargets()`：返回范围内最多 `_maxTargets` 个敌方单位，嘲讽目标优先，按距离排序
 - `OnAttackHitFrame()` 多目标模式：
-  1. `FindAllTargets()` 获取敌方单位
-  2. 如果 `_attackTarget == null && CurrentTarget != null`（建筑攻击），将建筑加入目标列表
-  3. `OnAttackEvent` 一次性触发人海/冲锋等基础被动 + 计算伤害
-  4. 循环每个目标：`OnPerTargetAttackEvent` 独立触发溅射/眩晕/连击 + 造成伤害
+  1. `OnAttackEvent` 一次性触发人海/冲锋等基础被动 + 计算伤害
+  2. 循环每个目标：`OnPerTargetAttackEvent` 独立触发溅射/眩晕/连击 + 造成伤害
 - `OnAttackHitFrame()` 单目标模式：`OnAttackEvent` 触发所有被动（含溅射/眩晕），与旧行为一致
 
 **网络同步方法：**
@@ -1626,21 +1626,7 @@ OnPlayerLeft(playerName)
 - 所有网络事件使用 `SafeInt`/`SafeFloat`/`SafeArray` 安全拆箱，防止 `InvalidCastException`
 - `OnDestroy` 设置 `_initialized = false` 并清除所有引用，防止 `GameSession.Reset()` 时序问题
 
-**CardHand 生命周期规则（硬约束）**：
-- CardHand 在 slot 级只允许创建一次，禁止运行时替换引用
-- 允许的操作：`Add()` / `Remove()` / `Clear()`（触发 `OnHandChanged` 事件）
-- 禁止的操作：`new CardHand()` 覆盖已有 `_slotHands[slot]`
-- 原因：HandArea 通过引用绑定 CardHand，替换引用会导致 UI 事件订阅失效
-- `HandleHandSync`：已有 hand 时 `Clear()` + `Add()` 填充，不替换引用
-- `HandlePlayerReady`：`ContainsKey` 守护，已有 hand 不覆盖
-- 手牌容量：`GetHandCapacity(slot)` 根据 `_baseBuildings[slot].IsLandlord` 返回 20（地主）或 17（农民）
-
-**Master 初始手牌**：
-- `NetworkGameManager.Initialize()` 中 Master 检查 `playerHand.Count == 0` 时补发 7 张牌
-- `Debug.Assert` 防复发：`!_net.IsMasterClient || playerHand.Count > 0`
-- HAND_SYNC 广播入口保护：`_playerHand.Count > 0` 才广播
-
-**同步防护机制（7 项）：**
+**同步防护机制（5 项）：**
 
 | 防护 | 机制 | 解决的问题 |
 |:---|:---|:---|
@@ -1650,7 +1636,6 @@ OnPlayerLeft(playerName)
 | StateVersion | `MASTER_STATE_SYNC` 携带版本号，客户端丢弃 `ver <= lastVer` 的旧广播 | 状态广播乱序导致旧状态覆盖新状态 |
 | Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式 | 同步问题排查无日志，靠猜定位 |
 | Request/Result 分离 | `DRAW_CARD`（请求）与 `DRAW_CARD_RESULT`（结果）使用独立 Key，Master 收到结果不重复执行 | Master 自广播被误判为新请求，导致无限摸牌循环 |
-| CardHand 不可替换 | `ContainsKey` 守护 + `HandleHandSync` 清空填充不替换引用 | UI 绑定的 CardHand 引用被替换导致事件订阅失效 |
 
 **Trace 日志关键搜索词：**
 - `PLAYER_READY_SEND` / `PLAYER_READY_RECV` — 玩家就绪
@@ -2366,12 +2351,12 @@ BOSS 技能施法时间与动画同步机制：
 |:---|:---|:---|
 | ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
 | ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
-| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2068 行） | 超过 2500 行或新增观战/回放时拆分 |
+| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2121 行） | 超过 2500 行或新增观战/回放时拆分 |
 | Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager + GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
 | ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
-| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2623 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2331 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
 | ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
 | ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
 
@@ -2538,8 +2523,8 @@ struct DeckState {
 | 当前系统 | v2.0 目标 | 改造要点 |
 |:---|:---|:---|
 | `_stateVersion` | `_tick` | 已完成 ✅ |
-| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **待实现** |
-| `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅ |
+| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），但 NetworkGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
+| `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅（`GameSnapshot.cs` 已独立实现） |
 | `HP_CORRECTION` 独立修正 | 合并入 Snapshot | 已完成 ✅ |
 | `SyncState` 状态机 | 生命周期阶段 | **待升级** |
 
@@ -2581,7 +2566,7 @@ AI     = 只读决策（联机模式）
 | 系统 | 真相源 | 保护机制 | 状态 |
 |:---|:---|:---|:---|
 | 牌堆剩余 | `CardDeck.Remaining` | 计算属性 `TotalCards - _cursor` | ✅ 已收敛 |
-| 手牌 | `_slotHands[slot]` | 字典存储，`_playerHand` 为只读投影，CardHand 禁止替换引用（`ContainsKey` 守护） | ✅ 已收敛 |
+| 手牌 | `_slotHands[slot]` | 字典存储，`_playerHand` 为只读投影 | ✅ 已收敛 |
 | 金币 | `_slotEconomies[slot]` | `IsMaster` 检查 | ✅ 已收敛 |
 | Buff | `CardUnit._buffs` | `SimulatesCombat` 门控 | ✅ 已收敛 |
 | Stun | `CardUnit.StunTimer` | `SimulatesCombat` 门控 | ✅ 已收敛 |
@@ -2778,25 +2763,21 @@ public bool IsValidCombatTarget(CardUnit unit, CardUnit target)
 ```
 TryAttack()
   → _isAttacking = true
-  → 创建 AttackTimeline（hitTimes[] 数组，用于状态管理）
+  → 创建 AttackTimeline（hitTimes[] 数组）
   → _attackSnapshotTargets = FindAllTargets()（多目标单位）
-  → 播放动画（纯表现，Animation Event 驱动伤害）
+  → 播放动画（纯表现）
 
 OnUpdate() 攻击中:
   → 超时安全阀（3×AttackInterval，仅防卡死）
-  → UpdateAttackTimeline()（授权验证 + 状态追踪，不触发伤害）
+  → UpdateAttackTimeline()（时间驱动攻击帧）
   → 嘲讽记录（_pendingTauntTarget，不中断攻击）
   → _animDone && _hitTimelineDone → FinishAttack()
-
-伤害触发（唯一路径）:
-  → Animation Event → AttackEventRelay → OnAttackHitFrame() → DealAttackDamage()
 
 攻击结束后:
   → 检查 _pendingTauntTarget → 切换目标
 ```
 
 **唯一退出条件**：`_animDone && _hitTimelineDone`
-**唯一伤害路径**：Animation Event → `OnAttackHitFrame()`（Timeline 不触发伤害）
 
 **禁止中断**：
 - 目标死亡
@@ -2831,27 +2812,7 @@ if (_maxTargets > 1)
 var targets = _attackSnapshotTargets ?? FindAllTargets();
 ```
 
-### 28.7 建筑攻击路径
-
-**双轨制**：`Target`（打单位）和 `CurrentTarget`（打建筑）独立运行。
-
-```
-FindNearestEnemy() → 只搜单位（跳过 _isBuilding）→ 设置 Target
-FindNearestEnemyBuilding() → 只搜建筑 → 设置 CurrentTarget
-```
-
-**多目标单位打建筑**：
-- `FindAllTargets()` 跳过建筑（`_isBuilding`）
-- `OnAttackHitFrame()` 中：如果 `_attackTarget == null && CurrentTarget != null`，将建筑加入 targets 列表
-- 建筑 + 附近兵种同时受到伤害
-
-**建筑攻击入口**（`OnUpdate()` line 838）：
-- `_attackTarget = null`（不设）
-- `_isAttacking = true`
-- `_hitTimes = [1f]`（单帧）
-- 伤害通过 `DealAttackDamage()` 的 `CurrentTarget` 兜底分支执行
-
-### 28.8 修改点汇总
+### 28.7 修改点汇总
 
 | 位置 | 改动 |
 |:---|:---|
@@ -2860,47 +2821,53 @@ FindNearestEnemyBuilding() → 只搜建筑 → 设置 CurrentTarget
 | `CardUnit.OnUpdate()` | 嘲讽改为延迟记录 |
 | `CardUnit.OnUpdate()` 攻击结束 | 检查 _pendingTauntTarget |
 | `CardUnit.TryAttack()` | 多目标单位创建快照 |
-| `CardUnit.OnAttackHitFrame()` | 多目标使用快照 + 建筑攻击支持 |
+| `CardUnit.OnAttackHitFrame()` | 多目标使用快照 |
 | `CardUnit.InterruptAttack()` | 重置新字段 |
-| `AttackEventRelay.OnAttackHitFrame()` | 恢复为伤害触发源 |
-| `CardUnit.ExecuteHit()` | 仅授权验证，不触发伤害 |
 | 6 处重置点 | 补齐 _pendingTauntTarget/_attackSnapshotTargets 重置 |
 
-### 28.9 攻击帧系统（Animation Event 驱动 + Timeline 授权）
+### 28.8 AttackTimeline 系统（替代 Animation Event + HitFrameCoroutine）
 
-**核心思想**：伤害由 Animation Event 驱动，Timeline 仅负责授权验证和攻击状态管理。
-
-**伤害路径（唯一）**：
-```
-Animation Event → AttackEventRelay.OnAttackHitFrame() → CardUnit.OnAttackHitFrame() → DealAttackDamage()
-```
-
-**Timeline 路径（仅授权，不触发伤害）**：
-```
-UpdateAttackTimeline() → ExecuteHit() → 授权验证（Boss.IsActive、IsValidCombatTarget）→ 不调用 OnAttackHitFrame
-```
+**核心思想**：攻击帧由时间驱动，不再依赖 Animation Event。
 
 **数据结构**：
 ```csharp
 float[] _hitTimes;    // normalized 0~1，如 [0.5, 1.0] 表示 50% 和 100% 时触发
 float _attackTimer;   // 当前攻击已过时间
 int _nextHitIndex;    // 下一个待触发的攻击帧索引
-bool _hitTimelineDone; // Timeline 是否完成（用于攻击状态退出判断）
+bool _hitTimelineDone; // Timeline 是否完成
 ```
 
-**ExecuteHit() 只做授权验证**：
-- 检查 `_isDying` / `_isAttacking`
-- 检查 `BossController.IsActive`
-- 检查 `IsValidCombatTarget`
-- **不调用** `OnAttackHitFrame()`（伤害由 Animation Event 触发）
+**TryAttack() 创建 Timeline**：
+```csharp
+float interval = Stats.AttackInterval;
+int hitCount = Mathf.Max(1, Stats.HitCount);
+_hitTimes = new float[hitCount];
+for (int i = 0; i < hitCount; i++)
+    _hitTimes[i] = (float)(i + 1) / hitCount;
+```
 
-### 28.10 Animation Event 授权验证
+**UpdateAttackTimeline() 每帧执行**：
+```csharp
+float t = _attackTimer / interval;
+while (_nextHitIndex < _hitTimes.Length && t >= _hitTimes[_nextHitIndex])
+{
+    ExecuteHit(_nextHitIndex);
+    _nextHitIndex++;
+}
+if (_nextHitIndex >= _hitTimes.Length)
+    _hitTimelineDone = true;
+```
 
-`OnAttackHitFrame()` 入口自带门禁：
+**ExecuteHit() → OnAttackHitFrame()**：
+- ExecuteHit 负责授权验证（BossController.IsActive、IsValidCombatTarget）
+- OnAttackHitFrame 负责纯伤害逻辑
+
+### 28.9 Animation Event 授权验证
+
+Animation Event 仍可能残留触发（旧动画未清理）。为防止未激活单位通过 Event 造成伤害：
+
 ```csharp
 // OnAttackHitFrame() 入口
-if (_isDying) return;
-if (!_isAttacking) return;
 var boss = GetComponent<BossController>();
 if (boss != null && !boss.IsActive) return;
 ```
@@ -2909,7 +2876,7 @@ if (boss != null && !boss.IsActive) return;
 - Timeline 路径：`UpdateAttackTimeline()` 检查 IsActive → InterruptAttack
 - Event 路径：`OnAttackHitFrame()` 检查 IsActive → return
 
-### 28.11 UnitHealthBar 死亡帧闪烁修复
+### 28.10 UnitHealthBar 死亡帧闪烁修复
 
 **问题**：单位死亡同一帧触发受击闪烁，`LateUpdate` 因 `_owner.IsAlive=false` 直接返回，闪烁颜色永远不重置。
 
@@ -2921,166 +2888,3 @@ if (_owner == null || !_owner.IsAlive) return;
 // 修复后
 if (_owner == null) return;
 ```
-
----
-
-## 29. Fusion Simulation 架构（Phase 5）
-
-> 本节定义 Fusion 迁移后的游戏架构，替代原 §13 中的 Photon PUN 2 网络模型。
-
-### 29.1 架构总览
-
-```
-INPUT (UI / AI)
-    ↓
-IntentBuffer (唯一输入通道)
-    ↓
-FusionGameManager.FixedUpdateNetwork (唯一执行点)
-    ↓
-RunSimulation()
-    ├── ProcessInput()
-    ├── UpdateAI() → IntentBuffer
-    ├── ProcessBidding() → WorldState
-    ├── UpdateEconomy()
-    ├── UpdateTurn()
-    ├── UpdateBossSkills()
-    ├── UpdatePassives()
-    └── UpdateCombat()
-    ↓
-SyncToNetworkState() → [Networked] WorldState
-    ↓
-Client 只读 WorldState
-    ↓
-UI (只读)
-```
-
-### 29.2 核心原则
-
-| 原则 | 说明 |
-|:---|:---|
-| 唯一状态源 | WorldState（INetworkStruct，[Networked]） |
-| 唯一执行点 | FusionGameManager.FixedUpdateNetwork |
-| 唯一输入通道 | IntentBuffer |
-| Host-only Simulation | 只有 HasStateAuthority 执行 RunSimulation |
-| Client 只读 | Client 只读 WorldState，不执行任何逻辑 |
-| UI 只读 | UI 只读 WorldState + 查询 IdentityService |
-| AI 只写 Intent | AI 只生成 IntentBuffer，不直接改 WorldState |
-
-### 29.3 三条封印规则
-
-```
-1. Only FusionGameManager can modify WorldState
-2. Only IntentBuffer can modify gameplay inputs
-3. UI/AI/GameSession are read-only at runtime
-```
-
-### 29.4 Identity 系统
-
-```
-IdentityService (Singleton + DontDestroyOnLoad)
-    ├── OfflineIdentityProvider (单机)
-    └── OnlineIdentityProvider (联机)
-         └── LobbyIdentityService (Host 分配 slot)
-
-FusionGameManager (只消费)
-    └── GetLocalSlot() → IdentityService
-
-UI
-    └── IdentityService.GetLocalSlot() + WorldState
-```
-
-**三层身份模型：**
-
-| 层 | 说明 | 来源 |
-|:---|:---|:---|
-| Layer 1: PlayerRef | 网络身份（仅真人） | Fusion OnPlayerJoined |
-| Layer 2: Slot | 游戏身份（Host 分配） | LobbyIdentityService |
-| Layer 3: AI | 纯数据标记（IsAI=1） | WorldState.PlayerState |
-
-### 29.5 WorldState 结构
-
-```csharp
-public struct WorldState : INetworkStruct
-{
-    public GameState Game;
-    public PlayerState Player0;
-    public PlayerState Player1;
-    public PlayerState Player2;
-}
-
-public struct GameState : INetworkStruct
-{
-    public int Seed;
-    public byte Phase;           // 0=叫分 1=出牌 2=结算
-    public byte TurnSlot;
-    public byte DeckCount;
-    public byte CurrentBidTurn;
-    public byte HighestBid;
-    public byte HighestBidder;
-    public byte BidCount;
-    public int TickCounter;      // Heartbeat
-    public int StateHash;        // 同步验证
-    public int BidTick;          // 叫分节拍
-}
-
-public struct PlayerState : INetworkStruct
-{
-    public byte Slot;
-    public byte IsAI;
-    public byte Role;            // 0=未定 1=地主 2=农民
-    public byte Bid;
-    public int Gold;
-    public int IncomeRate;
-    public byte HandCount;
-    public byte IsLandlord;
-}
-```
-
-### 29.6 GameSession（降级为数据缓存）
-
-```
-✔ 保留：HasResult / NetworkSeed / BidMultiplier / LandlordSlot / AISlots
-❌ 废弃：LocalPlayerId / PlayerBaseMapping / PlayerSlotMap / LocalActorNumber
-
-GameSession = 跨场景数据缓存（不可执行逻辑）
-唯一写入点：FusionGameManager.InitializeGameState()
-```
-
-### 29.7 FusionService（降级为连接层）
-
-```
-✔ 保留：Connect / Disconnect / CreateRoom / JoinRoom / LeaveRoom / LoadScene
-❌ 废弃：SendToAll / SendToMaster / SendToPlayer（标记 [Obsolete]）
-
-FusionService = 连接管理器（不参与游戏逻辑）
-```
-
-### 29.8 关键文件
-
-| 文件 | 职责 | 状态 |
-|:---|:---|:---|
-| `FusionGameState.cs` | WorldState + GameState + PlayerState 定义 | ✅ 完成 |
-| `FusionGameManager.cs` | Simulation Root + ProcessBidding + SyncToNetworkState | ✅ 完成 |
-| `IntentBuffer.cs` | UnitIntent + BidIntent 缓冲 | ✅ 完成 |
-| `AISystem.cs` | AI 决策（只生成 Intent） | ✅ 完成 |
-| `IdentityService.cs` | 身份查询 Facade | ✅ 完成 |
-| `LobbyIdentityService.cs` | Host 分配 slot（DontDestroyOnLoad） | ✅ 完成 |
-| `NetworkBiddingManager.cs` | 叫分 UI（Phase 4 桥接：本地处理 + GameSession） | ⚠️ 待迁移 |
-| `GameSession.cs` | 跨场景数据缓存 | ⚠️ Phase 6 删除 |
-
-### 29.9 Phase 状态
-
-| Phase | 状态 | 说明 |
-|:---|:---|:---|
-| Phase 4 | ✅ 完成 | 网络同步验证 |
-| Phase 5 | ✅ 完成 | Identity 收敛 + 状态机唯一化 |
-| Phase 6 | ⏳ 待做 | 删除 GameSession + 迁移 Bidding 到 Simulation |
-
-### 29.10 架构债务
-
-| 债务 | 说明 | 修复条件 |
-|:---|:---|:---|
-| 叫分场景本地状态机 | NetworkBiddingManager 仍在本地运行叫分逻辑 | Phase 6 迁移到 Simulation |
-| GameSession 桥接层 | 跨场景数据仍通过 GameSession 传递 | Phase 6 删除 |
-| _mySlot 残留 | NetworkBiddingManager 仍有本地 slot 计算 | Phase 6 完全删除 |
-| SendToAll/SendToMaster 标记 [Obsolete] | 旧系统仍编译但不执行 | Phase 6 完全删除 |
