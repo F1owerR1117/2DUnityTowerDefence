@@ -7,8 +7,9 @@ namespace DoudizhuTower.Gameplay.Systems
     /// 跨场景游戏会话数据（纯静态，无 MonoBehaviour）。
     /// 存储叫分期的结果，供游戏场景读取。
     ///
-    /// Phase 5：GameSession 降级为数据缓存，不再参与身份/逻辑。
+    /// ⚠️ [已废弃] Phase 5 后降级为数据缓存。
     /// 身份系统由 FusionGameManager.OnPlayerJoined 分配 slot。
+    /// 新功能请使用 WorldState 替代。
     /// </summary>
     public static class GameSession
     {

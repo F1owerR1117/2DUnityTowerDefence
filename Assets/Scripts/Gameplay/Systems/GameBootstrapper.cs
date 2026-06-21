@@ -8,7 +8,9 @@ using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Gameplay.Battle;
 using DoudizhuTower.Gameplay.Entities;
+using DoudizhuTower.Gameplay.Fusion;
 using DoudizhuTower.Gameplay.Network;
+using Fusion;
 using DoudizhuTower.UI.Hand;
 using DoudizhuTower.UI.HUD;
 using DoudizhuTower.UI.Battlefield;
@@ -74,9 +76,7 @@ namespace DoudizhuTower.Gameplay.Systems
         private PauseMenu _wiredPauseMenu;
         private VictoryPanel _wiredVictoryPanel;
         private Action _wiredTimeUpHandler;
-        private NetworkGameManager _networkGameManager;
         private Action<bool> _wiredGameEndedHandler;
-        private Action<bool> _wiredNetworkBroadcastHandler;
 
         public CardDeck MainDeck => _mainDeck;
         public EconomySystem EconomyLogic => _economyLogic;
@@ -154,9 +154,23 @@ namespace DoudizhuTower.Gameplay.Systems
             var playerHand = new CardHand(handCapacity);
             if (_isNetworkMode)
             {
-                // 联机模式：不自己发牌，等待 Master 通过 HAND_SYNC 广播手牌
-                // 客户端只创建空手牌容器，由 HandleHandSync 填充
-                // Master 的初始手牌由 NetworkGameManager.Initialize() 补发
+                // 联机模式：从 FusionGameManager 读取手牌
+                var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                if (gm != null)
+                {
+                    int mySlot = gm.GetLocalSlot();
+                    if (mySlot >= 0)
+                    {
+                        var handCards = gm.GetHandCards(mySlot);
+                        foreach (var deckIndex in handCards)
+                        {
+                            var card = _mainDeck.GetCardByIndex(deckIndex);
+                            if (card.DeckIndex >= 0)
+                                playerHand.Add(card);
+                        }
+                        Debug.Log($"[Bootstrapper] Fusion 手牌: slot={mySlot}, count={playerHand.Count}");
+                    }
+                }
             }
             else
             {
@@ -166,7 +180,33 @@ namespace DoudizhuTower.Gameplay.Systems
             // 为每个 AI 基地创建独立手牌
             var playerBaseRef = GetPlayerBase();
             var aiHands = new Dictionary<Component, CardHand>();
-            if (!_isNetworkMode)
+            if (_isNetworkMode)
+            {
+                // 联机模式：从 FusionGameManager 读取 AI 手牌
+                var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                if (gm != null)
+                {
+                    for (int slot = 0; slot < 3; slot++)
+                    {
+                        if (!gm.IsAISlot(slot)) continue;
+                        if (slot >= baseBuildings.Length) continue;
+                        var baseBldg = baseBuildings[slot];
+                        if (baseBldg == null) continue;
+
+                        var aiHand = new CardHand(17);
+                        var handCards = gm.GetHandCards(slot);
+                        foreach (var deckIndex in handCards)
+                        {
+                            var card = _mainDeck.GetCardByIndex(deckIndex);
+                            if (card.DeckIndex >= 0)
+                                aiHand.Add(card);
+                        }
+                        aiHands[baseBldg] = aiHand;
+                        Debug.Log($"[Bootstrapper] Fusion AI 手牌: slot={slot}, count={aiHand.Count}");
+                    }
+                }
+            }
+            else
             {
                 // 单机模式：非玩家操控的基地 → AI
                 foreach (var baseBldg in baseBuildings)
@@ -181,24 +221,6 @@ namespace DoudizhuTower.Gameplay.Systems
                         _mainDeck.Deal(7, aiHand);
                         aiHands[baseBldg] = aiHand;
                     }
-                }
-            }
-            else
-            {
-                // 联机模式：为 AI 槽位的基地创建 AI 手牌
-                // PlayerBaseMapping = 叫分结果数据（哪个 slot 控制哪个基地），不是 slot 计算
-                foreach (var aiSlot in GameSession.AISlots)
-                {
-                    if (aiSlot < 0 || aiSlot >= GameSession.PlayerBaseMapping.Length) continue;
-                    int baseIdx = GameSession.PlayerBaseMapping[aiSlot];
-                    if (baseIdx < 0 || baseIdx >= baseBuildings.Length) continue;
-                    var baseBldg = baseBuildings[baseIdx];
-                    if (baseBldg == null) continue;
-                    var aiDeck = new CardDeck(seed);
-                    aiDeck.Deal(aiSlot * 7, new CardHand(17)); // 跳过前面玩家的牌
-                    var aiHand = new CardHand(17);
-                    aiDeck.Deal(7, aiHand);
-                    aiHands[baseBldg] = aiHand;
                 }
             }
 
@@ -316,15 +338,15 @@ namespace DoudizhuTower.Gameplay.Systems
                 // 使用命名方法替代匿名 lambda
                 if (_isNetworkMode)
                 {
-                    // 联机模式：出牌通过 NetworkGameManager 同步
+                    // 联机模式：出牌通过 FusionGameManager.IntentBuffer 同步
                     _onPlayRequestHandler = (cards, result, routeGroup) =>
                     {
-                        _networkGameManager?.RequestPlayCards(cards, result, routeGroup);
+                        // Fusion 模式：由 FusionGameManager.ProcessPlayCards 处理
                     };
                     // 联机模式：弃牌广播到所有客户端（记牌器同步）
                     handArea.OnCardDiscarded += (card) =>
                     {
-                        _networkGameManager?.BroadcastCardDiscarded(card.DeckIndex);
+                        // Fusion 模式：由 EventBuffer 处理
                     };
                 }
                 else
@@ -528,18 +550,27 @@ namespace DoudizhuTower.Gameplay.Systems
 
                 if (_isNetworkMode)
                 {
-                    // 联机模式：自动摸牌（Master 端控制，广播到所有客户端）
+                    // 联机模式：摸牌由 FusionGameManager 处理
+                    // 自动摸牌
                     timerQueue?.ScheduleLoop(drawInterval, () =>
                     {
                         if (playerHand == null || playerHand.IsFull || _mainDeck == null) return;
-                        _networkGameManager?.RequestDrawCard();
+                        var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                        if (gm != null)
+                        {
+                            gm.SubmitDrawCard();
+                        }
                     });
 
-                    // 手动摸牌按钮（联机模式下不本地扣费，由 Master 验证后扣除）
+                    // 手动摸牌按钮
                     drawButton.onClick.AddListener(() =>
                     {
                         if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
-                        _networkGameManager?.RequestDrawCard(drawCost);
+                        var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                        if (gm != null)
+                        {
+                            gm.SubmitDrawCard();
+                        }
                     });
                 }
                 else
@@ -604,19 +635,10 @@ namespace DoudizhuTower.Gameplay.Systems
                 battleManager.OnGameEnded += onGameEnded;
                 _wiredGameEndedHandler = onGameEnded;
 
-                // 联机模式：Master 广播胜利/失败给所有客户端
                 if (_isNetworkMode)
                 {
-                    Action<bool> onNetworkBroadcast = (playerWon) =>
-                    {
-                        if (_networkGameManager != null)
-                            _networkGameManager.BroadcastGameEnd(playerWon, _networkGameManager.MySlot);
-                    };
-                    battleManager.OnGameEnded += onNetworkBroadcast;
-                    _wiredNetworkBroadcastHandler = onNetworkBroadcast;
                     // 联机模式下也允许返回主菜单
                     victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
-                    // _networkGameManager 的 OnNetworkGameEnd 注册延迟到 Step 11 之后
                 }
                 else
                 {
@@ -689,11 +711,17 @@ namespace DoudizhuTower.Gameplay.Systems
                     {
                         if (_isNetworkMode)
                         {
-                            // 联机模式：通过 NetworkGameManager 同步 pending 状态
-                            if (domainSystem.IsDomainPending)
-                                _networkGameManager?.RequestDomainPending(false);
-                            else
-                                _networkGameManager?.RequestDomainPending(true);
+                            // 联机模式：通过 FusionGameManager.ActivateDomain
+                            var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                            if (gm != null)
+                            {
+                                int mySlot = gm.GetLocalSlot();
+                                if (mySlot >= 0)
+                                {
+                                    gm.ActivateDomain(mySlot, 1);
+                                    Debug.Log($"[DomainButton] Fusion 领域激活: slot={mySlot}");
+                                }
+                            }
                         }
                         else
                         {
@@ -722,10 +750,7 @@ namespace DoudizhuTower.Gameplay.Systems
                     {
                         domainUIController.OnCounterButtonClicked += () =>
                         {
-                            if (domainSystem.IsCounterPending)
-                                _networkGameManager?.RequestCounterPending(false);
-                            else
-                                _networkGameManager?.RequestCounterPending(true);
+                            // Fusion 模式：通过 FusionGameManager 处理
                         };
                     }
                 }
@@ -735,111 +760,26 @@ namespace DoudizhuTower.Gameplay.Systems
                 }
             }
 
-            // ── Step 11: 联机模式初始化 NetworkGameManager ──
+            // ── Step 11: 联机模式初始化 ──
 
             if (_isNetworkMode)
             {
-                var net = NetworkFacade.Service;
-
-                if (net != null)
+                Debug.Log($"[Bootstrapper] Fusion 模式激活: _isNetworkMode={_isNetworkMode}");
+                // FusionGameManager 由 FusionService.Runner.Spawn() 创建
+                var fusionService = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.FusionService>();
+                Debug.Log($"[Bootstrapper] FusionService 查找结果: {fusionService != null}");
+                if (fusionService != null)
                 {
-                    var ngo = new GameObject("NetworkGameManager");
-                    _networkGameManager = ngo.AddComponent<NetworkGameManager>();
-                    _networkGameManager.Initialize(
-                        net, battleManager, economyManager, domainSystem,
-                        _mainDeck, playerHand, handArea, cardCounter,
-                        GetPlayerBase(), playerIsLandlord, baseBuildings
-                    );
-
-                    if (net.IsMasterClient)
-                    {
-                        // Master 端：根据 AI 槽位启用/禁用对应基地的 BuildingAI
-                        var mapping = GameSession.PlayerBaseMapping;
-                        for (int slot = 0; slot < 3; slot++)
-                        {
-                            if (mapping == null || slot >= mapping.Length) continue;
-                            int baseIdx = mapping[slot];
-                            if (baseIdx < 0 || baseIdx >= baseBuildings.Length) continue;
-                            var bldg = baseBuildings[baseIdx];
-                            if (bldg == null) continue;
-                            // 跳过 BOSS
-                            var cu = bldg.GetComponent<CardUnit>();
-                            if (cu != null && cu._isBoss) continue;
-                            var ai = bldg.GetComponent<BuildingAI>();
-                            if (ai == null) continue;
-
-                            bool isAI = GameSession.AISlots.Contains(slot);
-                            ai.enabled = isAI;
-                            if (isAI)
-                            {
-                                ai.SetNetworkContext(_networkGameManager, slot);
-                                _networkGameManager.RegisterSlotEconomy(slot, ai.Economy);
-                            }
-
-                        }
-                    }
-                    else
-                    {
-                        // 非 Master 客户端：禁用所有 AI（仅 Master 运行 AI），跳过 BOSS
-                        foreach (var baseBldg in baseBuildings)
-                        {
-                            if (baseBldg == null) continue;
-                            var cu = baseBldg.GetComponent<CardUnit>();
-                            if (cu != null && cu._isBoss) continue;
-                            var ai = baseBldg.GetComponent<BuildingAI>();
-                            if (ai != null) ai.enabled = false;
-                        }
-                    }
+                    fusionService.SpawnFusionGameManager();
                 }
                 else
                 {
-                    Debug.LogError("[Bootstrapper] 联机模式但 NetworkManager.Service 为空！");
+                    Debug.LogError("[Bootstrapper] FusionService 不存在！");
                 }
-
-                // ── Step 11b: 焊接飞筒网络事件（依赖 NetworkGameManager）──
-                if (_networkGameManager != null && !playerIsLandlord)
-                {
-                    // 农民：飞筒传牌/取牌事件
-                    if (launchTubeUI != null)
-                    {
-                        launchTubeUI.OnCardTransmitted += (card) =>
-                        {
-                            _networkGameManager.RequestCardTransfer(card);
-                        };
-                    }
-                    if (teammateTempSlotUI != null)
-                    {
-                        teammateTempSlotUI.OnCardMovedToHand += (card) =>
-                        {
-                            _networkGameManager.RequestCardTake();
-                        };
-                    }
-
-                    // 监听网络传牌到达 → 放入队友暂存槽
-                    _networkGameManager.OnCardArrived += (senderSlot, card) =>
-                    {
-                        if (teammateTempSlotUI != null)
-                        {
-                            teammateTempSlotUI.ReceiveCard(card);
-
-                        }
-                    };
-
-                    // 监听网络取牌 → 清空暂存槽
-                    _networkGameManager.OnCardTaken += (takerSlot) =>
-                    {
-                        teammateTempSlotUI?.Clear();
-
-                    };
-                }
-
-                // 注册胜利面板的网络结束回调（Step 9b 时 _networkGameManager 还未创建）
-                if (_networkGameManager != null && _wiredGameEndedHandler != null)
-                {
-                    _networkGameManager.OnNetworkGameEnd += _wiredGameEndedHandler;
-                    if (victoryPanel != null)
-                        victoryPanel.OnReturnToRoomRequested += OnQuitToLobby;
-                }
+            }
+            else
+            {
+                Debug.Log($"[Bootstrapper] 单机模式: _isNetworkMode={_isNetworkMode}");
             }
 
         }
@@ -879,15 +819,6 @@ namespace DoudizhuTower.Gameplay.Systems
             {
                 battleManager.OnGameEnded -= _wiredGameEndedHandler;
                 _wiredGameEndedHandler = null;
-            }
-            if (_wiredNetworkBroadcastHandler != null && battleManager != null)
-            {
-                battleManager.OnGameEnded -= _wiredNetworkBroadcastHandler;
-                _wiredNetworkBroadcastHandler = null;
-            }
-            if (_wiredGameEndedHandler != null && _networkGameManager != null)
-            {
-                _networkGameManager.OnNetworkGameEnd -= _wiredGameEndedHandler;
             }
             if (_wiredTimeUpHandler != null && gameStateMachine != null)
             {

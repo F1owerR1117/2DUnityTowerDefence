@@ -7,6 +7,7 @@ using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Gameplay.Entities;
 using DoudizhuTower.Gameplay.Network;
+using DoudizhuTower.Gameplay.Systems;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Battle
@@ -48,13 +49,11 @@ namespace DoudizhuTower.Gameplay.Battle
         private DomainSystem _domainSystem;
         private DoudizhuTower.UI.Battlefield.TempSlotUI _tempSlot;
 
-        // 联机同步
-        private DoudizhuTower.Gameplay.Network.NetworkGameManager _networkGameManager;
+        // 联机同步（Phase 6.5: PUN 已禁用，由 Fusion 处理）
         private int _slotIndex = -1;
 
-        public void SetNetworkContext(DoudizhuTower.Gameplay.Network.NetworkGameManager ngm, int slotIndex)
+        public void SetNetworkContext(int slotIndex)
         {
-            _networkGameManager = ngm;
             _slotIndex = slotIndex;
         }
 
@@ -105,9 +104,6 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void Update()
         {
-            // 联机模式：AI 只在 Master 运行（Client 通过网络事件接收 AI 行为）
-            if (_networkGameManager != null && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient) return;
-
             if (Hand == null || Hand.Count == 0 || Economy == null)
             {
                 if (!_initLogged)
@@ -116,11 +112,8 @@ namespace DoudizhuTower.Gameplay.Battle
                     Debug.LogWarning($"[BuildingAI] {name} 等待初始化: Hand={Hand != null}(count={Hand?.Count ?? -1}), Economy={Economy != null}, bm={_battleManager != null}, baseCtl={_baseCtl != null}");
                 }
                 // 仍然更新经济和摸牌，即使手牌为空
-                // v2.0: 仅 Master 端执行经济增长
-                if (Economy != null && _networkGameManager == null)
-            // v2.0: 仅 Master 端执行经济增长（联机模式由 NetworkGameManager 驱动）
-            if (_networkGameManager == null)
-                Economy.UpdateEconomy(Time.deltaTime);
+                if (Economy != null)
+                    Economy.UpdateEconomy(Time.deltaTime);
                 if (Hand != null && _deck != null)
                 {
                     _drawTimer += Time.deltaTime;
@@ -131,7 +124,6 @@ namespace DoudizhuTower.Gameplay.Battle
                         {
                             var card = _deck.Draw();
                             Hand.Add(card);
-                            _networkGameManager?.BroadcastAIDraw(_slotIndex, card);
                         }
                     }
                 }
@@ -147,8 +139,6 @@ namespace DoudizhuTower.Gameplay.Battle
                 {
                     var card = _deck.Draw();
                     Hand.Add(card);
-                    // 广播 AI 摸牌给 Client
-                    _networkGameManager?.BroadcastAIDraw(_slotIndex, card);
                 }
             }
 
@@ -163,7 +153,6 @@ namespace DoudizhuTower.Gameplay.Battle
                     if (held.HasValue)
                     {
                         Hand.Add(held.Value);
-                        _networkGameManager?.BroadcastAIDraw(_slotIndex, held.Value);
                         _tempSlot.Clear();
                     }
                 }
@@ -407,8 +396,6 @@ namespace DoudizhuTower.Gameplay.Battle
 
             foreach (var entry in playable)
             {
-                // v2.0: 仅 Master 端执行金币消耗（联机模式由 NetworkGameManager 驱动）
-                if (_networkGameManager != null && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient) continue;
                 if (Economy.TrySpend(entry.cost))
                 {
                     Hand.RemoveRange(entry.cards);
@@ -420,15 +407,7 @@ namespace DoudizhuTower.Gameplay.Battle
                     if (routeGroup != null)
                         routeGroup.SetRouteIndex(routeIndex);
 
-                    // 联机模式：通过 NetworkGameManager 广播出牌
-                    if (_networkGameManager != null && _slotIndex >= 0)
-                    {
-                        _networkGameManager.BroadcastAIPlay(_slotIndex, entry.cards, entry.result, routeIndex, _baseCtl);
-                    }
-                    else
-                    {
-                        _battleManager.DeployCards(entry.cards, entry.result, routeGroup, _baseCtl);
-                    }
+                    _battleManager.DeployCards(entry.cards, entry.result, routeGroup, _baseCtl);
 
                     // 通知领域系统 AI 出牌（用于触发要不起领域/反制护盾）
                     if (_domainSystem != null)
