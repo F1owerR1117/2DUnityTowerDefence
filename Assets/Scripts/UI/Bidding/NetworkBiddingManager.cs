@@ -59,7 +59,7 @@ namespace DoudizhuTower.UI.Bidding
         private bool _biddingEnded;
         private float _timer;
         private bool _initialized;
-        private object[] _pendingBidTurn;
+        private bool _shownResult;
 
         // 左右两侧对应的网络槽位（-1 = 未分配）
         private int _leftSlot = -1;
@@ -171,35 +171,63 @@ namespace DoudizhuTower.UI.Bidding
         {
             if (!_initialized || _biddingEnded) return;
 
-            _timer -= Time.deltaTime;
-            if (timerText != null)
-            {
-                int sec = Mathf.CeilToInt(Mathf.Max(0f, _timer));
-                timerText.text = $"{sec}s";
-            }
-
-            // 超时 → 自动结束（叫分场景桥接）
-            if (_timer <= 0f && _net.IsMasterClient)
-            {
-                MasterEndBidding();
-                return;
-            }
-
-            // AI 叫分（仅 Master 执行，叫分场景桥接）
-            if (_net.IsMasterClient && GameSession.AISlots.Contains(_currentTurnSlot))
-            {
-                int bid = AIDecideBid();
-                Debug.Log($"[Bidding] AI 槽位 {_currentTurnSlot} 叫分: {bid}");
-                ProcessBid(_currentTurnSlot, bid);
-            }
-
-            // 如果 FusionGameManager 存在，从 WorldState 读取状态
+            // ── Fusion 模式：从 WorldState 读取叫分状态 ──
             var gm = FusionGameManager.Instance;
-            if (gm != null && gm.IsLocalSlotReady)
+            if (gm != null)
             {
                 var world = gm.World;
-                UpdateTurnDisplayFromWorld(world);
-                UpdateBidDisplayFromWorld(world);
+
+                // 叫分已结束 → 显示结果
+                if (world.Game.IsBiddingFinished == 1 && !_shownResult)
+                {
+                    _shownResult = true;
+                    _biddingEnded = true;
+
+                    int landlordSlot = world.Game.BidWinnerSlot;
+                    bool localIsLandlord = (landlordSlot == _mySlot);
+                    float multiplier = world.Game.HighestBid > 0 ? world.Game.HighestBid : 1f;
+
+                    SetButtonsInteractable(false);
+                    ShowResult(localIsLandlord, multiplier);
+                    ShowRoleIcons(landlordSlot);
+
+                    if (confirmButton != null)
+                    {
+                        confirmButton.gameObject.SetActive(true);
+                        confirmButton.interactable = true;
+                    }
+
+                    Debug.Log($"[NetworkBidding] 从 WorldState 读取叫分结果: landlord={landlordSlot}, multiplier={multiplier}");
+                }
+
+                // 更新轮次显示
+                if (world.Game.IsBiddingFinished == 0)
+                {
+                    int currentTurn = world.Game.CurrentBidTurn;
+                    var labels = new[] {
+                        GetLabelForSlot(0),
+                        GetLabelForSlot(1),
+                        GetLabelForSlot(2)
+                    };
+                    for (int i = 0; i < labels.Length; i++)
+                    {
+                        if (labels[i] != null)
+                            labels[i].fontStyle = i == currentTurn
+                                ? FontStyles.Bold
+                                : FontStyles.Normal;
+                    }
+
+                    // 更新叫分显示
+                    for (int slot = 0; slot < 3; slot++)
+                    {
+                        var player = gm.GetPlayerState(slot);
+                        var bidText = GetBidDisplayForSlot(slot);
+                        if (bidText != null)
+                            bidText.text = player.Bid > 0 ? $"{player.Bid} 分" : "不叫";
+                    }
+                }
+
+                return;
             }
         }
 
@@ -281,50 +309,8 @@ namespace DoudizhuTower.UI.Bidding
 
         private void OnNetworkEvent(string key, object value, int senderActor)
         {
-            switch (key)
-            {
-                case NetworkProtocol.BID_TURN:
-                    HandleBidTurn((object[])value);
-                    break;
-                case NetworkProtocol.BID_ACTION:
-                    if (_net.IsMasterClient)
-                        HandleBidActionOnMaster((object[])value, senderActor);
-                    else
-                        HandleBidActionBroadcast((object[])value);
-                    break;
-                case NetworkProtocol.BID_RESULT:
-                    HandleBidResult((object[])value);
-                    break;
-            }
-        }
-
-        private void HandleBidTurn(object[] data)
-        {
-            _currentTurnSlot = (int)data[0];
-            _timer = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
-
-            UpdateBidButtons();
-            UpdateTurnDisplay();
-        }
-
-        private void HandleBidActionOnMaster(object[] data, int senderActor)
-        {
-            int senderSlot = NetworkProtocol.GetPlayerSlot(senderActor, _actorNumbers);
-            if (senderSlot != _currentTurnSlot) return;
-
-            int bid = (int)data[0];
-            int maxBid = biddingConfig != null ? biddingConfig.maxBid : 3;
-            if (bid < 0 || bid > maxBid) return;
-            if (bid > 0 && bid <= _highestBid) return;
-
-            ProcessBid(senderSlot, bid);
-        }
-
-        private void HandleBidActionBroadcast(object[] data)
-        {
-            int slot = (int)data[0];
-            int bid = (int)data[1];
-            ProcessBid(slot, bid);
+            // Fusion 模式：从 WorldState 读取，不处理网络事件
+            if (FusionGameManager.Instance != null) return;
         }
 
         private void ProcessBid(int slot, int bid)
@@ -411,37 +397,6 @@ namespace DoudizhuTower.UI.Bidding
             }
 
             _biddingEnded = true;
-        }
-
-        // ─── 处理叫分结果（所有客户端）───
-
-        private void HandleBidResult(object[] data)
-        {
-            if (_biddingEnded) return;
-            _biddingEnded = true;
-
-            int landlordSlot = (int)data[0];
-            float multiplier = Convert.ToSingle(data[2]);
-            int seed = (int)data[3];
-
-            bool localIsLandlord = (landlordSlot == _mySlot);
-
-            GameSession.IsNetworkMode = true;
-            GameSession.NetworkSeed = seed;
-            GameSession.LandlordSlot = landlordSlot;
-            GameSession.BidMultiplier = multiplier;
-            GameSession.HasResult = true;
-            GameSession.SetLocalPlayerIsLandlord(localIsLandlord);
-
-            SetButtonsInteractable(false);
-            ShowResult(localIsLandlord, multiplier);
-            ShowRoleIcons(landlordSlot);
-
-            if (confirmButton != null)
-            {
-                confirmButton.gameObject.SetActive(true);
-                confirmButton.interactable = true;
-            }
         }
 
         private void OnConfirm()
