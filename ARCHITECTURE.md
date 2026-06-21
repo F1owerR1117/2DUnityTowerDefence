@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v8.2
+# DoudizhuTower — 架构落地规范 v8.3
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -126,6 +126,22 @@
 | `CodexEntry` | 图鉴条目 | Config | ScriptableObject，存储单个图鉴条目（Id/DisplayName/Category/Icon/Description） |
 | `CodexDatabase` | 图鉴数据库 | Config | ScriptableObject，按分类组织 CodexEntry 条目，支持运行时查询 |
 | `UnitDebugToolWindow` | 兵种调试工具 | Editor | Editor 窗口（Tools → 技能可视化 → 综合调试工具），整合属性/被动/音效/特效/动画配置 |
+| `FusionGameManager` | Fusion 游戏管理器 | Gameplay/Fusion | 替代 NetworkGameManager，基于 Tick 状态机 + 双缓冲战斗系统 |
+| `FusionGameState` | Fusion 世界状态 | Gameplay/Fusion | WorldState struct，[Networked] 同步，唯一真相源 |
+| `FusionBattleManager` | Fusion 战场管理器 | Gameplay/Fusion | Host 权威战斗逻辑 |
+| `CombatSystem` | Fusion 战斗系统 | Gameplay/Fusion | FindTarget → AttackTick → ApplyDamage 流水线 |
+| `PassiveSystem` | Fusion 被动系统 | Gameplay/Fusion | 16 种通用被动的 Fusion 实现 |
+| `CardUnitView` | Fusion 单位视图 | Gameplay/Fusion | Client 侧视觉表现（行军/动画/血条） |
+| `IntentBuffer` | 输入意图缓冲 | Gameplay/Fusion | Client 输入 → Host 处理的桥梁 |
+| `UnitSyncManager` | 单位同步管理器 | Gameplay/Fusion | Fusion 网络对象生命周期管理 |
+| `PlayerInputHandler` | 玩家输入处理 | Gameplay/Fusion | Fusion 输入采集 + 发送 |
+| `ViewBinder` | 视图绑定器 | Gameplay/Fusion | Fusion 状态 → UI 视图的映射 |
+| `DesyncDetector` | 失步检测器 | Gameplay/Fusion | Client/Host 状态偏差检测 |
+| `IdentityService` | 身份服务 | Gameplay/Fusion/Identity | Singleton Facade，场景显式绑定 |
+| `NetworkFacade` | 网络门面 | Gameplay/Network | 统一 Photon/Fusion/本地联机的调用入口 |
+| `BattlePresentationManager` | 战斗演出管理器 | Gameplay/Presentation | 统一调度所有演出序列（镜头/对话/广播） |
+| `CameraDirector` | 镜头导演 | Gameplay/Presentation | 镜头切换/聚焦/震动 |
+| `IRuntimeReady` | 运行时就绪接口 | Core/Lifecycle | 控制 Update 是否执行游戏逻辑 |
 
 ## 实施状态总览
 
@@ -298,6 +314,11 @@
 | 叫分槽位同步等待 | `InitializeSlotWhenReady()` 协程等待 Photon PlayerList 同步完成后再计算槽位（最多 3 秒轮询），修复同时进入时所有玩家拿到相同手牌 | NetworkBiddingManager.cs |
 | AI 槽位房间持久化 | AI 槽位通过 Photon 房间属性（`aiSlots`）持久化，后加入玩家从房间属性恢复，修复后加入玩家看不到 AI 的 bug | OnlineLobbyController.cs |
 | 农民路线 UI 隐藏 | `HandArea.SetRouteUIVisible(false)` 隐藏农民不需要的路线选择 UI（prev/nextButton, routeLabel, routeIndicator） | HandArea.cs + GameBootstrapper.cs |
+| **Fusion 联机架构（Phase 5）** | FusionGameManager（Tick 状态机）+ FusionGameState（WorldState [Networked]）+ CombatSystem + PassiveSystem + IntentBuffer + ViewBinder + PlayerInputHandler + UnitSyncManager + DesyncDetector + Identity 系统（IIdentityProvider 策略模式）| Gameplay/Fusion/ + Gameplay/Fusion/Identity/ + Gameplay/Fusion/UI/ |
+| **战斗演出系统** | BattlePresentationManager（统一调度）+ CameraDirector（镜头）+ BattleAnnouncementManager（广播）+ BossDialogueBubble（BOSS 对话）| Gameplay/Presentation/ |
+| **网络门面** | NetworkFacade（统一 Photon/Fusion/本地联机调用入口）| Gameplay/Network/ |
+| **Fusion 网络基础设施** | FusionService + NetworkRunnerSetup + FusionTestSpawner + FusionTestObject + FusionMinimalDebug + FileLogger | Gameplay/Network/ |
+| **运行时就绪接口** | IRuntimeReady（控制 Update 是否执行游戏逻辑）| Core/Lifecycle/ |
 
 ### P1（仍需实现）
 
@@ -378,6 +399,8 @@ Assets/Scripts/
 │   ├── Economy/
 │   │   ├── EconomySystem.cs           # 金币增减 + 回金速度成长曲线
 │   │   └── CardCostCalculator.cs      # §2.3 Cost = ΣC_n × M_type 公式
+│   └── Lifecycle/
+│       └── IRuntimeReady.cs           # 运行时就绪接口（IsRuntimeReady 属性，控制 Update 是否执行游戏逻辑）
 │
 ├── Gameplay/                          # 运行时管理层（MonoBehaviour）
 │   ├── Systems/
@@ -429,13 +452,55 @@ Assets/Scripts/
 │   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连 + 中国区 nameserver）
 │   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
 │   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
+│   │   ├── NetworkFacade.cs           # 网络门面（统一 Photon/Fusion/本地联机的调用入口）
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
 │   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
 │   │   ├── GameSnapshot.cs             # ★ Snapshot 层（某 Tick 下的完整权威状态，可完全重建游戏）
 │   │   ├── GameEvent.cs                # ★ Event 层（不可变操作记录，append-only，必须携带 Tick）
+│   │   ├── FusionService.cs            # Fusion 网络服务实现（Photon Fusion SDK）
+│   │   ├── FusionTestSpawner.cs        # Fusion 测试生成器（Editor 调试用）
+│   │   ├── FusionTestObject.cs         # Fusion 测试对象（网络对象测试）
+│   │   ├── FusionMinimalDebug.cs       # Fusion 最小调试组件
+│   │   ├── NetworkRunnerSetup.cs       # NetworkRunner 配置（Fusion 运行时初始化）
+│   │   ├── FileLogger.cs              # 文件日志（调试用）
 │   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
 │   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
+│   ├── Fusion/                         # Fusion 联机架构（Phase 5，替代 PUN NetworkGameManager）
+│   │   ├── FusionGameManager.cs        # ★ Fusion 游戏管理器（替代 NetworkGameManager，基于 Tick 状态机 + 双缓冲战斗）
+│   │   ├── FusionGameState.cs          # ★ Fusion 世界状态（WorldState struct，[Networked] 同步）
+│   │   ├── FusionBattleManager.cs      # ★ Fusion 战场管理器（Host 权威战斗逻辑）
+│   │   ├── CombatSystem.cs            # ★ Fusion 战斗系统（FindTarget → AttackTick → ApplyDamage）
+│   │   ├── PassiveSystem.cs           # ★ Fusion 被动系统（16 种通用被动的 Fusion 实现）
+│   │   ├── BossSkillSystem.cs         # Fusion 版 BOSS 技能系统（HP 阶段/定时/击杀触发）
+│   │   ├── CardUnitView.cs            # ★ Fusion 单位视图（Client 侧视觉表现，行军/动画/血条）
+│   │   ├── IntentBuffer.cs            # ★ 输入意图缓冲（Client 输入 → Host 处理的桥梁）
+│   │   ├── EventBuffer.cs             # 事件缓冲（Fusion 事件队列）
+│   │   ├── UnitSyncManager.cs         # ★ 单位同步管理器（Fusion 网络对象生命周期）
+│   │   ├── UnitBuffer.cs              # 单位缓冲（Fusion 单位池）
+│   │   ├── UnitConfig.cs              # 单位配置（Fusion 单位预制体映射）
+│   │   ├── PlayerInputHandler.cs      # ★ 玩家输入处理（Fusion 输入采集 + 发送）
+│   │   ├── AISystem.cs               # Fusion AI 系统（Host 侧 AI 决策）
+│   │   ├── ViewBinder.cs             # ★ 视图绑定器（Fusion 状态 → UI 视图的映射）
+│   │   ├── DesyncDetector.cs         # ★ 失步检测器（Client/Host 状态偏差检测）
+│   │   ├── DesyncLogger.cs           # 失步日志（失步事件记录）
+│   │   ├── TickDisplay.cs            # Tick 显示（调试用，显示当前 Tick 号）
+│   │   ├── Identity/                  # 身份系统（IIdentityProvider 策略模式）
+│   │   │   ├── IIdentityProvider.cs    # 身份提供者接口（Offline/Online 统一抽象）
+│   │   │   ├── OfflineIdentityProvider.cs  # 单机身份提供者
+│   │   │   ├── OnlineIdentityProvider.cs   # 联机身份提供者
+│   │   │   ├── LobbyIdentityService.cs    # 大厅身份服务（联机房间身份分配）
+│   │   │   └── IdentityService.cs         # 身份服务 Facade（Singleton，场景显式绑定）
+│   │   └── UI/                        # Fusion UI 层
+│   │       ├── GameUIController.cs     # Fusion 游戏 UI 控制器
+│   │       ├── GoldView.cs            # Fusion 金币视图
+│   │       └── HandView.cs            # Fusion 手牌视图
+│   └── Presentation/                  # 战斗演出系统
+│       ├── BattlePresentationManager.cs  # ★ 战斗演出管理器（统一调度所有演出序列）
+│       ├── PresentationSequence.cs    # 演出序列（镜头+对话+广播的组合编排）
+│       ├── CameraDirector.cs          # 镜头导演（镜头切换/聚焦/震动）
+│       ├── BattleAnnouncementManager.cs  # 战场广播管理器（屏幕广播文字显示）
+│       └── BossDialogueBubble.cs      # BOSS 对话气泡（BOSS 技能前对话展示）
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -500,6 +565,7 @@ Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线�
 
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
+├── CreateRunnerPrefab.cs              # 创建 Fusion NetworkRunner 预制体工具
 ├── ReplaceAllTMPFonts.cs              # 批量替换 TextMeshPro 字体工具
 ├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
