@@ -49,7 +49,6 @@ namespace DoudizhuTower.Gameplay.Battle
         private DomainSystem _domainSystem;
         private DoudizhuTower.UI.Battlefield.TempSlotUI _tempSlot;
 
-        // 联机同步（Phase 6.5: PUN 已禁用，由 Fusion 处理）
         private int _slotIndex = -1;
 
         public void SetNetworkContext(int slotIndex)

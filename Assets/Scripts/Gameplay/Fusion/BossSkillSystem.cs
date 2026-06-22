@@ -6,6 +6,11 @@ namespace DoudizhuTower.Gameplay.Fusion
     /// Boss 技能系统（纯逻辑，无 MonoBehaviour）。
     /// 只负责生成事件，不直接修改 UnitState。
     /// </summary>
+    /// <remarks>
+    /// ⚠️ [已废弃] 当前未被 FusionGameManager 使用。
+    /// Boss 技能逻辑将在 Phase 7 中按需迁移。
+    /// </remarks>
+    [System.Obsolete("未被 FusionGameManager 使用，Boss 技能逻辑将在 Phase 7 中按需迁移")]
     public class BossSkillSystem
     {
         // 技能配置
@@ -64,8 +69,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             float endX = boss.PosX + nx * DASH_DISTANCE;
             float endY = boss.PosY + ny * DASH_DISTANCE;
 
-            // 3. 生成冲锋事件
-            events.AddDash(boss.UnitId, boss.PosX, boss.PosY, endX, endY, DASH_DAMAGE, DASH_WIDTH);
+            // Dash 事件由 CombatSystem 处理
         }
 
         /// <summary>
