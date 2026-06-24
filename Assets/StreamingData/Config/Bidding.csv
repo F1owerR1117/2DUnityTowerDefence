@@ -1,8 +1,0 @@
-﻿Parameter,Value,Description
-biddingDuration,30,叫分总时长（秒）
-maxBid,3,最高叫分
-aiPassChance,0.6,AI不叫概率
-aiBid1Weight,0.5,AI叫1分权重
-aiBid2Weight,0.3,AI叫2分权重
-aiBid3Weight,0.2,AI叫3分权重
-randomAssignOnTimeout,1,超时随机分配(1=是/0=否)

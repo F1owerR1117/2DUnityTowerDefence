@@ -1,4 +1,0 @@
-Id,DisplayName,Description,ExtraInfo,Keywords
-rule_domain,要不起领域,地主可激活,持续时间: 5秒,领域|封印
-rule_counter,反制护盾,农民可反击,持续时间: 2秒,反制|护盾
-rule_bombbreak,炸弹破封,炸弹可直接破封领域,不需要反制按钮,破封|炸弹
