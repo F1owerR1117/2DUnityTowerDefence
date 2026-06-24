@@ -16,6 +16,8 @@ namespace DoudizhuTower.Gameplay.Network
     /// </summary>
     public class FusionService : MonoBehaviour, INetworkService, INetworkRunnerCallbacks
     {
+        public static FusionService Instance { get; private set; }
+
         private NetworkRunner _runner;
         private bool _isConnected;
         private bool _isInRoom;
@@ -33,10 +35,26 @@ namespace DoudizhuTower.Gameplay.Network
         /// <summary>本机 PlayerRef（Fusion 身份）</summary>
         public PlayerRef LocalPlayer { get; private set; }
 
+        /// <summary>FusionGameManager 预制体（在 Inspector 中设置）</summary>
+        [SerializeField] private NetworkObject _fusionGameManagerPrefab;
+
         private void Awake()
         {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+            DontDestroyOnLoad(gameObject);
+
             // Build 中 TLS 证书验证修复：Photon 云 HTTPS 连接需要此回调
             ServicePointManager.ServerCertificateValidationCallback = CertCallback;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this) Instance = null;
         }
 
         private static bool CertCallback(
@@ -86,6 +104,44 @@ namespace DoudizhuTower.Gameplay.Network
             _isConnected = true;
             Debug.Log($"[Fusion] Runner 就绪: ProvideInput={_runner.ProvideInput}");
             OnServerConnected?.Invoke();
+        }
+
+        /// <summary>
+        /// 通过 NetworkRunner Spawn FusionGameManager。
+        /// 只有 Host/Master 可以 Spawn。
+        /// </summary>
+        public void SpawnFusionGameManager()
+        {
+            Debug.Log($"[Fusion] SpawnFusionGameManager 被调用: Runner={_runner != null}, IsRunning={_runner?.IsRunning}");
+
+            if (_runner == null || !_runner.IsRunning)
+            {
+                Debug.LogError($"[Fusion] NetworkRunner 未运行！Runner={_runner}, IsRunning={_runner?.IsRunning}");
+                return;
+            }
+
+            if (DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance != null)
+            {
+                Debug.Log("[Fusion] FusionGameManager 已存在，跳过 Spawn");
+                return;
+            }
+
+            Debug.Log($"[Fusion] _fusionGameManagerPrefab={_fusionGameManagerPrefab != null}");
+
+            // 方式 1：使用预制体（推荐）
+            if (_fusionGameManagerPrefab != null)
+            {
+                Debug.Log("[Fusion] 尝试通过 Runner.Spawn 预制体...");
+                var obj = _runner.Spawn(_fusionGameManagerPrefab);
+                Debug.Log($"[Fusion] Runner.Spawn 结果: {obj != null}");
+                return;
+            }
+
+            // 方式 2：运行时创建（备选）
+            Debug.LogWarning("[Fusion] 未配置 FusionGameManager 预制体，尝试运行时创建");
+            var go = new GameObject("FusionGameManager_Runtime");
+            go.AddComponent<global::Fusion.NetworkObject>();
+            go.AddComponent<DoudizhuTower.Gameplay.Fusion.FusionGameManager>();
         }
 
         public void Disconnect()
