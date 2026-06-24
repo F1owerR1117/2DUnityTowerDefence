@@ -5,8 +5,6 @@ namespace DoudizhuTower.UI
     /// <summary>
     /// 摄像机控制。WASD/方向键 + 鼠标边缘滚动移动，
     /// 滚轮缩放 orthographicSize。
-    /// 动态边界：根据 orthographicSize 和 aspect 计算允许移动范围，
-    /// 确保任何缩放级别下相机视野不超出地图边界。
     /// </summary>
     public class CameraController : MonoBehaviour
     {
@@ -19,11 +17,11 @@ namespace DoudizhuTower.UI
         public float minZoom = 10f;
         public float maxZoom = 80f;
 
-        [Header("地图绝对边界（整个场景的四个尽头坐标）")]
-        public float mapMinX = -300f;
-        public float mapMaxX = 900f;
-        public float mapMinY = 100f;
-        public float mapMaxY = 450f;
+        [Header("边界")]
+        public float minX = -300f;
+        public float maxX = 900f;
+        public float minY = 100f;
+        public float maxY = 450f;
 
         private Camera _cam;
 
@@ -63,26 +61,11 @@ namespace DoudizhuTower.UI
                     minZoom, maxZoom);
             }
 
-            // 动态限制边界：根据相机视口大小计算允许移动范围
-            if (_cam != null)
-            {
-                float camHalfHeight = _cam.orthographicSize;
-                float camHalfWidth = _cam.orthographicSize * _cam.aspect;
-
-                float clampedMinX = mapMinX + camHalfWidth;
-                float clampedMaxX = mapMaxX - camHalfWidth;
-                float clampedMinY = mapMinY + camHalfHeight;
-                float clampedMaxY = mapMaxY - camHalfHeight;
-
-                // 相机视野大于地图时，固定在地图中心
-                if (clampedMinX > clampedMaxX) clampedMinX = clampedMaxX = (mapMinX + mapMaxX) / 2f;
-                if (clampedMinY > clampedMaxY) clampedMinY = clampedMaxY = (mapMinY + mapMaxY) / 2f;
-
-                Vector3 pos = transform.position;
-                pos.x = Mathf.Clamp(pos.x, clampedMinX, clampedMaxX);
-                pos.y = Mathf.Clamp(pos.y, clampedMinY, clampedMaxY);
-                transform.position = pos;
-            }
+            // 限制边界
+            Vector3 pos = transform.position;
+            pos.x = Mathf.Clamp(pos.x, minX, maxX);
+            pos.y = Mathf.Clamp(pos.y, minY, maxY);
+            transform.position = pos;
         }
     }
 }
