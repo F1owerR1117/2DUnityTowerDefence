@@ -95,7 +95,7 @@
 | `VictoryStats` | 结算数据 | UI/Panels | struct，含 gameDuration/cardsPlayed/unitsSpawned/unitsKilled/goldEarned + 联机结算公式字段 |
 | `UnitPassivesGizmosOverlay` | 被动范围叠加 | Editor | Scene View 实线（逻辑范围）+ 虚线（VFX 覆盖）+ 数值标注 |
 | `UnitPassivesEditorWindow` | 被动技能调试窗口 | Editor | 编辑/运行时模式下查看和调整所有被动参数，无需进入 Play 模式 |
-| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，存储叫分结果 + 玩家基地映射，支持单机/联机 |
+| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，存储叫分结果 + 玩家基地映射，已废弃降级为数据缓存 |
 | `SaveSystem` | 存档系统 | Gameplay/Systems | 基于 PlayerPrefs，存储金币/首次胜利/对局统计 |
 | `BiddingManager` | 叫分期控制器 | UI/Bidding | 叫分场景主控：倒计时 + AI 叫分 + 玩家叫分 + 跳转 |
 | `BiddingConfig` | 叫分配置 | Config | ScriptableObject，可配叫分时长/AI 策略/超时处理 |
@@ -111,10 +111,9 @@
 | `PhotonService` | Photon 实现 | Gameplay/Network | 基于 Photon PUN 2 的 INetworkService 实现（含断线自动重连 + `OnMasterSwitched` + 中国区 nameserver `ns.photonengine.cn`） |
 | `NetworkManager` | 网络管理器 | Gameplay/Network | 单例，持有 INetworkService 引用，DontDestroyOnLoad |
 | `OnlineLobbyController` | 联机大厅控制器 | UI/Online | 联机模式选择（单排/创建房间/加入房间）+ 房间管理 |
-| `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 3 人网络轮流叫分，Master 端轮次管理 + AI 槽位支持 + 断线处理 |
+| `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 通过 INetworkService 抽象层通信，支持 Fusion 和本地联机 |
 | `BiddingSceneBootstrap` | 叫分场景引导 | UI/Bidding | 检测联机房间状态，自动切换单机/联机叫分管理器 |
 | `NetworkProtocol` | 网络协议常量 | Gameplay/Network | 事件 Key 定义 + Card/CardTypeResult 序列化 + 玩家槽位工具 |
-| `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线/HP 同步，挂载到游戏场景 |
 | `NetworkLogger` | 网络日志 | Gameplay/Network | 将网络相关日志写入 `Logs/network_log_slotN.txt` 文件 |
 | `NetworkDebugPanel` | 网络调试面板 | Gameplay/Network | 游戏内左上角显示槽位/手牌/金币/单位数/最近事件 |
 | `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
@@ -449,9 +448,7 @@ Assets/Scripts/
 │   │   └── MapController.cs           # 地图坐标常量与工具方法（WinCondition 枚举定义在 BattleManager.cs 中）
 │   ├── Network/                        # 联机网络层
 │   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步 + OnMasterSwitched）
-│   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连 + 中国区 nameserver）
 │   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
-│   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
 │   │   ├── NetworkFacade.cs           # 网络门面（统一 Photon/Fusion/本地联机的调用入口）
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
@@ -555,13 +552,6 @@ Assets/Scripts/
 │
 └── _DisabledTests/                     # 已禁用的测试目录
     └── CardTypeDetectorTests.cs
-
-Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线）
-├── Units.csv                          # 兵种数值表
-├── Heroes.csv                         # 英雄配置表
-├── Economy.csv                        # 经济配置表
-├── Bidding.csv                        # 叫分配置表
-└── Levels.csv                         # 关卡配置表
 
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
@@ -1626,24 +1616,21 @@ public static class NetworkProtocol
 | 飞筒联机同步 | ✅ CARD_TRANSFER/ARRIVE/TAKE 协议，Master 验证 + 广播 |
 | 经济同步增强 | ✅ GOLD_UPDATE 携带 incomeRate，所有客户端同步回金速度 |
 
-### 13.7 联机游戏管理器（NetworkGameManager）
+### 13.7 联机游戏管理器（已废弃）
 
-Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
+> ⚠️ **PUN NetworkGameManager 已删除**，由 `FusionGameManager`（§Fusion）替代。
+> 本节保留供历史参考，实际联机逻辑已迁移至 Fusion 架构。
 
-**核心职责：**
-- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币 + 领域封印（不信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
-- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 PLAYER_READY 已到达 + 扣费 → `SendToAll(DRAW_CARD_RESULT, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
-- **经济同步**：Master 使用自己追踪的金币，不接受客户端报告的金币覆盖（防止金币伪造）；`GOLD_UPDATE` 不覆盖客户端自身金币
-- **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
-- **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
-- **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
-- **断线处理**：`OnPlayerLeft` → 保留断线玩家实际金币 → 转为 AI 控制
-- **飞筒传牌同步**：`RequestCardTransfer(card)` → Master 验证手牌 → 广播 `CARD_ARRIVE` → 接收方暂存槽；`RequestCardTake()` → Master 广播 `CARD_TAKE` → 清空暂存槽
-- **HP 同步**：Master 每 5 秒广播所有存活单位 HP（用 `UnitId` 标识，跨客户端一致），客户端直接覆盖本地 HP
-- **Master 迁移**：`OnMasterSwitched` → 新 Master 请求时间同步
-- **牌堆偏移**：每个玩家的同步牌堆跳过 `slot * 7` 张牌，防止多名玩家拿到相同手牌
-- **手牌验证**：用 `DeckIndex` 比较（`ContainsByDeckIndex`），避免 `_deckId` 跨客户端不一致导致验证失败
-- **调试工具**：`NetworkLogger`（日志写入 `Logs/` 文件）+ `NetworkDebugPanel`（游戏内左上角状态面板）
+**历史架构（PUN，已废弃）：**
+- Master 权威架构，出牌/摸牌/经济/HP/飞筒同步
+- 使用 `INetworkService` 抽象层与 Photon PUN 2 通信
+- 协议 Key：`PLAY_CARDS`/`PLAY_APPROVED`/`DRAW_CARD`/`DRAW_CARD_RESULT` 等
+
+**当前架构（Fusion）：**
+- `FusionGameManager`：基于 Tick 状态机 + `[Networked]` 同步
+- `WorldState` struct：唯一真相源，Fusion 自动同步
+- `CombatSystem`：Host 权威战斗逻辑
+- `IntentBuffer`：Client 输入 → Host 处理的桥梁
 
 **数据流：**
 ```
@@ -2417,12 +2404,12 @@ BOSS 技能施法时间与动画同步机制：
 |:---|:---|:---|
 | ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
 | ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
-| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2121 行） | 超过 2500 行或新增观战/回放时拆分 |
-| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager + GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
+| ~~NetworkGameManager 职责过重~~ | **已删除** — PUN NetworkGameManager 已移除，由 FusionGameManager 替代 | ✅ 已偿还 |
+| Authority 未抽象 | `IsMasterClient` 判断分散在 GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
 | ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
-| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2331 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2946 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
 | ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
 | ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
 
@@ -2589,7 +2576,7 @@ struct DeckState {
 | 当前系统 | v2.0 目标 | 改造要点 |
 |:---|:---|:---|
 | `_stateVersion` | `_tick` | 已完成 ✅ |
-| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），但 NetworkGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
+| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），FusionGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
 | `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅（`GameSnapshot.cs` 已独立实现） |
 | `HP_CORRECTION` 独立修正 | 合并入 Snapshot | 已完成 ✅ |
 | `SyncState` 状态机 | 生命周期阶段 | **待升级** |
@@ -2669,7 +2656,6 @@ AI     = 只读决策（联机模式）
 | `EconomyManager.AddGold()` | ✅ `!IsMasterClient → return` | Client 不增加金币 |
 | `BuildingAI.Update()` | ✅ 联机模式不调用 `UpdateEconomy()` | AI 不自动增长金币 |
 | `BuildingAI.MakeDecision()` | ✅ `!IsMasterClient → continue` | AI 不执行 `TrySpend()` |
-| `NetworkGameManager.Update()` | ✅ `_net.IsMasterClient` 检查 | 仅 Master 执行 `_slotEconomies.UpdateEconomy()` |
 
 ### 26.5 数据流
 
@@ -2722,13 +2708,13 @@ EconomyManager.UpdateGoldUI()
 ```
 Master = 唯一战斗逻辑权威
 Client = 纯投影层（动画 + 特效 + UI + 音效）
-NetworkGameManager = 事件转发层（不直接播放音效）
+FusionGameManager = 事件转发层（不直接播放音效）
 ```
 
 **禁止**：
 - Client 修改任何战斗状态
 - Client 执行战斗计算
-- NetworkGameManager 直接播放音效
+- FusionGameManager 直接播放音效
 - 新增事件类型（CombatEvent struct 等）
 
 ### 27.2 事件体系（已冻结）
@@ -2746,13 +2732,13 @@ NetworkGameManager = 事件转发层（不直接播放音效）
 
 ```
 Master: TakeDamage() → OnTakeDamageEvent → UnitAudio.OnTakeDamage() → 播放音效
-Client: UNIT_HIT → NetworkGameManager → UnitAudio.PlayHitNetwork() → 播放音效
+Client: UNIT_HIT → FusionGameManager → UnitAudio.PlayHitNetwork() → 播放音效
 ```
 
 **关键规则**：
 - Master 保留本地事件驱动音效（不修改）
 - Client 通过网络事件驱动音效
-- `NetworkGameManager` 不直接播放音效，转发到 `UnitAudio`
+- `FusionGameManager` 不直接播放音效，转发到 `UnitAudio`
 - `HandleUnitAttack()` 检查 `IsMasterClient`，Master 不执行
 
 ### 27.4 VisualStunTimer（Client 专用）
