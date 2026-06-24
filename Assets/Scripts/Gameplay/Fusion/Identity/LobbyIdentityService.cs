@@ -47,7 +47,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             allPlayers.Sort((a, b) => a.RawEncoded.CompareTo(b.RawEncoded));
 
             int slot = -1;
-            for (int i = 0; i < allPlayers.Count; i++)
+            for (int i = 0; i < allPlayers.Count(); i++)
             {
                 if (allPlayers[i] == player)
                 {
