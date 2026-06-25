@@ -288,7 +288,7 @@ namespace DoudizhuTower.Gameplay.Network
                 Debug.LogError($"[Fusion] JoinRandomRoom 异常: {ex.Message}\n{ex.StackTrace}");
                 if (_runner != null)
                 {
-                    _runner.Shutdown();
+                    await _runner.Shutdown();
                     _runner = null;
                 }
             }

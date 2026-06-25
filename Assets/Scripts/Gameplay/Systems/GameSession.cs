@@ -82,8 +82,10 @@ namespace DoudizhuTower.Gameplay.Systems
 
         public static void MarkSlotReady()
         {
+#pragma warning disable CS0618 // Phase 5 废弃字段，保留兼容
             if (SlotReady) return;
             SlotReady = true;
+#pragma warning restore CS0618
             OnSlotReady?.Invoke();
         }
 
@@ -99,9 +101,11 @@ namespace DoudizhuTower.Gameplay.Systems
             _localPlayerIsLandlord = false;
 
             // 废弃字段也重置（兼容旧代码）
+#pragma warning disable CS0618
             LocalPlayerId = 0;
             PlayerBaseMapping = null;
             PlayerSlotMap = new Dictionary<int, int>();
+#pragma warning restore CS0618
             LocalActorNumber = -1;
             LandlordPlayerId = -1;
             SlotReady = false;

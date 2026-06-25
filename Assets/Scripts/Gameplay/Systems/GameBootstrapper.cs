@@ -88,7 +88,9 @@ namespace DoudizhuTower.Gameplay.Systems
             if (GameSession.HasResult)
             {
                 _playerIsLandlord = GameSession.PlayerIsLandlord;
+#pragma warning disable CS0618 // Phase 5 废弃字段，保留兼容
                 playerBaseIndex = GameSession.MyBaseIndex;
+#pragma warning restore CS0618
             }
 
             Debug.Log($"[Bootstrapper] HasResult={GameSession.HasResult}, PlayerIsLandlord={GameSession.PlayerIsLandlord}, _playerIsLandlord={_playerIsLandlord}");
