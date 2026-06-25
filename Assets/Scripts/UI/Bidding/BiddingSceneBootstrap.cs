@@ -1,3 +1,4 @@
+using DoudizhuTower.Gameplay.Fusion;
 using DoudizhuTower.Gameplay.Network;
 using UnityEngine;
 
@@ -6,7 +7,7 @@ namespace DoudizhuTower.UI.Bidding
     /// <summary>
     /// 叫分场景启动引导。
     /// 检测当前是否处于联机房间，决定激活 BiddingManager（单机）还是 NetworkBiddingManager（联机）。
-    /// 挂载到叫分场景中同时拥有 BiddingManager 和 NetworkBiddingManager 的 GameObject 上。
+    /// 联机模式下确保 FusionGameManager 已 Spawn。
     /// </summary>
     public class BiddingSceneBootstrap : MonoBehaviour
     {
@@ -26,6 +27,32 @@ namespace DoudizhuTower.UI.Bidding
 
             if (networkManager != null)
                 networkManager.gameObject.SetActive(isNetwork);
+
+            // 联机模式：确保 FusionGameManager 已 Spawn（叫分场景需要 WorldState）
+            if (isNetwork)
+            {
+                EnsureFusionGameManager();
+            }
+        }
+
+        private void EnsureFusionGameManager()
+        {
+            if (FusionGameManager.Instance != null)
+            {
+                Debug.Log("[BiddingBootstrap] FusionGameManager 已存在");
+                return;
+            }
+
+            var fusionService = FindFirstObjectByType<FusionService>();
+            if (fusionService != null && fusionService.Runner != null && fusionService.Runner.IsRunning)
+            {
+                Debug.Log("[BiddingBootstrap] Spawn FusionGameManager for bidding scene");
+                fusionService.SpawnFusionGameManager();
+            }
+            else
+            {
+                Debug.LogWarning("[BiddingBootstrap] FusionService 未就绪，FusionGameManager 无法 Spawn");
+            }
         }
     }
 }
