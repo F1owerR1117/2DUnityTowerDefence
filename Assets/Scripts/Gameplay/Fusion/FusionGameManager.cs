@@ -352,7 +352,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         private void InitializeGamePhase()
         {
             State = GamePhase.Bidding;
-            _stateStartTick = Runner.Tick;
+            OnStateChanged(GamePhase.Lobby, GamePhase.Bidding);
             var world = World;
 
             // 从 GameSession 读取叫分结果（桥接层）
@@ -558,7 +558,6 @@ namespace DoudizhuTower.Gameplay.Fusion
             {
                 var oldState = State;
                 State = _nextState;
-                _stateStartTick = Runner.Tick;
 
                 // 状态切换时重置所有子系统
                 OnStateChanged(oldState, State);
@@ -568,9 +567,12 @@ namespace DoudizhuTower.Gameplay.Fusion
             _nextState = State;
         }
 
-        /// <summary>状态切换生命周期钩子（重置子系统）</summary>
+        /// <summary>状态切换生命周期钩子（唯一写入点）</summary>
         private void OnStateChanged(GamePhase oldState, GamePhase newState)
         {
+            // 计时器唯一写入点
+            _stateStartTick = Runner.Tick;
+
             // 重置 AI 计数器
             _aiTickCounter = 0;
 
