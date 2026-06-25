@@ -136,7 +136,7 @@ namespace DoudizhuTower.Gameplay.Fusion
     // ⑥ 世界状态容器
     // =========================
 
-    public enum GameState : byte
+    public enum GamePhase : byte
     {
         Lobby = 0,
         Bidding = 1,

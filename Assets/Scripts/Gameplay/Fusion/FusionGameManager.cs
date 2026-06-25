@@ -23,7 +23,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         public WorldState World { get; set; }
 
         [Networked]
-        public GameState State { get; set; }
+        public GamePhase State { get; set; }
 
         [Header("引用")]
         [SerializeField] private PlayerInputHandler inputHandler;
@@ -49,7 +49,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         // =========================
         // 原子状态推进
         // =========================
-        private GameState _nextState;
+        private GamePhase _nextState;
 
         // =========================
         // AI 节流
@@ -121,7 +121,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             // 只有 Host 初始化游戏状态
             if (HasStateAuthority)
             {
-                InitializeGameState();
+                InitializeGamePhase();
             }
         }
 
@@ -336,9 +336,9 @@ namespace DoudizhuTower.Gameplay.Fusion
             return false;
         }
 
-        private void InitializeGameState()
+        private void InitializeGamePhase()
         {
-            State = GameState.Bidding;
+            State = GamePhase.Bidding;
             var world = World;
 
             // 从 GameSession 读取叫分结果（桥接层）
@@ -477,16 +477,16 @@ namespace DoudizhuTower.Gameplay.Fusion
             // Phase 2: 状态分发
             switch (State)
             {
-                case GameState.Lobby:
+                case GamePhase.Lobby:
                     TickLobby();
                     break;
-                case GameState.Bidding:
+                case GamePhase.Bidding:
                     TickBidding();
                     break;
-                case GameState.Playing:
+                case GamePhase.Playing:
                     TickPlaying();
                     break;
-                case GameState.End:
+                case GamePhase.End:
                     break;
             }
 
@@ -529,7 +529,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         }
 
         /// <summary>原子状态推进（延迟到 Commit）</summary>
-        private void NextState(GameState state)
+        private void NextState(GamePhase state)
         {
             _nextState = state;
         }
@@ -584,7 +584,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             // 检查叫分是否结束
             if (world.Game.IsBiddingFinished == 1)
             {
-                NextState(GameState.Playing);
+                NextState(GamePhase.Playing);
             }
         }
 
@@ -1026,7 +1026,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitBid(int slot, int bid)
         {
-            if (State != GameState.Bidding) return;
+            if (State != GamePhase.Bidding) return;
 
             _bidInputs.Enqueue(new BidInput { Slot = slot, Bid = bid });
         }
@@ -1036,7 +1036,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitDrawCard()
         {
-            if (State != GameState.Playing) return;
+            if (State != GamePhase.Playing) return;
 
             var world = World;
             int mySlot = GetLocalSlot();
@@ -1067,7 +1067,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitDomain(int slot)
         {
-            if (State != GameState.Playing) return;
+            if (State != GamePhase.Playing) return;
 
             var world = World;
             if (world.Game.DomainActive == 1) return;
@@ -1085,7 +1085,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         private void ProcessBidding(ref WorldState world)
         {
-            if (State != GameState.Bidding) return;
+            if (State != GamePhase.Bidding) return;
 
             // ① 处理 Fusion Input 叫分
             while (_bidInputs.Count > 0)
@@ -1180,7 +1180,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             Debug.Log($"[ProcessBidding] 叫分结束: 地主=slot{landlordSlot}, 最高叫分={world.Game.HighestBid}");
 
             // 推进状态机到出牌阶段
-            AdvanceState(GameState.Playing);
+            NextState(GamePhase.Playing);
         }
 
         // =========================
