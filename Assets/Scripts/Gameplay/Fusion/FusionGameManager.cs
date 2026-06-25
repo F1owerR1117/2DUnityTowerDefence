@@ -457,6 +457,11 @@ namespace DoudizhuTower.Gameplay.Fusion
                     Debug.Log($"[FusionGameManager] GetInput: Action={netInput.Action} Slot={netInput.Slot}");
                     ProcessNetworkInput(ref _pendingWorld, netInput);
                 }
+                else
+                {
+                    if (_currentTick % 300 == 0)
+                        Debug.Log($"[FusionGameManager] GetInput: 无输入 (Tick={_currentTick})");
+                }
 
                 RunSimulation();
                 SyncToNetworkState();
