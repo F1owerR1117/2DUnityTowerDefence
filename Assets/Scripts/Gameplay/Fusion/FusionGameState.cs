@@ -85,45 +85,49 @@ namespace DoudizhuTower.Gameplay.Fusion
     }
 
     // =========================
-    // ⑤ 输入系统
+    // ⑤ 输入系统（传输层：指令容器，不绑定业务数据结构）
     // =========================
     public struct FusionPlayerInput : INetworkInput
     {
         public byte Action;       // 0=none, 1=play, 2=draw, 3=bid, 4=domain
-        public byte BidValue;     // 叫分值 (1/2/3)
-        public byte RouteIndex;   // 路线索引
-        public byte BaseIndex;    // 基地索引
-        public byte CardCount;    // 出牌数量（最大 6：农民 5 张，地主 6 张）
-        public byte C0;           // CardIndices[0]
-        public byte C1;           // CardIndices[1]
-        public byte C2;           // CardIndices[2]
-        public byte C3;           // CardIndices[3]
-        public byte C4;           // CardIndices[4]
-        public byte C5;           // CardIndices[5]
+        public byte Slot;         // 玩家槽位
+        public byte DataLength;   // 有效数据长度（D0-Dn）
+        public byte D0;           // 通用数据缓冲区
+        public byte D1;
+        public byte D2;
+        public byte D3;
+        public byte D4;
+        public byte D5;
+        public byte D6;
+        public byte D7;
 
-        /// <summary>写入牌组索引</summary>
-        public void SetCards(byte[] indices)
+        /// <summary>写入任意字节数据</summary>
+        public void SetData(byte[] data)
         {
-            CardCount = (byte)(indices?.Length ?? 0);
-            if (CardCount > 0) C0 = indices[0];
-            if (CardCount > 1) C1 = indices[1];
-            if (CardCount > 2) C2 = indices[2];
-            if (CardCount > 3) C3 = indices[3];
-            if (CardCount > 4) C4 = indices[4];
-            if (CardCount > 5) C5 = indices[5];
+            DataLength = (byte)(data?.Length ?? 0);
+            if (DataLength > 0) D0 = data[0];
+            if (DataLength > 1) D1 = data[1];
+            if (DataLength > 2) D2 = data[2];
+            if (DataLength > 3) D3 = data[3];
+            if (DataLength > 4) D4 = data[4];
+            if (DataLength > 5) D5 = data[5];
+            if (DataLength > 6) D6 = data[6];
+            if (DataLength > 7) D7 = data[7];
         }
 
-        /// <summary>读取牌组索引</summary>
-        public byte[] GetCards()
+        /// <summary>读取任意字节数据</summary>
+        public byte[] GetData()
         {
-            if (CardCount == 0) return System.Array.Empty<byte>();
-            var result = new byte[CardCount];
-            result[0] = C0;
-            if (CardCount > 1) result[1] = C1;
-            if (CardCount > 2) result[2] = C2;
-            if (CardCount > 3) result[3] = C3;
-            if (CardCount > 4) result[4] = C4;
-            if (CardCount > 5) result[5] = C5;
+            if (DataLength == 0) return System.Array.Empty<byte>();
+            var result = new byte[DataLength];
+            if (DataLength > 0) result[0] = D0;
+            if (DataLength > 1) result[1] = D1;
+            if (DataLength > 2) result[2] = D2;
+            if (DataLength > 3) result[3] = D3;
+            if (DataLength > 4) result[4] = D4;
+            if (DataLength > 5) result[5] = D5;
+            if (DataLength > 6) result[6] = D6;
+            if (DataLength > 7) result[7] = D7;
             return result;
         }
     }

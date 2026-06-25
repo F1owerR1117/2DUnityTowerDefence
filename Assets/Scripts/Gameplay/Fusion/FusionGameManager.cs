@@ -230,7 +230,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         public bool IsAISlot(int slot) => _aiSlots.Contains(slot);
 
         // =========================
-        // 输入缓存（UI → Fusion NetworkInput）
+        // 输入缓存（UI → IntentBuffer → FusionPlayerInput → 网络同步）
         // =========================
 
         /// <summary>设置叫分输入（UI 调用）</summary>
@@ -239,7 +239,8 @@ namespace DoudizhuTower.Gameplay.Fusion
             _localInput = new FusionPlayerInput
             {
                 Action = 3,
-                BidValue = (byte)bidValue
+                DataLength = 1,
+                D0 = (byte)bidValue
             };
         }
 
@@ -252,19 +253,28 @@ namespace DoudizhuTower.Gameplay.Fusion
             };
         }
 
-        /// <summary>设置出牌输入（UI 调用）</summary>
+        /// <summary>设置出牌输入（UI 调用，通过 IntentBuffer 序列化）</summary>
         public void SetPlayCardInput(byte[] cardIndices, int routeIndex, int baseIndex)
         {
             if (cardIndices == null || cardIndices.Length == 0) return;
 
-            var input = new FusionPlayerInput
+            // 业务层：先写入 IntentBuffer
+            int slot = GetLocalSlot();
+            _intentBuffer.AddPlayCard(slot, cardIndices, routeIndex, baseIndex);
+
+            // 传输层：序列化元数据到 FusionPlayerInput
+            var data = new byte[3 + cardIndices.Length];
+            data[0] = (byte)cardIndices.Length;
+            data[1] = (byte)routeIndex;
+            data[2] = (byte)baseIndex;
+            System.Array.Copy(cardIndices, 0, data, 3, cardIndices.Length);
+
+            _localInput = new FusionPlayerInput
             {
                 Action = 1,
-                RouteIndex = (byte)routeIndex,
-                BaseIndex = (byte)baseIndex
+                Slot = (byte)slot
             };
-            input.SetCards(cardIndices);
-            _localInput = input;
+            _localInput.SetData(data);
         }
 
         /// <summary>设置领域激活输入（UI 调用）</summary>
@@ -441,7 +451,7 @@ namespace DoudizhuTower.Gameplay.Fusion
                 // 从 Fusion NetworkInput 读取客户端输入
                 if (GetInput(out FusionPlayerInput netInput))
                 {
-                    Debug.Log($"[FusionGameManager] GetInput: Action={netInput.Action} Bid={netInput.BidValue}");
+                    Debug.Log($"[FusionGameManager] GetInput: Action={netInput.Action} Slot={netInput.Slot}");
                     ProcessNetworkInput(ref _pendingWorld, netInput);
                 }
 
@@ -654,25 +664,36 @@ namespace DoudizhuTower.Gameplay.Fusion
 
         /// <summary>
         /// 处理从 Fusion NetworkInput 读取的客户端输入（Host-only）。
+        /// 传输层 → 业务层（IntentBuffer）→ GameLogic。
         /// </summary>
         private void ProcessNetworkInput(ref WorldState world, FusionPlayerInput netInput)
         {
-            int slot = GetLocalSlot();
+            int slot = netInput.Slot;
             if (slot < 0) return;
 
             switch (netInput.Action)
             {
-                case 1: // 出牌
+                case 1: // 出牌：从传输层反序列化到 IntentBuffer
                     {
-                        var cardIndices = netInput.GetCards();
-                        _intentBuffer.AddPlayCard(slot, cardIndices, netInput.RouteIndex, netInput.BaseIndex);
+                        var data = netInput.GetData();
+                        if (data.Length < 3) break;
+                        int cardCount = data[0];
+                        int routeIndex = data[1];
+                        int baseIndex = data[2];
+                        var cardIndices = new byte[cardCount];
+                        System.Array.Copy(data, 3, cardIndices, 0, cardCount);
+                        _intentBuffer.AddPlayCard(slot, cardIndices, routeIndex, baseIndex);
                     }
                     break;
                 case 2: // 摸牌
                     SubmitDrawCard();
                     break;
-                case 3: // 叫分
-                    SubmitBid(slot, netInput.BidValue);
+                case 3: // 叫分：从传输层反序列化
+                    {
+                        var data = netInput.GetData();
+                        int bidValue = data.Length > 0 ? data[0] : 0;
+                        SubmitBid(slot, bidValue);
+                    }
                     break;
                 case 4: // 领域
                     SubmitDomain(slot);
