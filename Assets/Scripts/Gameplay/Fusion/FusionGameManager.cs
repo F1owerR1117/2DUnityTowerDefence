@@ -236,6 +236,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// <summary>设置叫分输入（UI 调用）</summary>
         public void SetBidInput(int bidValue)
         {
+            Debug.Log($"[FusionGameManager] SetBidInput called: bid={bidValue}, Instance={Instance != null}");
             _localInput = new FusionPlayerInput
             {
                 Action = 3,
@@ -247,6 +248,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// <summary>设置摸牌输入（UI 调用）</summary>
         public void SetDrawInput()
         {
+            Debug.Log($"[FusionGameManager] SetDrawInput called, Instance={Instance != null}");
             _localInput = new FusionPlayerInput
             {
                 Action = 2
@@ -302,6 +304,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             if (_localInput.Action != 0)
             {
                 input = _localInput;
+                Debug.Log($"[FusionGameManager] TryGetLocalInput: Action={input.Action}");
                 _localInput = default;
                 return true;
             }
@@ -668,6 +671,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         private void ProcessNetworkInput(ref WorldState world, FusionPlayerInput netInput)
         {
+            Debug.Log($"[FusionGameManager] ProcessNetworkInput: Action={netInput.Action} Slot={netInput.Slot} DataLen={netInput.DataLength}");
             int slot = netInput.Slot;
             if (slot < 0) return;
 
