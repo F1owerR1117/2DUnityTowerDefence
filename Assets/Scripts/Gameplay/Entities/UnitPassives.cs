@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using DoudizhuTower.Core.Battle;
+using DoudizhuTower.Gameplay.Battle;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Entities
