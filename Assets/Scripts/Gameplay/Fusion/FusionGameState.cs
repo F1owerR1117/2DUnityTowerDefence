@@ -13,13 +13,22 @@ namespace DoudizhuTower.Gameplay.Fusion
         public byte Phase;           // 0=叫分 1=出牌 2=结算
         public byte TurnSlot;        // 当前行动玩家
         public byte DeckCount;       // 剩余牌数
+
+        // 叫分状态（Fusion Networked）
         public byte CurrentBidTurn;  // 当前叫分轮到谁
         public byte HighestBid;      // 最高叫分
         public byte HighestBidder;   // 最高叫分者 slot
         public byte BidCount;        // 已叫分人数
-        public int TickCounter;      // Heartbeat：保证 snapshot 捕捉
-        public int StateHash;        // 同步验证：Client 对比用
-        public int BidTick;          // 叫分节拍（Host 写，Client 只读）
+        public byte BidWinnerSlot;   // 叫分赢家 slot
+        public byte IsBiddingFinished; // 0=进行中 1=已结束
+
+        public int TickCounter;      // Heartbeat
+        public int StateHash;        // 同步验证
+
+        // 领域状态
+        public byte DomainActive;
+        public byte DomainType;
+        public byte DomainSlot;
     }
 
     // =========================
@@ -48,40 +57,23 @@ namespace DoudizhuTower.Gameplay.Fusion
         public int UnitId;
         public int Owner;         // 所属玩家 Slot
 
-        public float PosX;        // 位置（避免 Vector2，Fusion 更友好）
+        public float PosX;        // 位置
         public float PosY;
 
         public int HP;
         public int MaxHP;
 
+        public int ATK;           // 攻击力
+        public float AttackSpeed; // 攻击间隔（秒）
+        public float AttackTimer; // 攻击冷却计时
+        public float AttackRange; // 攻击范围
+
         public int TargetId;      // 攻击目标 (-1=无目标)
 
         public byte State;        // 0=Idle 1=Move 2=Attack 3=Dead
 
-        public float AttackTimer; // 攻击冷却计时
         public float MoveSpeed;   // 移动速度
-        public float AttackRange; // 攻击范围
-
         public byte IsLandlord;   // 0=false, 1=true
-
-        // 被动标志位
-        public byte PassiveFlags; // PassiveFlags 枚举
-    }
-
-    // =========================
-    // ③-a 被动标志枚举
-    // =========================
-    [System.Flags]
-    public enum PassiveFlags : byte
-    {
-        None = 0,
-        HasAura = 1 << 0,
-        HasRegen = 1 << 1,
-        HasThorns = 1 << 2,
-        HasShield = 1 << 3,
-        HasSlow = 1 << 4,
-        IsSlowed = 1 << 5,
-        IsShielded = 1 << 6,
     }
 
     // =========================
@@ -97,9 +89,17 @@ namespace DoudizhuTower.Gameplay.Fusion
     // =========================
     public struct FusionPlayerInput : INetworkInput
     {
-        public byte Action;     // 0=none,1=play,2=draw,3=bid
-        public byte CardId;
-        public byte Target;
+        public byte Action;       // 0=none, 1=play, 2=draw, 3=bid
+        public byte CardId;       // 单张牌 ID（play 时为第一张）
+        public byte BidValue;     // 叫分值 (1/2/3)
+        public byte RouteIndex;   // 路线索引
+        public byte BaseIndex;    // 基地索引
+        public byte CardCount;    // 出牌数量（多张牌时）
+        public byte Card2;        // 第二张牌
+        public byte Card3;        // 第三张牌
+        public byte Card4;        // 第四张牌
+        public byte Card5;        // 第五张牌
+        public byte Card6;        // 第六张牌（地主上限 6 张）
     }
 
     // =========================

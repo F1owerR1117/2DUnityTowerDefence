@@ -550,7 +550,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
                 if (_isNetworkMode)
                 {
-                    // 联机模式：摸牌由 FusionGameManager 处理
+                    // 联机模式：摸牌通过 Fusion NetworkInput 发送到 Host
                     // 自动摸牌
                     timerQueue?.ScheduleLoop(drawInterval, () =>
                     {
@@ -558,7 +558,7 @@ namespace DoudizhuTower.Gameplay.Systems
                         var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
                         if (gm != null)
                         {
-                            gm.SubmitDrawCard();
+                            gm.SetDrawInput();
                         }
                     });
 
@@ -569,7 +569,7 @@ namespace DoudizhuTower.Gameplay.Systems
                         var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
                         if (gm != null)
                         {
-                            gm.SubmitDrawCard();
+                            gm.SetDrawInput();
                         }
                     });
                 }

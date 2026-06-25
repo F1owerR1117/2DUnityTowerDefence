@@ -28,6 +28,11 @@ namespace DoudizhuTower.Gameplay.Fusion
         [SerializeField] private UnitSyncManager unitSyncManager;
 
         // =========================
+        // 本地输入缓存（UI → OnInput → Fusion 网络同步）
+        // =========================
+        private FusionPlayerInput _localInput;
+
+        // =========================
         // 双缓冲单位系统
         // =========================
         private UnitBuffer _unitBuffer;
@@ -224,6 +229,73 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public bool IsAISlot(int slot) => _aiSlots.Contains(slot);
 
+        // =========================
+        // 输入缓存（UI → Fusion NetworkInput）
+        // =========================
+
+        /// <summary>设置叫分输入（UI 调用）</summary>
+        public void SetBidInput(int bidValue)
+        {
+            _localInput = new FusionPlayerInput
+            {
+                Action = 3,
+                BidValue = (byte)bidValue
+            };
+        }
+
+        /// <summary>设置摸牌输入（UI 调用）</summary>
+        public void SetDrawInput()
+        {
+            _localInput = new FusionPlayerInput
+            {
+                Action = 2
+            };
+        }
+
+        /// <summary>设置出牌输入（UI 调用）</summary>
+        public void SetPlayCardInput(byte[] cardIndices, int routeIndex, int baseIndex)
+        {
+            if (cardIndices == null || cardIndices.Length == 0) return;
+
+            var input = new FusionPlayerInput
+            {
+                Action = 1,
+                CardId = cardIndices[0],
+                CardCount = (byte)cardIndices.Length,
+                RouteIndex = (byte)routeIndex,
+                BaseIndex = (byte)baseIndex
+            };
+            if (cardIndices.Length > 1) input.Card2 = cardIndices[1];
+            if (cardIndices.Length > 2) input.Card3 = cardIndices[2];
+            if (cardIndices.Length > 3) input.Card4 = cardIndices[3];
+            if (cardIndices.Length > 4) input.Card5 = cardIndices[4];
+            if (cardIndices.Length > 5) input.Card6 = cardIndices[5];
+            _localInput = input;
+        }
+
+        /// <summary>设置领域激活输入（UI 调用）</summary>
+        public void SetDomainInput()
+        {
+            _localInput = new FusionPlayerInput
+            {
+                Action = 4
+            };
+        }
+
+        // =========================
+        // Fusion NetworkInput 回调
+        // =========================
+
+        public override void OnInput(NetworkRunner runner, NetworkInput input)
+        {
+            if (_localInput.Action != 0)
+            {
+                input.Set(_localInput);
+                Debug.Log($"[FusionGameManager] OnInput sent: Action={_localInput.Action}");
+                _localInput = default;
+            }
+        }
+
         private void InitializeGameState()
         {
             var world = World;
@@ -363,6 +435,13 @@ namespace DoudizhuTower.Gameplay.Fusion
             // 只有 Host 执行 Simulation
             if (HasStateAuthority)
             {
+                // 从 Fusion NetworkInput 读取客户端输入
+                if (GetInput(out FusionPlayerInput netInput))
+                {
+                    Debug.Log($"[FusionGameManager] GetInput: Action={netInput.Action} Bid={netInput.BidValue}");
+                    ProcessNetworkInput(ref _pendingWorld, netInput);
+                }
+
                 RunSimulation();
                 SyncToNetworkState();
             }
@@ -383,7 +462,6 @@ namespace DoudizhuTower.Gameplay.Fusion
 
             var world = World;
 
-            ProcessInput(ref world);
             UpdateAI(ref world);
             ProcessBidding(ref world);
             ProcessPlayCards(ref world);
@@ -568,72 +646,41 @@ namespace DoudizhuTower.Gameplay.Fusion
         }
 
         // =========================
-        // 输入处理
+        // 输入处理（Fusion NetworkInput 版本）
         // =========================
-        private void ProcessInput(ref WorldState world)
+
+        /// <summary>
+        /// 处理从 Fusion NetworkInput 读取的客户端输入（Host-only）。
+        /// </summary>
+        private void ProcessNetworkInput(ref WorldState world, FusionPlayerInput netInput)
         {
-            if (inputHandler != null && inputHandler.TryGetInput(out var input))
+            int slot = GetLocalSlot();
+            if (slot < 0) return;
+
+            switch (netInput.Action)
             {
-                switch (input.Action)
-                {
-                    case 1:
-                        // 出牌：从 inputHandler 获取完整出牌数据
-                        if (inputHandler.TryGetPlayCards(out var cardIndices, out int routeIndex, out int baseIndex))
-                        {
-                            int slot = GetLocalSlot();
-                            if (slot >= 0)
-                            {
-                                _intentBuffer.AddPlayCard(slot, cardIndices, routeIndex, baseIndex);
-                            }
-                        }
-                        else
-                        {
-                            HandlePlay(ref world, input);
-                        }
-                        break;
-                    case 2: HandleDraw(ref world, input); break;
-                    case 3: HandleBid(ref world, input); break;
-                }
+                case 1: // 出牌
+                    {
+                        var cardIndices = new byte[netInput.CardCount];
+                        cardIndices[0] = netInput.CardId;
+                        if (netInput.CardCount > 1) cardIndices[1] = netInput.Card2;
+                        if (netInput.CardCount > 2) cardIndices[2] = netInput.Card3;
+                        if (netInput.CardCount > 3) cardIndices[3] = netInput.Card4;
+                        if (netInput.CardCount > 4) cardIndices[4] = netInput.Card5;
+                        if (netInput.CardCount > 5) cardIndices[5] = netInput.Card6;
+                        _intentBuffer.AddPlayCard(slot, cardIndices, netInput.RouteIndex, netInput.BaseIndex);
+                    }
+                    break;
+                case 2: // 摸牌
+                    SubmitDrawCard();
+                    break;
+                case 3: // 叫分
+                    SubmitBid(slot, netInput.BidValue);
+                    break;
+                case 4: // 领域
+                    SubmitDomain(slot);
+                    break;
             }
-        }
-
-        private void HandlePlay(ref WorldState world, FusionPlayerInput input)
-        {
-            var player = GetPlayer(world, input.Target);
-
-            if (player.HandCount > 0 && _slotHandCards.TryGetValue(input.Target, out var handCards) && handCards.Count > 0)
-            {
-                // 移除最后一张牌（简化：实际出牌由 ProcessPlayCards 处理）
-                handCards.RemoveAt(handCards.Count - 1);
-                player.HandCount = (byte)handCards.Count;
-                SetPlayer(ref world, input.Target, player);
-            }
-        }
-
-        private void HandleDraw(ref WorldState world, FusionPlayerInput input)
-        {
-            var player = GetPlayer(world, input.Target);
-
-            // 摸牌：从牌堆顶部取一张牌加入手牌
-            if (world.Game.DeckCount > 0 && player.HandCount < 20)
-            {
-                byte newCardId = (byte)((54 - world.Game.DeckCount) % 54);
-                if (!_slotHandCards.TryGetValue(input.Target, out var handCards))
-                {
-                    handCards = new List<byte>();
-                    _slotHandCards[input.Target] = handCards;
-                }
-                handCards.Add(newCardId);
-                player.HandCount = (byte)handCards.Count;
-                SetPlayer(ref world, input.Target, player);
-
-                world.Game.DeckCount--;
-            }
-        }
-
-        private void HandleBid(ref WorldState world, FusionPlayerInput input)
-        {
-            // 叫分通过 SubmitBid 直接提交，不走 FusionPlayerInput
         }
 
         // =========================
@@ -848,6 +895,23 @@ namespace DoudizhuTower.Gameplay.Fusion
             World = world;
 
             Debug.Log($"[FusionGameManager] 摸牌: slot={mySlot}, card={newCardId}, 剩余={world.Game.DeckCount}");
+        }
+
+        /// <summary>
+        /// 提交领域激活请求（UI 唯一入口）。
+        /// </summary>
+        public void SubmitDomain(int slot)
+        {
+            if (!Object.HasStateAuthority) return;
+
+            var world = World;
+            if (world.Game.DomainActive == 1) return;
+
+            world.Game.DomainActive = 1;
+            world.Game.DomainSlot = (byte)slot;
+            World = world;
+
+            Debug.Log($"[FusionGameManager] 领域激活: slot={slot}");
         }
 
         /// <summary>

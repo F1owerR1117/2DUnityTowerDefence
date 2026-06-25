@@ -292,8 +292,9 @@ namespace DoudizhuTower.UI.Bidding
             if (gm != null && gm.IsLocalSlotReady)
             {
                 int mySlot = gm.GetLocalSlot();
-                gm.SubmitBid(mySlot, bid);
-                Debug.Log($"[Bidding] Intent sent via FusionGameManager: slot={mySlot} bid={bid}");
+                // 通过 Fusion NetworkInput 发送到 Host
+                gm.SetBidInput(bid);
+                Debug.Log($"[Bidding] Input sent via Fusion: slot={mySlot} bid={bid}");
             }
             else
             {
