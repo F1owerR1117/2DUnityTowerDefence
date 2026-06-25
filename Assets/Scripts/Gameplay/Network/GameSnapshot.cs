@@ -21,7 +21,6 @@ namespace DoudizhuTower.Gameplay.Network
         public Dictionary<int, float> SlotIncomeRates;
         public Dictionary<int, float> UnitHPs;
 
-        public int[] PlayerBaseMapping;
         public float BidMultiplier;
         public int NetworkSeed;
 
@@ -33,7 +32,7 @@ namespace DoudizhuTower.Gameplay.Network
             UnitHPs = new Dictionary<int, float>();
         }
 
-        /// <summary>序列化为 NetworkProtocol 传输格式（Photon 不支持泛型字典，用扁平数组）</summary>
+        /// <summary>序列化为扁平数组</summary>
         public object[] Serialize()
         {
             var slotCount = SlotHands.Count;
@@ -71,7 +70,6 @@ namespace DoudizhuTower.Gameplay.Network
                 SharedPoolRemaining,
                 NetworkSeed,
                 BidMultiplier,
-                PlayerBaseMapping ?? new int[0],
                 slotIds,
                 slotHandsData,
                 slotGoldData,
@@ -84,7 +82,7 @@ namespace DoudizhuTower.Gameplay.Network
         /// <summary>反序列化</summary>
         public static GameSnapshot Deserialize(object[] data)
         {
-            if (data == null || data.Length < 14)
+            if (data == null || data.Length < 13)
                 return null;
 
             var snap = new GameSnapshot
@@ -95,14 +93,13 @@ namespace DoudizhuTower.Gameplay.Network
                 GamePhase = data[3] as string ?? "Playing",
                 SharedPoolRemaining = NetworkProtocol.SafeInt(data[4]),
                 NetworkSeed = NetworkProtocol.SafeInt(data[5]),
-                BidMultiplier = NetworkProtocol.SafeFloat(data[6]),
-                PlayerBaseMapping = data[7] as int[] ?? new int[0]
+                BidMultiplier = NetworkProtocol.SafeFloat(data[6])
             };
 
-            var slotIds = data[8] as int[] ?? new int[0];
-            var slotHandsData = data[9] as int[][] ?? new int[0][];
-            var slotGoldData = data[10] as float[] ?? new float[0];
-            var slotIncomeData = data[11] as float[] ?? new float[0];
+            var slotIds = data[7] as int[] ?? new int[0];
+            var slotHandsData = data[8] as int[][] ?? new int[0][];
+            var slotGoldData = data[9] as float[] ?? new float[0];
+            var slotIncomeData = data[10] as float[] ?? new float[0];
 
             for (int i = 0; i < slotIds.Length; i++)
             {
@@ -111,8 +108,8 @@ namespace DoudizhuTower.Gameplay.Network
                 snap.SlotIncomeRates[slotIds[i]] = i < slotIncomeData.Length ? slotIncomeData[i] : 0f;
             }
 
-            var unitIds = data[12] as int[] ?? new int[0];
-            var unitHPData = data[13] as float[] ?? new float[0];
+            var unitIds = data[11] as int[] ?? new int[0];
+            var unitHPData = data[12] as float[] ?? new float[0];
             for (int k = 0; k < unitIds.Length; k++)
             {
                 snap.UnitHPs[unitIds[k]] = k < unitHPData.Length ? unitHPData[k] : 0f;
