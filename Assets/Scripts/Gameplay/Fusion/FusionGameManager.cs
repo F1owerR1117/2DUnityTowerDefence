@@ -570,6 +570,8 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// <summary>状态切换生命周期钩子（唯一写入点）</summary>
         private void OnStateChanged(GamePhase oldState, GamePhase newState)
         {
+            if (oldState == newState) return;
+
             // 计时器唯一写入点
             _stateStartTick = Runner.Tick;
 
