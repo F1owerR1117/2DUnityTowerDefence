@@ -36,6 +36,27 @@ namespace DoudizhuTower.Gameplay.Fusion
         private FusionPlayerInput _localInput;
 
         // =========================
+        // Tick Guard（防重复执行）
+        // =========================
+        private int _lastTickProcessed = -1;
+
+        // =========================
+        // 输入消费栅栏（单次消费）
+        // =========================
+        private FusionPlayerInput _input;
+        private bool _inputConsumed;
+
+        // =========================
+        // 原子状态推进
+        // =========================
+        private GameState _nextState;
+
+        // =========================
+        // AI 节流
+        // =========================
+        private int _aiTickCounter;
+
+        // =========================
         // 双缓冲单位系统
         // =========================
         private UnitBuffer _unitBuffer;
@@ -443,89 +464,183 @@ namespace DoudizhuTower.Gameplay.Fusion
         }
 
         // =========================
-        // 主游戏循环（Fusion核心）
+        // 主游戏循环（工业级管道）
         // =========================
         public override void FixedUpdateNetwork()
         {
-            if (_currentTick % 100 == 0)
-            {
-                Debug.Log($"[FusionGameManager] Tick:{_currentTick} HasStateAuthority:{HasStateAuthority} IsValid:{Object.IsValid}");
-            }
+            if (!HasStateAuthority) return;
+            if (!BeginTick()) return;
 
-            // 只有 Host 执行 Simulation
-            if (HasStateAuthority)
-            {
-                // 从 Fusion NetworkInput 读取客户端输入
-                if (GetInput(out FusionPlayerInput netInput))
-                {
-                    Debug.Log($"[FusionGameManager] GetInput: Action={netInput.Action} Slot={netInput.Slot}");
-                    ProcessNetworkInput(ref _pendingWorld, netInput);
-                }
-                else
-                {
-                    if (_currentTick % 300 == 0)
-                        Debug.Log($"[FusionGameManager] GetInput: 无输入 (Tick={_currentTick})");
-                }
+            // Phase 1: 输入只读一次
+            ReadInputOnce();
 
-                RunSimulation();
-                SyncToNetworkState();
-            }
-
-            // Client 只读 WorldState（Fusion 自动同步）
-            _currentTick++;
-        }
-
-        private void RunSimulation()
-        {
-            _eventBuffer.Clear();
-            _intentBuffer.Clear();
-
-            var world = World;
-            Debug.Log($"[STATE] {State} Tick={_currentTick}");
-
+            // Phase 2: 状态分发
             switch (State)
             {
                 case GameState.Lobby:
-                    ProcessLobby(ref world);
+                    TickLobby();
                     break;
                 case GameState.Bidding:
-                    ProcessBidding(ref world);
+                    TickBidding();
                     break;
                 case GameState.Playing:
-                    ProcessPlayCards(ref world);
-                    UpdateAI(ref world);
-                    ProcessDomain(ref world);
-                    ProcessTransfers(ref world);
-                    UpdateEconomy(ref world);
-                    UpdateTurn(ref world);
-                    _combatSystem.Simulate(_unitBuffer, _eventBuffer, Time.deltaTime);
+                    TickPlaying();
                     break;
                 case GameState.End:
                     break;
             }
 
-            _unitBuffer.CleanupDead();
-            ComputeDesyncHash();
-            _unitBuffer.Swap();
+            // Phase 3: 原子状态提交
+            CommitState();
 
-            _pendingWorld = world;
+            _currentTick++;
         }
 
-        private void ProcessLobby(ref WorldState world)
+        /// <summary>Tick Guard：防止同帧重复执行</summary>
+        private bool BeginTick()
         {
-            // Lobby 阶段：等待叫分开始
+            if (Runner.Tick == _lastTickProcessed) return false;
+            _lastTickProcessed = Runner.Tick;
+            return true;
         }
 
-        /// <summary>状态推进（唯一入口）</summary>
-        public void AdvanceState(GameState next)
+        /// <summary>输入只读一次，缓存到 _input</summary>
+        private void ReadInputOnce()
         {
-            Debug.Log($"[STATE] 推进: {State} → {next}");
-            State = next;
+            _inputConsumed = false;
+            if (GetInput(out FusionPlayerInput input))
+            {
+                _input = input;
+                Debug.Log($"[FusionGameManager] ReadInput: Action={input.Action} Slot={input.Slot}");
+            }
+        }
+
+        /// <summary>消费输入（每个系统只能调用一次）</summary>
+        private bool ConsumeInput(out FusionPlayerInput input)
+        {
+            if (_inputConsumed)
+            {
+                input = default;
+                return false;
+            }
+            _inputConsumed = true;
+            input = _input;
+            return input.Action != 0;
+        }
+
+        /// <summary>原子状态推进（延迟到 Commit）</summary>
+        private void NextState(GameState state)
+        {
+            _nextState = state;
+        }
+
+        /// <summary>提交状态变更（Tick 末尾执行）</summary>
+        private void CommitState()
+        {
+            if (_nextState != State)
+            {
+                Debug.Log($"[STATE] 推进: {State} → {_nextState}");
+                State = _nextState;
+            }
+            _nextState = State;
         }
 
         /// <summary>
         /// 只有StateAuthority执行：将本地状态同步到网络状态
         /// </summary>
+        // =========================
+        // 状态 Tick 方法
+        // =========================
+
+        private void TickLobby()
+        {
+            // 等待叫分开始
+        }
+
+        private void TickBidding()
+        {
+            var world = World;
+
+            // 处理输入
+            if (ConsumeInput(out var input) && input.Action == 3)
+            {
+                int slot = input.Slot;
+                int bid = input.DataLength > 0 ? input.D0 : 0;
+                SubmitBid(slot, bid);
+            }
+
+            // 处理叫分队列
+            while (_bidInputs.Count > 0)
+            {
+                var bidInput = _bidInputs.Dequeue();
+                ApplyBid(ref world, bidInput.Slot, bidInput.Bid);
+            }
+
+            // 处理 AI 叫分
+            ProcessAI();
+
+            World = world;
+
+            // 检查叫分是否结束
+            if (world.Game.IsBiddingFinished == 1)
+            {
+                NextState(GameState.Playing);
+            }
+        }
+
+        private void TickPlaying()
+        {
+            var world = World;
+
+            // 处理输入
+            if (ConsumeInput(out var input))
+            {
+                ProcessNetworkInput(ref world, input);
+            }
+
+            // 处理 AI
+            ProcessAI();
+
+            // 处理出牌队列
+            while (_intentBuffer.HasPlayCard())
+            {
+                var playIntent = _intentBuffer.PopPlayCard();
+                // 执行出牌逻辑
+            }
+
+            // 处理领域
+            ProcessDomain(ref world);
+
+            // 处理传送
+            ProcessTransfers(ref world);
+
+            // 经济更新
+            UpdateEconomy(ref world);
+
+            // 回合推进
+            UpdateTurn(ref world);
+
+            // 战斗模拟
+            _combatSystem.Simulate(_unitBuffer, _eventBuffer, Time.deltaTime);
+
+            World = world;
+
+            _unitBuffer.CleanupDead();
+            ComputeDesyncHash();
+            _unitBuffer.Swap();
+        }
+
+        /// <summary>AI 节流（每 20 tick 执行一次）</summary>
+        private void ProcessAI()
+        {
+            _aiTickCounter++;
+            if (_aiTickCounter % 20 != 0) return;
+
+            if (_aiSystem == null || _unitBuffer == null) return;
+            var world = World;
+            _aiSystem.Simulate(world, _unitBuffer, _intentBuffer, _currentTick);
+        }
+
         private void SyncToNetworkState()
         {
             if (!Object.HasStateAuthority)
@@ -700,7 +815,6 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         private void ProcessNetworkInput(ref WorldState world, FusionPlayerInput netInput)
         {
-            Debug.Log($"[FusionGameManager] ProcessNetworkInput: Action={netInput.Action} Slot={netInput.Slot} DataLen={netInput.DataLength}");
             int slot = netInput.Slot;
             if (slot < 0) return;
 
