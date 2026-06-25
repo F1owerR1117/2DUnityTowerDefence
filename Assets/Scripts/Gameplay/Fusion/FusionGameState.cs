@@ -89,17 +89,12 @@ namespace DoudizhuTower.Gameplay.Fusion
     // =========================
     public struct FusionPlayerInput : INetworkInput
     {
-        public byte Action;       // 0=none, 1=play, 2=draw, 3=bid
-        public byte CardId;       // 单张牌 ID（play 时为第一张）
+        public byte Action;       // 0=none, 1=play, 2=draw, 3=bid, 4=domain
         public byte BidValue;     // 叫分值 (1/2/3)
         public byte RouteIndex;   // 路线索引
         public byte BaseIndex;    // 基地索引
-        public byte CardCount;    // 出牌数量（多张牌时）
-        public byte Card2;        // 第二张牌
-        public byte Card3;        // 第三张牌
-        public byte Card4;        // 第四张牌
-        public byte Card5;        // 第五张牌
-        public byte Card6;        // 第六张牌（地主上限 6 张）
+        public byte CardCount;    // 出牌数量
+        public fixed byte CardIndices[10]; // 出牌 DeckIndex 数组（最多 10 张）
     }
 
     // =========================

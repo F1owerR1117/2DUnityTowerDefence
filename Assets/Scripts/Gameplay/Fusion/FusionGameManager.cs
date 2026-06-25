@@ -260,16 +260,12 @@ namespace DoudizhuTower.Gameplay.Fusion
             var input = new FusionPlayerInput
             {
                 Action = 1,
-                CardId = cardIndices[0],
                 CardCount = (byte)cardIndices.Length,
                 RouteIndex = (byte)routeIndex,
                 BaseIndex = (byte)baseIndex
             };
-            if (cardIndices.Length > 1) input.Card2 = cardIndices[1];
-            if (cardIndices.Length > 2) input.Card3 = cardIndices[2];
-            if (cardIndices.Length > 3) input.Card4 = cardIndices[3];
-            if (cardIndices.Length > 4) input.Card5 = cardIndices[4];
-            if (cardIndices.Length > 5) input.Card6 = cardIndices[5];
+            for (int i = 0; i < cardIndices.Length && i < 10; i++)
+                input.CardIndices[i] = cardIndices[i];
             _localInput = input;
         }
 
@@ -662,12 +658,8 @@ namespace DoudizhuTower.Gameplay.Fusion
                 case 1: // 出牌
                     {
                         var cardIndices = new byte[netInput.CardCount];
-                        cardIndices[0] = netInput.CardId;
-                        if (netInput.CardCount > 1) cardIndices[1] = netInput.Card2;
-                        if (netInput.CardCount > 2) cardIndices[2] = netInput.Card3;
-                        if (netInput.CardCount > 3) cardIndices[3] = netInput.Card4;
-                        if (netInput.CardCount > 4) cardIndices[4] = netInput.Card5;
-                        if (netInput.CardCount > 5) cardIndices[5] = netInput.Card6;
+                        for (int i = 0; i < netInput.CardCount; i++)
+                            cardIndices[i] = netInput.CardIndices[i];
                         _intentBuffer.AddPlayCard(slot, cardIndices, netInput.RouteIndex, netInput.BaseIndex);
                     }
                     break;
