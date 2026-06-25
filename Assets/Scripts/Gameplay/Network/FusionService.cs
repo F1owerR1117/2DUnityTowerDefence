@@ -465,11 +465,9 @@ namespace DoudizhuTower.Gameplay.Network
         public void OnInput(NetworkRunner runner, NetworkInput input)
         {
             var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-            Debug.Log($"[FusionService] OnInput called: gm={gm != null}, IsServer={runner.IsServer}");
             if (gm != null && gm.TryGetLocalInput(out var localInput))
             {
                 input.Set(localInput);
-                Debug.Log($"[FusionService] OnInput forwarded: Action={localInput.Action}");
             }
         }
         public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
