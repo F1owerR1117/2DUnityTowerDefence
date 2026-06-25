@@ -647,7 +647,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         {
             var world = World;
 
-            // 处理输入
+            // 处理玩家输入
             if (ConsumeInput(out var input) && input.Action == 3)
             {
                 int slot = input.Slot;
@@ -655,14 +655,21 @@ namespace DoudizhuTower.Gameplay.Fusion
                 SubmitBid(slot, bid);
             }
 
-            // 处理叫分队列
+            // 处理叫分队列（玩家 + AI）
             while (_bidInputs.Count > 0)
             {
                 var bidInput = _bidInputs.Dequeue();
                 ApplyBid(ref world, bidInput.Slot, bidInput.Bid);
             }
 
-            // AI 调用（带节流）
+            // 处理 AI 叫分意图（从 IntentBuffer 读取）
+            while (_intentBuffer.HasBid())
+            {
+                var bidIntent = _intentBuffer.PopBid();
+                ApplyBid(ref world, bidIntent.Slot, bidIntent.Bid);
+            }
+
+            // AI 决策（生成新意图到 IntentBuffer）
             ProcessAI();
 
             World = world;
