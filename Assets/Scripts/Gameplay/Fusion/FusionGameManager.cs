@@ -210,9 +210,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             for (int slot = 0; slot < 3 && assigned < aiCount; slot++)
             {
                 if (_slotToPlayer.ContainsKey(slot)) continue;
-                if (_aiSlots.Contains(slot)) continue;
-
-                _aiSlots.Add(slot);
+                if (GetPlayer(world, slot).IsAI == 1) continue;
 
                 var p = GetPlayer(world, slot);
                 p.Slot = (byte)slot;
@@ -224,6 +222,48 @@ namespace DoudizhuTower.Gameplay.Fusion
             }
 
             World = world;
+        }
+
+        /// <summary>添加 AI 槽位（Host 调用，Fusion 自动同步）</summary>
+        public void AddAISlot(int slot)
+        {
+            if (!HasStateAuthority) return;
+            if (slot < 0 || slot >= 3) return;
+
+            var world = World;
+            var p = GetPlayer(world, slot);
+            if (p.IsAI == 1) return; // 已是 AI
+
+            p.Slot = (byte)slot;
+            p.IsAI = 1;
+            SetPlayer(ref world, slot, p);
+            World = world;
+
+            Debug.Log($"[FusionGameManager] AI added → Slot {slot}");
+        }
+
+        /// <summary>移除 AI 槽位（Host 调用，Fusion 自动同步）</summary>
+        public void RemoveAISlot(int slot)
+        {
+            if (!HasStateAuthority) return;
+            if (slot < 0 || slot >= 3) return;
+
+            var world = World;
+            var p = GetPlayer(world, slot);
+            if (p.IsAI == 0) return; // 不是 AI
+
+            p.IsAI = 0;
+            SetPlayer(ref world, slot, p);
+            World = world;
+
+            Debug.Log($"[FusionGameManager] AI removed ← Slot {slot}");
+        }
+
+        /// <summary>查询槽位是否为 AI（所有机器可读）</summary>
+        public bool IsAISlotByState(int slot)
+        {
+            var world = World;
+            return GetPlayer(world, slot).IsAI == 1;
         }
 
         /// <summary>
