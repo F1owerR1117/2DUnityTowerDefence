@@ -458,7 +458,15 @@ namespace DoudizhuTower.Gameplay.Network
         public void OnUserSimulationMessage(NetworkRunner runner, SimulationMessagePtr message) { }
         public void OnReliableDataReceived(NetworkRunner runner, PlayerRef player, ReliableKey key, ArraySegment<byte> data) { }
         public void OnReliableDataProgress(NetworkRunner runner, PlayerRef player, ReliableKey key, float progress) { }
-        public void OnInput(NetworkRunner runner, NetworkInput input) { }
+        public void OnInput(NetworkRunner runner, NetworkInput input)
+        {
+            var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+            if (gm != null && gm.TryGetLocalInput(out var localInput))
+            {
+                input.Set(localInput);
+                Debug.Log($"[FusionService] OnInput forwarded: Action={localInput.Action}");
+            }
+        }
         public void OnInputMissing(NetworkRunner runner, PlayerRef player, NetworkInput input) { }
         public void OnReadyToStart(NetworkRunner runner) { }
         public void OnSceneLoadDone(NetworkRunner runner) { }

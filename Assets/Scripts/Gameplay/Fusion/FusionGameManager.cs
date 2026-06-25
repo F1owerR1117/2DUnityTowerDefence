@@ -277,17 +277,26 @@ namespace DoudizhuTower.Gameplay.Fusion
         }
 
         // =========================
-        // Fusion NetworkInput 回调
+        // 本地输入缓存（UI → FusionService.OnInput → Fusion 网络同步）
         // =========================
 
-        public override void OnInput(NetworkRunner runner, NetworkInput input)
+        /// <summary>供 FusionService.OnInput 调用，设置本机输入缓存</summary>
+        public void SetLocalInput(FusionPlayerInput input)
+        {
+            _localInput = input;
+        }
+
+        /// <summary>供 FusionService.OnInput 调用，读取并清除本机输入缓存</summary>
+        public bool TryGetLocalInput(out FusionPlayerInput input)
         {
             if (_localInput.Action != 0)
             {
-                input.Set(_localInput);
-                Debug.Log($"[FusionGameManager] OnInput sent: Action={_localInput.Action}");
+                input = _localInput;
                 _localInput = default;
+                return true;
             }
+            input = default;
+            return false;
         }
 
         private void InitializeGameState()
