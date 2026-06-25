@@ -22,6 +22,9 @@ namespace DoudizhuTower.Gameplay.Fusion
         [Networked]
         public WorldState World { get; set; }
 
+        [Networked]
+        public GameState State { get; set; }
+
         [Header("引用")]
         [SerializeField] private PlayerInputHandler inputHandler;
         [SerializeField] private ViewBinder viewBinder;
@@ -314,6 +317,7 @@ namespace DoudizhuTower.Gameplay.Fusion
 
         private void InitializeGameState()
         {
+            State = GameState.Bidding;
             var world = World;
 
             // 从 GameSession 读取叫分结果（桥接层）
@@ -473,30 +477,50 @@ namespace DoudizhuTower.Gameplay.Fusion
 
         private void RunSimulation()
         {
-            if (_currentTick % 100 == 0)
-            {
-                Debug.Log($"[FusionGameManager] RunSimulation 执行中 Tick:{_currentTick}");
-            }
-
             _eventBuffer.Clear();
             _intentBuffer.Clear();
 
             var world = World;
+            Debug.Log($"[STATE] {State} Tick={_currentTick}");
 
-            UpdateAI(ref world);
-            ProcessBidding(ref world);
-            ProcessPlayCards(ref world);
-            ProcessDomain(ref world);
-            ProcessTransfers(ref world);
-            UpdateEconomy(ref world);
-            UpdateTurn(ref world);
-            _combatSystem.Simulate(_unitBuffer, _eventBuffer, Time.deltaTime);
+            switch (State)
+            {
+                case GameState.Lobby:
+                    ProcessLobby(ref world);
+                    break;
+                case GameState.Bidding:
+                    ProcessBidding(ref world);
+                    break;
+                case GameState.Playing:
+                    ProcessPlayCards(ref world);
+                    UpdateAI(ref world);
+                    ProcessDomain(ref world);
+                    ProcessTransfers(ref world);
+                    UpdateEconomy(ref world);
+                    UpdateTurn(ref world);
+                    _combatSystem.Simulate(_unitBuffer, _eventBuffer, Time.deltaTime);
+                    break;
+                case GameState.End:
+                    break;
+            }
 
             _unitBuffer.CleanupDead();
             ComputeDesyncHash();
             _unitBuffer.Swap();
 
             _pendingWorld = world;
+        }
+
+        private void ProcessLobby(ref WorldState world)
+        {
+            // Lobby 阶段：等待叫分开始
+        }
+
+        /// <summary>状态推进（唯一入口）</summary>
+        public void AdvanceState(GameState next)
+        {
+            Debug.Log($"[STATE] 推进: {State} → {next}");
+            State = next;
         }
 
         /// <summary>
@@ -888,7 +912,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitBid(int slot, int bid)
         {
-            if (!Object.HasStateAuthority) return;
+            if (State != GameState.Bidding) return;
 
             _bidInputs.Enqueue(new BidInput { Slot = slot, Bid = bid });
         }
@@ -898,7 +922,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitDrawCard()
         {
-            if (!Object.HasStateAuthority) return;
+            if (State != GameState.Playing) return;
 
             var world = World;
             int mySlot = GetLocalSlot();
@@ -929,7 +953,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         public void SubmitDomain(int slot)
         {
-            if (!Object.HasStateAuthority) return;
+            if (State != GameState.Playing) return;
 
             var world = World;
             if (world.Game.DomainActive == 1) return;
@@ -947,6 +971,8 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// </summary>
         private void ProcessBidding(ref WorldState world)
         {
+            if (State != GameState.Bidding) return;
+
             // ① 处理 Fusion Input 叫分
             while (_bidInputs.Count > 0)
             {
@@ -1035,9 +1061,12 @@ namespace DoudizhuTower.Gameplay.Fusion
             // 设置叫分结束状态（Fusion 自动同步到 Client）
             world.Game.BidWinnerSlot = (byte)landlordSlot;
             world.Game.IsBiddingFinished = 1;
-            world.Game.Phase = 1; // 进入出牌阶段
+            world.Game.Phase = 1;
 
             Debug.Log($"[ProcessBidding] 叫分结束: 地主=slot{landlordSlot}, 最高叫分={world.Game.HighestBid}");
+
+            // 推进状态机到出牌阶段
+            AdvanceState(GameState.Playing);
         }
 
         // =========================

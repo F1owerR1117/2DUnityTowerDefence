@@ -135,6 +135,15 @@ namespace DoudizhuTower.Gameplay.Fusion
     // =========================
     // ⑥ 世界状态容器
     // =========================
+
+    public enum GameState : byte
+    {
+        Lobby = 0,
+        Bidding = 1,
+        Playing = 2,
+        End = 3,
+    }
+
     public struct WorldState : INetworkStruct
     {
         public GameState Game;
