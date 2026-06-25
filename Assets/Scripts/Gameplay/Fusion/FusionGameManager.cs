@@ -49,6 +49,24 @@ namespace DoudizhuTower.Gameplay.Fusion
         // =========================
         // 原子状态推进
         // =========================
+        private GameState _nextState;
+
+        // =========================
+        // Tick 驱动计时器
+        // =========================
+        private int _stateStartTick;
+        private int _biddingDurationTicks = 3000; // 30s × 100 tick/s
+        private int _turnDurationTicks = 600;     // 6s × 100 tick/s
+
+        // =========================
+        // 状态收敛条件
+        // =========================
+        private int _currentTurnSlot;
+        private int _turnTimerTicks;
+
+        // =========================
+        // AI 节流
+        // =========================
         private GamePhase _nextState;
 
         // =========================
@@ -537,12 +555,85 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// <summary>提交状态变更（Tick 末尾执行）</summary>
         private void CommitState()
         {
+            // 收敛器：检查状态完成条件
+            TryAdvanceState();
+
             if (_nextState != State)
             {
                 Debug.Log($"[STATE] 推进: {State} → {_nextState}");
                 State = _nextState;
+                _stateStartTick = Runner.Tick;
             }
             _nextState = State;
+        }
+
+        /// <summary>状态收敛器（唯一判定入口）</summary>
+        private void TryAdvanceState()
+        {
+            var world = World;
+
+            switch (State)
+            {
+                case GamePhase.Bidding:
+                    if (IsBiddingFinished(ref world))
+                    {
+                        ResolveBidding(ref world);
+                        NextState(GamePhase.Playing);
+                    }
+                    break;
+                case GamePhase.Playing:
+                    if (IsPlayingFinished(ref world))
+                    {
+                        NextState(GamePhase.End);
+                    }
+                    break;
+            }
+        }
+
+        private bool IsBiddingFinished(ref WorldState world)
+        {
+            // 条件1：所有玩家都叫过分
+            if (world.Game.BidCount >= 3) return true;
+            // 条件2：有人叫了最高分
+            if (world.Game.HighestBid >= 3) return true;
+            // 条件3：计时器超时
+            if (Runner.Tick - _stateStartTick >= _biddingDurationTicks) return true;
+            return false;
+        }
+
+        private bool IsPlayingFinished(ref WorldState world)
+        {
+            // 条件：所有玩家手牌为空（简化判定）
+            bool allEmpty = true;
+            for (int i = 0; i < 3; i++)
+            {
+                var p = GetPlayer(world, i);
+                if (p.HandCount > 0) { allEmpty = false; break; }
+            }
+            return allEmpty;
+        }
+
+        /// <summary>叫分结果判定</summary>
+        private void ResolveBidding(ref WorldState world)
+        {
+            int landlordSlot = world.Game.HighestBidder >= 0
+                ? world.Game.HighestBidder
+                : (byte)(Runner.Tick % 3);
+
+            for (int i = 0; i < 3; i++)
+            {
+                var p = GetPlayer(world, i);
+                p.Role = (i == landlordSlot) ? (byte)1 : (byte)2;
+                p.IsLandlord = (i == landlordSlot) ? (byte)1 : (byte)0;
+                SetPlayer(ref world, i, p);
+            }
+
+            world.Game.BidWinnerSlot = (byte)landlordSlot;
+            world.Game.IsBiddingFinished = 1;
+            world.Game.Phase = 1;
+            world.Game.TurnSlot = (byte)landlordSlot;
+
+            Debug.Log($"[ResolveBidding] 地主=slot{landlordSlot}, 最高叫分={world.Game.HighestBid}");
         }
 
         /// <summary>
@@ -576,16 +667,11 @@ namespace DoudizhuTower.Gameplay.Fusion
                 ApplyBid(ref world, bidInput.Slot, bidInput.Bid);
             }
 
-            // 处理 AI 叫分
+            // AI 调用（带节流）
             ProcessAI();
 
             World = world;
-
-            // 检查叫分是否结束
-            if (world.Game.IsBiddingFinished == 1)
-            {
-                NextState(GamePhase.Playing);
-            }
+            // 收敛判定在 CommitState 中统一执行
         }
 
         private void TickPlaying()
@@ -630,15 +716,27 @@ namespace DoudizhuTower.Gameplay.Fusion
             _unitBuffer.Swap();
         }
 
-        /// <summary>AI 节流（每 20 tick 执行一次）</summary>
+        /// <summary>AI 调用（叫分/战斗分别节流）</summary>
         private void ProcessAI()
         {
-            _aiTickCounter++;
-            if (_aiTickCounter % 20 != 0) return;
+            if (_aiSystem == null) return;
 
-            if (_aiSystem == null || _unitBuffer == null) return;
             var world = World;
-            _aiSystem.Simulate(world, _unitBuffer, _intentBuffer, _currentTick);
+
+            if (State == GamePhase.Bidding)
+            {
+                // 叫分 AI：每 120 tick（1.2s）决策一次
+                _aiTickCounter++;
+                if (_aiTickCounter % 120 != 0) return;
+                _aiSystem.Simulate(world, _unitBuffer, _intentBuffer, _currentTick);
+            }
+            else if (State == GamePhase.Playing)
+            {
+                // 战斗 AI：每 240 tick（2.4s）决策一次
+                _aiTickCounter++;
+                if (_aiTickCounter % 240 != 0) return;
+                _aiSystem.Simulate(world, _unitBuffer, _intentBuffer, _currentTick);
+            }
         }
 
         private void SyncToNetworkState()
