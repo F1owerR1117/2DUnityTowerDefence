@@ -137,11 +137,15 @@ namespace DoudizhuTower.Gameplay.Network
                 return;
             }
 
-            // 方式 2：运行时创建（备选）
+            // 方式 2：运行时创建（添加到 Runner 所在 GameObject）
             Debug.LogWarning("[Fusion] 未配置 FusionGameManager 预制体，尝试运行时创建");
-            var go = new GameObject("FusionGameManager_Runtime");
-            go.AddComponent<global::Fusion.NetworkObject>();
-            go.AddComponent<DoudizhuTower.Gameplay.Fusion.FusionGameManager>();
+            var existingNO = gameObject.GetComponent<global::Fusion.NetworkObject>();
+            if (existingNO == null)
+            {
+                existingNO = gameObject.AddComponent<global::Fusion.NetworkObject>();
+            }
+            var gm = gameObject.AddComponent<DoudizhuTower.Gameplay.Fusion.FusionGameManager>();
+            Debug.Log($"[Fusion] 运行时创建 FusionGameManager: Instance={DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance != null}");
         }
 
         public void Disconnect()
