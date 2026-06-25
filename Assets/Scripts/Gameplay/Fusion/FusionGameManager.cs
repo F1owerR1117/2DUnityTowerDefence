@@ -555,11 +555,35 @@ namespace DoudizhuTower.Gameplay.Fusion
 
             if (_nextState != State)
             {
-                Debug.Log($"[STATE] 推进: {State} → {_nextState}");
+                var oldState = State;
                 State = _nextState;
                 _stateStartTick = Runner.Tick;
+
+                // 状态切换时重置所有子系统
+                OnStateChanged(oldState, State);
+
+                Debug.Log($"[STATE] 推进: {oldState} → {State}");
             }
             _nextState = State;
+        }
+
+        /// <summary>状态切换生命周期钩子（重置子系统）</summary>
+        private void OnStateChanged(GamePhase oldState, GamePhase newState)
+        {
+            // 重置 AI 计数器
+            _aiTickCounter = 0;
+
+            // 重置输入消费状态
+            _inputConsumed = true;
+            _input = default;
+
+            // 重置叫分队列
+            _bidInputs.Clear();
+
+            // 重置意图缓冲
+            _intentBuffer.Clear();
+
+            Debug.Log($"[STATE] Reset → {newState}");
         }
 
         /// <summary>状态收敛器（唯一判定入口）</summary>
@@ -718,10 +742,14 @@ namespace DoudizhuTower.Gameplay.Fusion
             _unitBuffer.Swap();
         }
 
-        /// <summary>AI 调用（叫分/战斗分别节流）</summary>
+        /// <summary>AI 调用（叫分/战斗分别节流，绑定 State 生命周期）</summary>
         private void ProcessAI()
         {
             if (_aiSystem == null) return;
+
+            // 状态切换后等待 20 tick 再启动 AI
+            int ticksSinceStateStart = Runner.Tick - _stateStartTick;
+            if (ticksSinceStateStart < 20) return;
 
             var world = World;
 
