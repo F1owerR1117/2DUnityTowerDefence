@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v8.3
+# DoudizhuTower — 架构落地规范 v9.0
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -95,7 +95,7 @@
 | `VictoryStats` | 结算数据 | UI/Panels | struct，含 gameDuration/cardsPlayed/unitsSpawned/unitsKilled/goldEarned + 联机结算公式字段 |
 | `UnitPassivesGizmosOverlay` | 被动范围叠加 | Editor | Scene View 实线（逻辑范围）+ 虚线（VFX 覆盖）+ 数值标注 |
 | `UnitPassivesEditorWindow` | 被动技能调试窗口 | Editor | 编辑/运行时模式下查看和调整所有被动参数，无需进入 Play 模式 |
-| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，存储叫分结果 + 玩家基地映射，已废弃降级为数据缓存 |
+| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，仅存储叫分结果缓存（BidMultiplier/HasResult/LandlordSlot/AISlots），已废弃降级 |
 | `SaveSystem` | 存档系统 | Gameplay/Systems | 基于 PlayerPrefs，存储金币/首次胜利/对局统计 |
 | `BiddingManager` | 叫分期控制器 | UI/Bidding | 叫分场景主控：倒计时 + AI 叫分 + 玩家叫分 + 跳转 |
 | `BiddingConfig` | 叫分配置 | Config | ScriptableObject，可配叫分时长/AI 策略/超时处理 |
@@ -313,7 +313,9 @@
 | 叫分槽位同步等待 | `InitializeSlotWhenReady()` 协程等待 Photon PlayerList 同步完成后再计算槽位（最多 3 秒轮询），修复同时进入时所有玩家拿到相同手牌 | NetworkBiddingManager.cs |
 | AI 槽位房间持久化 | AI 槽位通过 Photon 房间属性（`aiSlots`）持久化，后加入玩家从房间属性恢复，修复后加入玩家看不到 AI 的 bug | OnlineLobbyController.cs |
 | 农民路线 UI 隐藏 | `HandArea.SetRouteUIVisible(false)` 隐藏农民不需要的路线选择 UI（prev/nextButton, routeLabel, routeIndicator） | HandArea.cs + GameBootstrapper.cs |
-| **Fusion 联机架构（Phase 5）** | FusionGameManager（Tick 状态机）+ FusionGameState（WorldState [Networked]）+ CombatSystem + PassiveSystem + IntentBuffer + ViewBinder + PlayerInputHandler + UnitSyncManager + DesyncDetector + Identity 系统（IIdentityProvider 策略模式）| Gameplay/Fusion/ + Gameplay/Fusion/Identity/ + Gameplay/Fusion/UI/ |
+| **Fusion 联机架构（Phase 5）** | FusionGameManager（GamePhase 状态机 + BeginTick/ReadInputOnce/ConsumeInput 管道 + TryAdvanceState 收敛器 + OnStateChanged 生命周期）+ FusionGameState（WorldState [Networked] + GamePhase 枚举 + PlayerState.IsAI）+ CombatSystem + PassiveSystem + IntentBuffer + ViewBinder + PlayerInputHandler + UnitSyncManager + DesyncDetector + Identity 系统（IIdentityProvider 策略模式）| Gameplay/Fusion/ + Gameplay/Fusion/Identity/ + Gameplay/Fusion/UI/ |
+| **AI 槽位 WorldState 同步** | FusionGameManager.AddAISlot/RemoveAISlot/IsAISlotByState — 通过 WorldState.PlayerX.IsAI 同步，替代 PUN SendToAll/SetRoomProperty | FusionGameManager.cs + OnlineLobbyController.cs |
+| **UnitPassives BOSS 守卫** | UnitPassives.Update() 开头检查 BossController.IsActive，BOSS 未激活时跳过所有被动逻辑 | UnitPassives.cs |
 | **战斗演出系统** | BattlePresentationManager（统一调度）+ CameraDirector（镜头）+ BattleAnnouncementManager（广播）+ BossDialogueBubble（BOSS 对话）| Gameplay/Presentation/ |
 | **网络门面** | NetworkFacade（统一 Photon/Fusion/本地联机调用入口）| Gameplay/Network/ |
 | **Fusion 网络基础设施** | FusionService + NetworkRunnerSetup + FusionTestSpawner + FusionTestObject + FusionMinimalDebug + FileLogger | Gameplay/Network/ |
@@ -411,7 +413,7 @@ Assets/Scripts/
 │   │   ├── VFXManager.cs             # ★ 单例粒子特效对象池（DontDestroyOnLoad）
 │   │   ├── UIManager.cs              # ★ 跨场景 UI 管理器（单例，管理 UI_Scene 加载 + PauseMenu/VictoryPanel 引用）
 │   │   ├── SceneLoader.cs            # 场景加载工具（LoadBidding/LoadGame/LoadMainMenu/LoadCodex/QuitGame）
-│   │   ├── GameSession.cs            # ★ 跨场景会话数据（叫分结果 + 玩家基地映射，支持联机扩展）
+│   │   ├── GameSession.cs            # 叫分结果缓存（已废弃降级，核心逻辑由 WorldState 替代）
 │   │   └── SaveSystem.cs             # ★ 存档系统（PlayerPrefs，金币/首次胜利/对局统计）
 │   ├── Entities/
 │   │   ├── CardUnit.cs                # ★ 兵种基类（4 个 partial 文件）
@@ -2192,44 +2194,42 @@ AI 槽位（仅 Master 执行）:
 
 ---
 
-## 22. 跨场景数据传递（GameSession）
+## 22. 跨场景数据传递（GameSession — 已废弃降级）
+
+> ⚠️ Phase 5 后 GameSession 仅作为桥接数据缓存，核心逻辑由 FusionGameManager WorldState 替代。
 
 ### 22.1 单机模式
 
 ```csharp
 GameSession.SetResult(isLandlord, multiplier, landlordIdx, farmerIndices);
-// 自动构建 PlayerBaseMapping[3]，随机分配农民基地
-GameSession.MyBaseIndex       // 本机玩家操控的基地索引
 GameSession.PlayerIsLandlord  // 本机玩家是否地主
 GameSession.BidMultiplier     // 叫分倍数
-GameSession.HasResult         // 是否有叫分结果（GameBootstrapper.Awake 据此决定是否读取 GameSession）
-GameSession.Reset()           // 清除所有会话数据（调试/重新开始用）
+GameSession.HasResult         // 是否有叫分结果
+GameSession.Reset()           // 清除所有会话数据
 ```
 
-### 22.2 联机模式（已实现）
+### 22.2 联机模式
 
 ```csharp
-GameSession.IsNetworkMode = true;              // 标记联机模式
-GameSession.NetworkSeed = seed;                // 同步随机种子（Master 生成）
-GameSession.LocalPlayerId = localId;           // 本机玩家 ID（0/1/2）
-GameSession.SetResultNetwork(localId, baseMapping, multiplier);
+GameSession.IsNetworkMode = true;
+GameSession.NetworkSeed = seed;
+GameSession.SetResultNetwork(landlordSlot, multiplier);
 GameSession.SetLocalPlayerIsLandlord(isLandlord);
-GameSession.AISlots                            // AI 槽位 HashSet<int>
-GameSession.IsAISlot(slot)                     // 判断指定槽位是否为 AI
-// localId = 网络分配的玩家 ID（0/1/2）
-// baseMapping = 完整的 [playerId → baseIndex] 映射
-// seed = Environment.TickCount，Master 端生成，通过 BID_RESULT 广播
+GameSession.AISlots           // AI 槽位（Lobby 阶段临时存储）
 ```
 
-**联机初始化流程**：
+**AI 槽位同步**：通过 `FusionGameManager.AddAISlot()`/`RemoveAISlot()` 写入 `WorldState.PlayerX.IsAI`，Fusion 自动同步到所有客户端。
+
+### 22.3 联机初始化流程
+
 ```
 NetworkBiddingManager.HandleBidResult()
   → GameSession.IsNetworkMode = true
   → GameSession.NetworkSeed = seed
-  → GameSession.SetResultNetwork(_mySlot, baseMapping, multiplier)
+  → GameSession.SetResultNetwork(landlordSlot, multiplier)
   → GameSession.SetLocalPlayerIsLandlord(localIsLandlord)
-  → Master 点击确认 → LoadScene(GAME_SCENE)
-  → GameBootstrapper 读取 GameSession 启动游戏
+  → LoadScene(GAME_SCENE)
+  → GameBootstrapper 读取 GameSession.LandlordSlot
 ```
 
 ---
