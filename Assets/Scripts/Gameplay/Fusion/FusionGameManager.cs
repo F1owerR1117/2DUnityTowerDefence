@@ -47,11 +47,6 @@ namespace DoudizhuTower.Gameplay.Fusion
         private bool _inputConsumed;
 
         // =========================
-        // 原子状态推进
-        // =========================
-        private GameState _nextState;
-
-        // =========================
         // Tick 驱动计时器
         // =========================
         private int _stateStartTick;
