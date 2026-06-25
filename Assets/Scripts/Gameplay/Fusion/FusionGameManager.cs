@@ -352,6 +352,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         private void InitializeGamePhase()
         {
             State = GamePhase.Bidding;
+            _stateStartTick = Runner.Tick;
             var world = World;
 
             // 从 GameSession 读取叫分结果（桥接层）
