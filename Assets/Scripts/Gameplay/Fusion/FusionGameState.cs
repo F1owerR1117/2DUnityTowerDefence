@@ -93,8 +93,39 @@ namespace DoudizhuTower.Gameplay.Fusion
         public byte BidValue;     // 叫分值 (1/2/3)
         public byte RouteIndex;   // 路线索引
         public byte BaseIndex;    // 基地索引
-        public byte CardCount;    // 出牌数量
-        public fixed byte CardIndices[10]; // 出牌 DeckIndex 数组（最多 10 张）
+        public byte CardCount;    // 出牌数量（最大 6：农民 5 张，地主 6 张）
+        public byte C0;           // CardIndices[0]
+        public byte C1;           // CardIndices[1]
+        public byte C2;           // CardIndices[2]
+        public byte C3;           // CardIndices[3]
+        public byte C4;           // CardIndices[4]
+        public byte C5;           // CardIndices[5]
+
+        /// <summary>写入牌组索引</summary>
+        public void SetCards(byte[] indices)
+        {
+            CardCount = (byte)(indices?.Length ?? 0);
+            if (CardCount > 0) C0 = indices[0];
+            if (CardCount > 1) C1 = indices[1];
+            if (CardCount > 2) C2 = indices[2];
+            if (CardCount > 3) C3 = indices[3];
+            if (CardCount > 4) C4 = indices[4];
+            if (CardCount > 5) C5 = indices[5];
+        }
+
+        /// <summary>读取牌组索引</summary>
+        public byte[] GetCards()
+        {
+            if (CardCount == 0) return System.Array.Empty<byte>();
+            var result = new byte[CardCount];
+            result[0] = C0;
+            if (CardCount > 1) result[1] = C1;
+            if (CardCount > 2) result[2] = C2;
+            if (CardCount > 3) result[3] = C3;
+            if (CardCount > 4) result[4] = C4;
+            if (CardCount > 5) result[5] = C5;
+            return result;
+        }
     }
 
     // =========================
