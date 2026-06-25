@@ -351,9 +351,8 @@ namespace DoudizhuTower.Gameplay.Network
             if (_runner == null) return Array.Empty<string>();
             var list = new System.Collections.Generic.List<string>();
             foreach (var p in _runner.ActivePlayers)
-            {
                 list.Add($"Player_{p.RawEncoded}");
-            }
+            list.Sort((a, b) => a.CompareTo(b));
             return list.ToArray();
         }
 
@@ -379,9 +378,8 @@ namespace DoudizhuTower.Gameplay.Network
             if (_runner == null) return Array.Empty<int>();
             var list = new System.Collections.Generic.List<int>();
             foreach (var p in _runner.ActivePlayers)
-            {
                 list.Add(p.RawEncoded);
-            }
+            list.Sort();
             return list.ToArray();
         }
 
