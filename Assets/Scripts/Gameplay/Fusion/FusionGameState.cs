@@ -29,6 +29,14 @@ namespace DoudizhuTower.Gameplay.Fusion
         public byte DomainActive;
         public byte DomainType;
         public byte DomainSlot;
+
+        // 身份初始化锁（0=未就绪 1=Host 已写入全部身份数据）
+        public byte IdentityReady;
+
+        // Host 分配的 PlayerRef → Slot 映射（存储 PlayerRef.RawEncoded 的低 8 位）
+        public byte Slot0PlayerRef;
+        public byte Slot1PlayerRef;
+        public byte Slot2PlayerRef;
     }
 
     // =========================

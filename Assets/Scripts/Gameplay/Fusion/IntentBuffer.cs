@@ -39,6 +39,26 @@ namespace DoudizhuTower.Gameplay.Fusion
     }
 
     // =========================
+    // 出牌意图（Host 验证用）
+    // =========================
+    public struct PlayCardIntent
+    {
+        public int Slot;
+        public byte[] CardDeckIndices;  // 出的牌的 DeckIndex 数组
+        public int RouteIndex;          // 路线索引
+        public int BaseIndex;           // 基地索引
+    }
+
+    // =========================
+    // 传送意图（飞筒传牌）
+    // =========================
+    public struct TransferIntent
+    {
+        public int SenderSlot;       // 发送方 slot
+        public byte CardDeckIndex;   // 传送的牌 DeckIndex
+    }
+
+    // =========================
     // 意图缓冲区
     // =========================
     public class IntentBuffer
@@ -52,8 +72,20 @@ namespace DoudizhuTower.Gameplay.Fusion
         private BidIntent[] _bidIntents = new BidIntent[MAX_BID_INTENTS];
         private int _bidCount;
 
+        // 出牌意图队列
+        private const int MAX_PLAY_INTENTS = 8;
+        private PlayCardIntent[] _playIntents = new PlayCardIntent[MAX_PLAY_INTENTS];
+        private int _playCount;
+
+        // 传送意图队列
+        private const int MAX_TRANSFER_INTENTS = 8;
+        private TransferIntent[] _transferIntents = new TransferIntent[MAX_TRANSFER_INTENTS];
+        private int _transferCount;
+
         public int Count => _count;
         public int BidCount => _bidCount;
+        public int PlayCount => _playCount;
+        public int TransferCount => _transferCount;
 
         /// <summary>
         /// 添加意图
@@ -81,6 +113,8 @@ namespace DoudizhuTower.Gameplay.Fusion
         {
             _count = 0;
             _bidCount = 0;
+            _playCount = 0;
+            _transferCount = 0;
         }
 
         // =========================
@@ -104,6 +138,62 @@ namespace DoudizhuTower.Gameplay.Fusion
             for (int i = 1; i < _bidCount; i++)
                 _bidIntents[i - 1] = _bidIntents[i];
             _bidCount--;
+            return intent;
+        }
+
+        // =========================
+        // 出牌意图方法
+        // =========================
+
+        public void AddPlayCard(int slot, byte[] cardDeckIndices, int routeIndex, int baseIndex)
+        {
+            if (_playCount >= MAX_PLAY_INTENTS) return;
+            _playIntents[_playCount] = new PlayCardIntent
+            {
+                Slot = slot,
+                CardDeckIndices = cardDeckIndices,
+                RouteIndex = routeIndex,
+                BaseIndex = baseIndex
+            };
+            _playCount++;
+        }
+
+        public bool HasPlayCard() => _playCount > 0;
+
+        public PlayCardIntent PopPlayCard()
+        {
+            if (_playCount <= 0) return default;
+            var intent = _playIntents[0];
+            for (int i = 1; i < _playCount; i++)
+                _playIntents[i - 1] = _playIntents[i];
+            _playCount--;
+            return intent;
+        }
+
+        // =========================
+        // 传送意图方法（飞筒）
+        // =========================
+
+        public void AddTransfer(int senderSlot, byte cardDeckIndex)
+        {
+            if (_transferCount >= MAX_TRANSFER_INTENTS) return;
+            _transferIntents[_transferCount] = new TransferIntent
+            {
+                SenderSlot = senderSlot,
+                CardDeckIndex = cardDeckIndex
+            };
+            _transferCount++;
+        }
+
+        public bool HasTransfer() => _transferCount > 0;
+
+        public TransferIntent PopTransfer()
+        {
+            if (_transferCount <= 0) return default;
+            var intent = _transferIntents[0];
+            for (int i = 1; i < _transferCount; i++)
+                _transferIntents[i - 1] = _transferIntents[i];
+            _transferCount--;
             return intent;
         }
 

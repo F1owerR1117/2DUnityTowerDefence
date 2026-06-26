@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Threading.Tasks;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using UnityEngine;
 using Fusion;
 using Fusion.Sockets;
+using DoudizhuTower.Gameplay.Systems;
 
 namespace DoudizhuTower.Gameplay.Network
 {
@@ -131,9 +133,8 @@ namespace DoudizhuTower.Gameplay.Network
             // 方式 1：使用预制体（推荐）
             if (_fusionGameManagerPrefab != null)
             {
-                Debug.Log("[Fusion] 尝试通过 Runner.Spawn 预制体...");
-                var obj = _runner.Spawn(_fusionGameManagerPrefab);
-                Debug.Log($"[Fusion] Runner.Spawn 结果: {obj != null}");
+                Debug.Log("[Fusion] 尝试通过 Runner.SpawnAsync 预制体...");
+                _ = SpawnGameManagerAsync();
                 return;
             }
 
@@ -146,6 +147,19 @@ namespace DoudizhuTower.Gameplay.Network
             }
             var gm = gameObject.AddComponent<DoudizhuTower.Gameplay.Fusion.FusionGameManager>();
             Debug.Log($"[Fusion] 运行时创建 FusionGameManager: Instance={DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance != null}");
+        }
+
+        private async Task SpawnGameManagerAsync()
+        {
+            try
+            {
+                var obj = await _runner.SpawnAsync(_fusionGameManagerPrefab);
+                Debug.Log($"[Fusion] SpawnAsync 完成: {obj != null}");
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Fusion] SpawnAsync 失败: {e.Message}");
+            }
         }
 
         public void Disconnect()
@@ -332,6 +346,10 @@ namespace DoudizhuTower.Gameplay.Network
             _isMaster = false;
             _currentRoomName = null;
             LocalPlayer = default;
+            // 重置网络模式锁，允许下次切换到单机模式
+            GameSession.ResetNetworkModeLock();
+            GameSession.AISlots.Clear();
+            GameSession.RawAISlots.Clear();
         }
 
         public bool IsInRoom => _isInRoom;
@@ -349,15 +367,48 @@ namespace DoudizhuTower.Gameplay.Network
         public string[] GetPlayerNames()
         {
             if (_runner == null) return Array.Empty<string>();
-            var list = new System.Collections.Generic.List<string>();
+            var list = new System.Collections.Generic.List<(int raw, string name)>();
             foreach (var p in _runner.ActivePlayers)
-                list.Add($"Player_{p.RawEncoded}");
-            list.Sort((a, b) => a.CompareTo(b));
-            return list.ToArray();
+            {
+                string name = _runner.IsServer && p == _runner.LocalPlayer
+                    ? "Host (你)"
+                    : $"Player_{p.RawEncoded}";
+                list.Add((p.RawEncoded, name));
+            }
+            list.Sort((a, b) =>
+            {
+                if (a.raw == _runner.LocalPlayer.RawEncoded) return -1;
+                if (b.raw == _runner.LocalPlayer.RawEncoded) return 1;
+                return a.raw.CompareTo(b.raw);
+            });
+            var result = new string[list.Count];
+            for (int i = 0; i < list.Count; i++)
+                result[i] = list[i].name;
+            return result;
         }
 
-        public void SetPlayerReady(bool ready) { }
-        public bool AreAllPlayersReady => true;
+        private readonly System.Collections.Generic.HashSet<int> _readyPlayers = new();
+
+        public void SetPlayerReady(bool ready)
+        {
+            if (_runner == null) return;
+            int raw = _runner.LocalPlayer.RawEncoded;
+            if (ready) _readyPlayers.Add(raw);
+            else _readyPlayers.Remove(raw);
+        }
+
+        public bool AreAllPlayersReady
+        {
+            get
+            {
+                if (_runner == null) return false;
+                foreach (var p in _runner.ActivePlayers)
+                {
+                    if (!_readyPlayers.Contains(p.RawEncoded)) return false;
+                }
+                return _readyPlayers.Count > 0;
+            }
+        }
 
         [System.Obsolete] public void SendToAll(string key, object value) { }
         [System.Obsolete] public void SendToMaster(string key, object value) { }

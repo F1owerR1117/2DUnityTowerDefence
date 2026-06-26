@@ -354,7 +354,7 @@ namespace DoudizhuTower.UI.Battlefield
             _domainSystem.SetPlayerClickedCounter();
 
             // 如果没有订阅者（单机模式），直接设置 pending 状态
-            // 有订阅者时，pending 状态由 NetworkGameManager 广播后设置
+            // 有订阅者时，pending 状态由 FusionGameManager 处理
             if (OnCounterButtonClicked == null)
             {
                 if (_domainSystem.IsCounterPending)

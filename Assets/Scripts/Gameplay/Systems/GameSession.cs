@@ -10,13 +10,28 @@ namespace DoudizhuTower.Gameplay.Systems
     /// </summary>
     public static class GameSession
     {
-        /// <summary>运行时重置事件</summary>
         public static event System.Action OnRuntimeReset;
+
+        // ─── 网络模式（锁定后不可变） ───
+        public static bool IsNetworkMode { get; private set; }
+        private static bool _networkModeLocked;
+
+        public static void SetNetworkMode(bool value)
+        {
+            if (_networkModeLocked) return;
+            IsNetworkMode = value;
+            _networkModeLocked = true;
+        }
+
+        public static void ResetNetworkModeLock()
+        {
+            _networkModeLocked = false;
+            IsNetworkMode = false;
+        }
 
         // ─── 叫分结果 ───
         public static float BidMultiplier = 1f;
         public static bool HasResult;
-        public static bool IsNetworkMode;
         public static int NetworkSeed;
         public static int LandlordSlot = -1;
 
@@ -28,13 +43,11 @@ namespace DoudizhuTower.Gameplay.Systems
         public static bool PlayerIsLandlord => _localPlayerIsLandlord;
         private static bool _localPlayerIsLandlord;
 
-        // ─── 方法 ───
-
         public static void Reset()
         {
             BidMultiplier = 1f;
             HasResult = false;
-            IsNetworkMode = false;
+            // IsNetworkMode 不在此处修改——由 SetNetworkMode 在启动时锁定
             NetworkSeed = 0;
             LandlordSlot = -1;
             AISlots = new HashSet<int>();
@@ -43,33 +56,27 @@ namespace DoudizhuTower.Gameplay.Systems
             OnRuntimeReset?.Invoke();
         }
 
-        /// <summary>写入叫分结果（单机模式）</summary>
         public static void SetResult(bool localIsLandlord, float multiplier, int landlordBaseIndex, int[] farmerBaseIndices)
         {
             _localPlayerIsLandlord = localIsLandlord;
             BidMultiplier = multiplier;
             HasResult = true;
-            IsNetworkMode = false;
             LandlordSlot = 0;
         }
 
-        /// <summary>写入叫分结果（联机模式）</summary>
         public static void SetResultNetwork(int landlordSlot, float multiplier)
         {
             LandlordSlot = landlordSlot;
             BidMultiplier = multiplier;
             HasResult = true;
-            IsNetworkMode = true;
-            _localPlayerIsLandlord = false;
+            // _localPlayerIsLandlord 由 SetLocalPlayerIsLandlord 单独设置
         }
 
-        /// <summary>设置本机是否地主</summary>
         public static void SetLocalPlayerIsLandlord(bool isLandlord)
         {
             _localPlayerIsLandlord = isLandlord;
         }
 
-        /// <summary>判断指定槽位是否为 AI</summary>
         public static bool IsAISlot(int slot) => AISlots.Contains(slot);
     }
 }

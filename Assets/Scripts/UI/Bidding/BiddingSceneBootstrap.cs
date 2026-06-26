@@ -44,15 +44,20 @@ namespace DoudizhuTower.UI.Bidding
             }
 
             var fusionService = FindFirstObjectByType<FusionService>();
-            if (fusionService != null && fusionService.Runner != null && fusionService.Runner.IsRunning)
+            if (fusionService == null || fusionService.Runner == null || !fusionService.Runner.IsRunning)
             {
-                Debug.Log("[BiddingBootstrap] Spawn FusionGameManager for bidding scene");
-                fusionService.SpawnFusionGameManager();
+                Debug.LogWarning("[BiddingBootstrap] FusionService 未就绪");
+                return;
             }
-            else
+
+            if (!fusionService.IsMasterClient)
             {
-                Debug.LogWarning("[BiddingBootstrap] FusionService 未就绪，FusionGameManager 无法 Spawn");
+                Debug.Log("[BiddingBootstrap] Client 不 Spawn，等待 Host 的 FusionGameManager 网络同步");
+                return;
             }
+
+            Debug.Log("[BiddingBootstrap] Host Spawn FusionGameManager");
+            fusionService.SpawnFusionGameManager();
         }
     }
 }

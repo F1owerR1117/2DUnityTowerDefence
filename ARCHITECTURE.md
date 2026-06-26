@@ -320,6 +320,14 @@
 | **网络门面** | NetworkFacade（统一 Photon/Fusion/本地联机调用入口）| Gameplay/Network/ |
 | **Fusion 网络基础设施** | FusionService + NetworkRunnerSetup + FusionTestSpawner + FusionTestObject + FusionMinimalDebug + FileLogger | Gameplay/Network/ |
 | **运行时就绪接口** | IRuntimeReady（控制 Update 是否执行游戏逻辑）| Core/Lifecycle/ |
+| **Fusion 叫分 RPC 管道** | Client→Host 叫分/摸牌/出牌通过 `[Rpc(RpcSources.All, RpcTargets.StateAuthority)]` 发送，Host 统一执行 | FusionGameManager.cs + NetworkBiddingManager.cs |
+| **IdentityReady 初始化锁** | GameState.IdentityReady 字段，Host 写入 1 后 Client 才允许读取 WorldState，防止时序竞态 | FusionGameState.cs + FusionGameManager.cs + NetworkBiddingManager.cs |
+| **GameSession 模式锁定** | SetNetworkMode(bool) 单次写入不可逆，Reset() 不再覆盖 IsNetworkMode | GameSession.cs |
+| **叫分状态机修正** | TryAdvanceState 叫分完成后不自动推进 Playing，等 UI 确认按钮触发 ConfirmBidding() | FusionGameManager.cs |
+| **AI 叫分节流修复** | 删除 AISystem 内部 BID_INTERVAL_TICKS 双重节流，由 ProcessAI 统一控制频率 | AISystem.cs |
+| **IsPlayingFinished 修正** | 返回 false，胜负由 BattleManager.OnGameEnded 驱动，不再误判手牌为空为游戏结束 | FusionGameManager.cs |
+| **出牌执行连接** | ApplyPlayCards 连接 BattleManager.DeployCards 生成兵种 | FusionGameManager.cs |
+| **Client 状态同步** | GameSceneSync 每 0.5s 广播牌堆/手牌/金币，RPC 同步到 Client 本地缓存 | GameSceneSync.cs + FusionGameManager.cs |
 
 ### P1（仍需实现）
 
@@ -2398,6 +2406,27 @@ BOSS 技能施法时间与动画同步机制：
 
 ## 24. 架构债务登记
 
+### Fusion 游戏场景集成状态（2026-06-26 更新）
+
+| 子系统 | 状态 | 说明 |
+|:---|:---|:---|
+| 叫分输入 RPC | ✅ 完成 | Client→Host RpcSubmitBid |
+| 摸牌 RPC | ✅ 完成 | Client→Host RpcDrawCard |
+| 出牌 RPC | ✅ 完成 | Client→Host RpcPlayCard |
+| IdentityReady 锁 | ✅ 完成 | 防止 Client 在 Host 初始化前读取 WorldState |
+| Slot/Identity 同步 | ✅ 完成 | WorldState 映射 + GetLocalSlot 回退 |
+| AI 叫分 | ✅ 完成 | 双重节流已修复 |
+| 出牌执行 | ✅ 完成 | ApplyPlayCards 连接 BattleManager.DeployCards |
+| IsPlayingFinished | ✅ 完成 | 返回 false，由 BattleManager 驱动结束 |
+| GameSession 模式锁定 | ✅ 完成 | SetNetworkMode 单次写入 |
+| 退出联机解锁 | ✅ 完成 | ResetNetworkModeLock |
+| Client 手牌 UI 同步 | ❌ 未完成 | HandArea 仍读本地引用 |
+| Client 牌堆显示 | ❌ 未完成 | CardCounterUI 不同步 |
+| Client 经济显示 | ❌ 未完成 | EconomyManager 不读 _syncedGold |
+| Client 领域 UI | ❌ 未完成 | DomainUIController 不同步 |
+| BattleManager→Fusion 桥接 | ❌ 未完成 | OnGameEnded 不触发状态机 |
+| 兵种视觉同步 | ❌ 未完成 | Client 无 UnitView |
+
 以下为已识别但暂不偿还的架构债务，待功能扩展时根据实际痛点决定是否升级。
 
 | 债务 | 现状 | 触发偿还条件 |
@@ -2412,6 +2441,11 @@ BOSS 技能施法时间与动画同步机制：
 | 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2946 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
 | ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
 | ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
+| **[ARCH-016] Client 手牌 UI 不同步（P0）** | HandArea 读本地 `playerHand` 引用，不从 WorldState 或 RPC 同步的 `_slotHandCards` 读取 | 联机模式出牌后 Client 手牌不更新 |
+| **[ARCH-017] BattleManager→Fusion 状态机未桥接（P0）** | BattleManager.OnGameEnded 触发但 FusionGameManager 不响应，游戏无法正常结束 | 联机模式游戏永不结束或无结算界面 |
+| **[ARCH-018] Client 经济/领域 UI 未同步（P1）** | _syncedGold 和领域 RPC 存在，但 EconomyManager/DomainUIController 不读取 | 联机模式金币/领域显示错误 |
+| **[ARCH-019] _slotHandCards 跨进程不同步（P1）** | Host 本地字典，Client 依赖 RPC 同步，但同步时机和完整性不足 | Client 手牌与 Host 不一致 |
+| **[ARCH-020] GameSession 静态污染源未完全清除（P2）** | AISlots/RawAISlots 仍为 static HashSet，退出联机后可能残留 | 多次切换单机/联机后状态异常 |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
 

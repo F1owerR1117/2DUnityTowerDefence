@@ -291,18 +291,15 @@ namespace DoudizhuTower.UI.Online
                 if (text != null) text.text = _isReady ? "取消准备" : "准备";
             }
 
-            bool allReady = _net.AreAllPlayersReady;
             if (startGameButton != null)
-                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3 && allReady;
+                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3;
 
             if (roomStatusText != null)
             {
                 if (totalCount < 3)
                     roomStatusText.text = $"等待玩家加入... ({totalCount}/3)";
-                else if (!allReady)
-                    roomStatusText.text = $"等待所有玩家准备... ({totalCount}/3)";
                 else
-                    roomStatusText.text = "所有人已就绪，可以开始";
+                    roomStatusText.text = "可以开始游戏";
             }
         }
 
@@ -317,15 +314,14 @@ namespace DoudizhuTower.UI.Online
         private void OnStartGame()
         {
             if (_net == null || !_net.IsMasterClient) return;
-            if (!_net.AreAllPlayersReady) return;
             int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
             if (totalCount < 3) return;
 
             // 房主同步跳转到叫分场景
             GameSession.Reset();
-
-            // AI 槽位已通过 FusionGameManager.AddAISlot 同步到 WorldState
-            // 不需要额外写入 GameSession
+            GameSession.SetNetworkMode(true);
+            GameSession.AISlots = new HashSet<int>(_aiSlots);
+            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
 
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }

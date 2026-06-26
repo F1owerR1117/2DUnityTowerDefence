@@ -199,7 +199,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         #region 网络事件播放（Client 端使用）
 
-        /// <summary>Client 端播放攻击音效（由 NetworkGameManager.HandleUnitAttack 调用）</summary>
+        /// <summary>Client 端播放攻击音效</summary>
         public void PlayAttackNetwork()
         {
             if (_unit != null && !_unit.SimulatesCombat)
@@ -220,7 +220,7 @@ namespace DoudizhuTower.Gameplay.Entities
             }
         }
 
-        /// <summary>Client 端播放受击音效（由 NetworkGameManager.HandleUnitHit 调用）</summary>
+        /// <summary>Client 端播放受击音效</summary>
         public void PlayHitNetwork()
         {
             var audio = AudioManager.Instance;
@@ -230,7 +230,7 @@ namespace DoudizhuTower.Gameplay.Entities
                 audio.PlayCombat(hitClip, hitVolumeScale * volumeScale);
         }
 
-        /// <summary>Client 端播放死亡音效（由 NetworkGameManager.HandleUnitDied 调用）</summary>
+        /// <summary>Client 端播放死亡音效</summary>
         public void PlayDeathNetwork()
         {
             var audio = AudioManager.Instance;

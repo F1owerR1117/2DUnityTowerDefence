@@ -8,6 +8,11 @@ namespace DoudizhuTower.Gameplay.Fusion
     /// Fusion 战斗管理器。
     /// 替代 BattleManager，基于 Tick 状态机。
     /// </summary>
+    /// <remarks>
+    /// ⚠️ [已废弃] 战斗逻辑已移至 CombatSystem。
+    /// 本类保留供参考，不再使用。
+    /// </remarks>
+    [System.Obsolete("战斗逻辑已移至 CombatSystem，本类不再使用")]
     public class FusionBattleManager : NetworkBehaviour
     {
         [Header("引用")]

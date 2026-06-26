@@ -14,8 +14,8 @@ namespace DoudizhuTower.Gameplay.Fusion
 
         public DesyncLogger(string fileName = "DesyncLog.txt")
         {
-            _logPath = Path.Combine(Application.persistentDataPath, fileName);
-            _writer = new StreamWriter(_logPath, true);
+            _logPath = Path.Combine(Application.persistentDataPath, $"{Path.GetFileNameWithoutExtension(fileName)}_{System.Guid.NewGuid():N}.txt");
+            _writer = new StreamWriter(_logPath, false);
             _writer.WriteLine($"=== Desync Log Started: {System.DateTime.Now} ===");
             _writer.Flush();
         }

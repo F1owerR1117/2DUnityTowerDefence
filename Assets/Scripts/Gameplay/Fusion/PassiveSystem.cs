@@ -6,6 +6,11 @@ namespace DoudizhuTower.Gameplay.Fusion
     /// 被动系统（纯逻辑，无 MonoBehaviour）。
     /// 在 CombatSystem 之前执行，对 UnitBuffer 进行修饰。
     /// </summary>
+    /// <remarks>
+    /// ⚠️ [已废弃] 当前未被 FusionGameManager 使用。
+    /// 被动逻辑将在 Phase 7 中按需迁移。
+    /// </remarks>
+    [System.Obsolete("未被 FusionGameManager 使用，被动逻辑将在 Phase 7 中按需迁移")]
     public class PassiveSystem
     {
         /// <summary>

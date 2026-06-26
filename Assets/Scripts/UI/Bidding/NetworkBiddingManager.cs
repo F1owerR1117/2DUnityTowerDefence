@@ -52,14 +52,14 @@ namespace DoudizhuTower.UI.Bidding
         private int _mySlot = -1;
         private int _myPlayerId;
         private int[] _actorNumbers;
-        private int _currentTurnSlot;
         private int[] _bids = new int[3];
+        private int _localTurnSlot;
         private int _highestBidder = -1;
         private int _highestBid;
         private bool _biddingEnded;
-        private float _timer;
         private bool _initialized;
         private bool _shownResult;
+        private System.Collections.Generic.HashSet<int> _aiSlots = new();
 
         // 左右两侧对应的网络槽位（-1 = 未分配）
         private int _leftSlot = -1;
@@ -76,9 +76,6 @@ namespace DoudizhuTower.UI.Bidding
 
             // 等待 IdentityService 同步完成后再计算槽位
             StartCoroutine(InitializeSlotWhenReady());
-
-            float duration = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
-            _timer = duration;
 
             if (resultPanel != null) resultPanel.SetActive(false);
             if (confirmButton != null) confirmButton.onClick.AddListener(OnConfirm);
@@ -97,31 +94,57 @@ namespace DoudizhuTower.UI.Bidding
 
         private IEnumerator InitializeSlotWhenReady()
         {
-            // Phase 5 Final：slot 由 IdentityService 管理，不再本地计算
-            // 等待 IdentityService 就绪
+            // 等待 FusionGameManager 就绪
             float timeout = 5f;
             while (timeout > 0f)
             {
-                if (IdentityService.Instance != null && IdentityService.Instance.IsReady())
-                {
-                    _mySlot = IdentityService.Instance.GetLocalSlot();
-                    Debug.Log($"[NetworkBidding] Slot from IdentityService: mySlot={_mySlot}");
+                if (FusionGameManager.Instance != null)
                     break;
-                }
                 timeout -= 0.1f;
                 yield return new WaitForSeconds(0.1f);
             }
 
-            if (_mySlot < 0)
+            var gm = FusionGameManager.Instance;
+            if (gm != null)
             {
-                Debug.LogWarning("[NetworkBidding] IdentityService 未就绪，使用兜底 slot=0");
-                _mySlot = 0;
+                // 等待 Host 的 IdentityReady 锁释放
+                float identityTimeout = 10f;
+                while (identityTimeout > 0f)
+                {
+                    if (gm.HasStateAuthority || gm.World.Game.IdentityReady == 1)
+                        break;
+                    identityTimeout -= 0.1f;
+                    yield return new WaitForSeconds(0.1f);
+                }
+
+                _mySlot = gm.GetLocalSlot();
+                Debug.Log($"[NetworkBidding] Slot from FusionGameManager: mySlot={_mySlot}, HasStateAuth={gm.HasStateAuthority}, IdentityReady={gm.World.Game.IdentityReady}");
             }
 
-            string aiSlotsStr = string.Join(", ", GameSession.AISlots);
-            Debug.Log($"[NetworkBidding] AI 槽位: [{aiSlotsStr}], mySlot={_mySlot}");
+            if (_mySlot < 0)
+            {
+                _mySlot = 0;
+                Debug.LogWarning("[NetworkBidding] 无法确定槽位，使用兜底 slot=0");
+            }
 
-            // 槽位确定后执行依赖槽位的初始化
+            // AI 槽位：Host 从 GameSession，Client 从 WorldState
+            if (gm != null && !gm.HasStateAuthority)
+            {
+                _aiSlots.Clear();
+                var world = gm.World;
+                for (int i = 0; i < 3; i++)
+                {
+                    var p = gm.GetPlayerState(i);
+                    if (p.IsAI == 1) _aiSlots.Add(i);
+                }
+                Debug.Log($"[NetworkBidding] Client AI 槽位: [{string.Join(",", _aiSlots)}]");
+            }
+            else
+            {
+                _aiSlots = new System.Collections.Generic.HashSet<int>(GameSession.AISlots);
+                Debug.Log($"[NetworkBidding] Host AI 槽位: [{string.Join(",", _aiSlots)}]");
+            }
+
             AssignSideSlots();
             SetPlayerLabels();
             _initialized = true;
@@ -169,65 +192,73 @@ namespace DoudizhuTower.UI.Bidding
 
         private void Update()
         {
-            if (!_initialized || _biddingEnded) return;
-
-            // ── Fusion 模式：从 WorldState 读取叫分状态 ──
             var gm = FusionGameManager.Instance;
-            if (gm != null)
+            if (gm == null) return;
+
+            // Client 等待 Host 身份初始化完成
+            if (!gm.HasStateAuthority && gm.World.Game.IdentityReady == 0) return;
+
+            var world = gm.World;
+
+            // ── 倒计时：从 Fusion Tick 差值计算（唯一权威） ──
+            int elapsed = gm.Runner.Tick - gm.StateStartTick;
+            int remaining = Mathf.Max(0, gm.BiddingDurationTicks - elapsed);
+            int seconds = Mathf.CeilToInt(remaining / 100f);
+            if (timerText != null)
+                timerText.text = $"{seconds}s";
+
+            // ── 叫分已结束 → 显示结果 ──
+            if (world.Game.IsBiddingFinished == 1 && !_shownResult)
             {
-                var world = gm.World;
+                _shownResult = true;
 
-                // 叫分已结束 → 显示结果
-                if (world.Game.IsBiddingFinished == 1 && !_shownResult)
+                int landlordSlot = world.Game.BidWinnerSlot;
+                bool localIsLandlord = (landlordSlot == _mySlot);
+                float multiplier = world.Game.HighestBid > 0 ? world.Game.HighestBid : 1f;
+
+                SetButtonsInteractable(false);
+                ShowResult(localIsLandlord, multiplier);
+                ShowRoleIcons(landlordSlot);
+
+                if (confirmButton != null)
                 {
-                    _shownResult = true;
-                    _biddingEnded = true;
-
-                    int landlordSlot = world.Game.BidWinnerSlot;
-                    bool localIsLandlord = (landlordSlot == _mySlot);
-                    float multiplier = world.Game.HighestBid > 0 ? world.Game.HighestBid : 1f;
-
-                    SetButtonsInteractable(false);
-                    ShowResult(localIsLandlord, multiplier);
-                    ShowRoleIcons(landlordSlot);
-
-                    if (confirmButton != null)
-                    {
-                        confirmButton.gameObject.SetActive(true);
-                        confirmButton.interactable = true;
-                    }
-
-                    Debug.Log($"[NetworkBidding] 从 WorldState 读取叫分结果: landlord={landlordSlot}, multiplier={multiplier}");
+                    confirmButton.gameObject.SetActive(true);
+                    confirmButton.interactable = true;
                 }
 
-                // 更新轮次显示
-                if (world.Game.IsBiddingFinished == 0)
-                {
-                    int currentTurn = world.Game.CurrentBidTurn;
-                    var labels = new[] {
-                        GetLabelForSlot(0),
-                        GetLabelForSlot(1),
-                        GetLabelForSlot(2)
-                    };
-                    for (int i = 0; i < labels.Length; i++)
-                    {
-                        if (labels[i] != null)
-                            labels[i].fontStyle = i == currentTurn
-                                ? FontStyles.Bold
-                                : FontStyles.Normal;
-                    }
+                Debug.Log($"[NetworkBidding] 从 WorldState 读取叫分结果: landlord={landlordSlot}, multiplier={multiplier}");
+            }
 
-                    // 更新叫分显示
-                    for (int slot = 0; slot < 3; slot++)
+            // ── 叫分进行中 → 更新轮次 + 叫分显示 + 按钮状态 ──
+            if (world.Game.IsBiddingFinished == 0)
+            {
+                int currentTurn = world.Game.CurrentBidTurn;
+                var labels = new[] {
+                    GetLabelForSlot(0),
+                    GetLabelForSlot(1),
+                    GetLabelForSlot(2)
+                };
+                for (int i = 0; i < labels.Length; i++)
+                {
+                    if (labels[i] != null)
+                        labels[i].fontStyle = i == currentTurn
+                            ? FontStyles.Bold
+                            : FontStyles.Normal;
+                }
+
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    var player = gm.GetPlayerState(slot);
+                    var bidText = GetBidDisplayForSlot(slot);
+                    if (bidText != null)
                     {
-                        var player = gm.GetPlayerState(slot);
-                        var bidText = GetBidDisplayForSlot(slot);
-                        if (bidText != null)
-                            bidText.text = player.Bid > 0 ? $"{player.Bid} 分" : "不叫";
+                        string display = player.Bid > 0 ? $"{player.Bid} 分" : "不叫";
+                        bidText.text = display;
+                        Debug.Log($"[BidDisplay] slot={slot} IsAI={player.IsAI} Bid={player.Bid} → {display}");
                     }
                 }
 
-                return;
+                UpdateBidButtons();
             }
         }
 
@@ -287,18 +318,27 @@ namespace DoudizhuTower.UI.Bidding
         {
             if (_biddingEnded) return;
 
-            // Phase 5 Final：优先使用 FusionGameManager（游戏场景），否则本地处理（叫分场景桥接）
             var gm = FusionGameManager.Instance;
-            if (gm != null && gm.IsLocalSlotReady)
+            if (gm != null)
             {
-                int mySlot = gm.GetLocalSlot();
-                // 通过 Fusion NetworkInput 发送到 Host
-                gm.SetBidInput(bid);
-                Debug.Log($"[Bidding] Input sent via Fusion: slot={mySlot} bid={bid}");
+                int mySlot = gm.IsLocalSlotReady ? gm.GetLocalSlot() : -1;
+                if (mySlot < 0) mySlot = _mySlot >= 0 ? _mySlot : 0;
+
+                if (gm.HasStateAuthority)
+                {
+                    // Host 直接提交
+                    gm.SubmitBid(mySlot, bid);
+                    Debug.Log($"[Bidding] Host bid: slot={mySlot} bid={bid}");
+                }
+                else
+                {
+                    // Client 通过 RPC 发送到 Host
+                    gm.RpcSubmitBid(mySlot, bid);
+                    Debug.Log($"[Bidding] Client RPC bid: slot={mySlot} bid={bid}");
+                }
             }
             else
             {
-                // 叫分场景桥接：本地处理（无 FusionGameManager）
                 Debug.Log($"[Bidding] Local bid: slot={_mySlot} bid={bid}");
                 ProcessBid(_mySlot, bid);
             }
@@ -317,7 +357,7 @@ namespace DoudizhuTower.UI.Bidding
         private void ProcessBid(int slot, int bid)
         {
             // 叫分场景桥接：本地处理叫分逻辑
-            if (slot != _currentTurnSlot) return;
+            if (slot != _localTurnSlot) return;
 
             _bids[slot] = bid;
 
@@ -339,7 +379,7 @@ namespace DoudizhuTower.UI.Bidding
                 return;
             }
 
-            int nextTurn = _currentTurnSlot + 1;
+            int nextTurn = _localTurnSlot + 1;
             if (nextTurn >= 3)
             {
                 if (_highestBidder >= 0)
@@ -350,8 +390,7 @@ namespace DoudizhuTower.UI.Bidding
                 nextTurn = 0;
             }
 
-            _currentTurnSlot = nextTurn;
-            _timer = biddingConfig != null ? biddingConfig.biddingDuration : 30f;
+            _localTurnSlot = nextTurn;
 
             UpdateBidButtons();
             UpdateTurnDisplay();
@@ -378,7 +417,7 @@ namespace DoudizhuTower.UI.Bidding
 
             int seed = Environment.TickCount;
 
-            GameSession.IsNetworkMode = true;
+            GameSession.SetNetworkMode(true);
             GameSession.NetworkSeed = seed;
             GameSession.LandlordSlot = landlordSlot;
             GameSession.BidMultiplier = multiplier;
@@ -402,6 +441,20 @@ namespace DoudizhuTower.UI.Bidding
 
         private void OnConfirm()
         {
+            var gm = FusionGameManager.Instance;
+            if (gm != null && gm.HasStateAuthority)
+            {
+                gm.ConfirmBidding();
+            }
+            GameSession.SetNetworkMode(true);
+            if (gm != null)
+            {
+                var world = gm.World;
+                int landlordSlot = world.Game.BidWinnerSlot;
+                float multiplier = world.Game.HighestBid > 0 ? world.Game.HighestBid : 1f;
+                GameSession.SetResultNetwork(landlordSlot, multiplier);
+                GameSession.SetLocalPlayerIsLandlord(landlordSlot == _mySlot);
+            }
             _net.LoadScene(SceneLoader.GAME_SCENE);
         }
 
@@ -410,7 +463,7 @@ namespace DoudizhuTower.UI.Bidding
             if (_biddingEnded) return;
 
             int realPlayerCount = _net.CurrentPlayerCount;
-            int totalSlots = realPlayerCount + GameSession.AISlots.Count;
+            int totalSlots = realPlayerCount + _aiSlots.Count;
 
             if (totalSlots < 3)
             {
@@ -478,7 +531,7 @@ namespace DoudizhuTower.UI.Bidding
 
             if (playerLabelMe != null)
             {
-                if (GameSession.AISlots.Contains(_mySlot))
+                if (_aiSlots.Contains(_mySlot))
                     playerLabelMe.text = "AI（你）";
                 else
                     playerLabelMe.text = _mySlot < names.Length ? $"{names[_mySlot]}（你）" : "你";
@@ -486,7 +539,7 @@ namespace DoudizhuTower.UI.Bidding
 
             if (playerLabelLeft != null && _leftSlot >= 0)
             {
-                if (GameSession.AISlots.Contains(_leftSlot))
+                if (_aiSlots.Contains(_leftSlot))
                     playerLabelLeft.text = $"<color=#FFD700>AI-{_leftSlot + 1}</color>";
                 else
                     playerLabelLeft.text = _leftSlot < names.Length ? names[_leftSlot] : "等待中...";
@@ -494,7 +547,7 @@ namespace DoudizhuTower.UI.Bidding
 
             if (playerLabelRight != null && _rightSlot >= 0)
             {
-                if (GameSession.AISlots.Contains(_rightSlot))
+                if (_aiSlots.Contains(_rightSlot))
                     playerLabelRight.text = $"<color=#FFD700>AI-{_rightSlot + 1}</color>";
                 else
                     playerLabelRight.text = _rightSlot < names.Length ? names[_rightSlot] : "等待中...";

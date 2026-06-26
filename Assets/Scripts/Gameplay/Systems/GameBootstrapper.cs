@@ -154,22 +154,40 @@ namespace DoudizhuTower.Gameplay.Systems
             var playerHand = new CardHand(handCapacity);
             if (_isNetworkMode)
             {
-                // 联机模式：从 FusionGameManager 读取手牌
+                // 联机模式：优先从 FusionGameManager 读取，失败则确定性重新发牌
                 var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                int mySlot = gm != null ? gm.GetLocalSlot() : 0;
+                if (mySlot < 0) mySlot = 0;
+
+                bool gotCards = false;
                 if (gm != null)
                 {
-                    int mySlot = gm.GetLocalSlot();
-                    if (mySlot >= 0)
+                    var handCards = gm.GetHandCards(mySlot);
+                    if (handCards != null && handCards.Count > 0)
                     {
-                        var handCards = gm.GetHandCards(mySlot);
                         foreach (var deckIndex in handCards)
                         {
                             var card = _mainDeck.GetCardByIndex(deckIndex);
-                            if (card.DeckIndex >= 0)
-                                playerHand.Add(card);
+                            if (card.DeckIndex >= 0) playerHand.Add(card);
                         }
-                        Debug.Log($"[Bootstrapper] Fusion 手牌: slot={mySlot}, count={playerHand.Count}");
+                        gotCards = true;
                     }
+                }
+
+                // Host 的 _slotHandCards 为空时（Client），用相同 seed 确定性发牌
+                if (!gotCards)
+                {
+                    int landlordSlot = GameSession.LandlordSlot >= 0 ? GameSession.LandlordSlot : 0;
+                    bool isLandlord = (mySlot == landlordSlot);
+                    int capacity = isLandlord ? 20 : 17;
+                    var freshDeck = new DoudizhuTower.Core.Cards.CardDeck(seed);
+                    freshDeck.Deal(mySlot * 7, new DoudizhuTower.Core.Cards.CardHand(capacity));
+                    freshDeck.Deal(7, playerHand);
+                    Debug.Log($"[Bootstrapper] 确定性发牌: slot={mySlot}, count={playerHand.Count}");
+                }
+                else
+                {
+                    Debug.Log($"[Bootstrapper] Fusion 手牌: slot={mySlot}, count={playerHand.Count}");
                 }
             }
             else
@@ -182,28 +200,43 @@ namespace DoudizhuTower.Gameplay.Systems
             var aiHands = new Dictionary<Component, CardHand>();
             if (_isNetworkMode)
             {
-                // 联机模式：从 FusionGameManager 读取 AI 手牌
+                // 联机模式：从 FusionGameManager 读取 AI 手牌，失败则确定性发牌
                 var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                if (gm != null)
+                for (int slot = 0; slot < 3; slot++)
                 {
-                    for (int slot = 0; slot < 3; slot++)
-                    {
-                        if (!gm.IsAISlot(slot)) continue;
-                        if (slot >= baseBuildings.Length) continue;
-                        var baseBldg = baseBuildings[slot];
-                        if (baseBldg == null) continue;
+                    if (slot >= baseBuildings.Length) continue;
+                    var baseBldg = baseBuildings[slot];
+                    if (baseBldg == null) continue;
 
-                        var aiHand = new CardHand(17);
+                    bool isAI = gm != null ? gm.IsAISlot(slot) : !GameSession.AISlots.Contains(slot) == false;
+                    if (!isAI) continue;
+
+                    var aiHand = new CardHand(17);
+                    bool gotCards = false;
+
+                    if (gm != null)
+                    {
                         var handCards = gm.GetHandCards(slot);
-                        foreach (var deckIndex in handCards)
+                        if (handCards != null && handCards.Count > 0)
                         {
-                            var card = _mainDeck.GetCardByIndex(deckIndex);
-                            if (card.DeckIndex >= 0)
-                                aiHand.Add(card);
+                            foreach (var deckIndex in handCards)
+                            {
+                                var card = _mainDeck.GetCardByIndex(deckIndex);
+                                if (card.DeckIndex >= 0) aiHand.Add(card);
+                            }
+                            gotCards = true;
                         }
-                        aiHands[baseBldg] = aiHand;
-                        Debug.Log($"[Bootstrapper] Fusion AI 手牌: slot={slot}, count={aiHand.Count}");
                     }
+
+                    if (!gotCards)
+                    {
+                        var freshDeck = new DoudizhuTower.Core.Cards.CardDeck(seed);
+                        freshDeck.Deal(slot * 7, new CardHand(17));
+                        freshDeck.Deal(7, aiHand);
+                    }
+
+                    aiHands[baseBldg] = aiHand;
+                    Debug.Log($"[Bootstrapper] Fusion AI 手牌: slot={slot}, count={aiHand.Count}");
                 }
             }
             else
@@ -550,7 +583,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
                 if (_isNetworkMode)
                 {
-                    // 联机模式：摸牌通过 Fusion NetworkInput 发送到 Host
+                    // 联机模式：摸牌通过 RPC 发送到 Host
                     // 自动摸牌
                     timerQueue?.ScheduleLoop(drawInterval, () =>
                     {
@@ -558,7 +591,8 @@ namespace DoudizhuTower.Gameplay.Systems
                         var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
                         if (gm != null)
                         {
-                            gm.SetDrawInput();
+                            int mySlot = gm.GetLocalSlot();
+                            if (mySlot >= 0) gm.RpcDrawCard(mySlot);
                         }
                     });
 
@@ -569,7 +603,8 @@ namespace DoudizhuTower.Gameplay.Systems
                         var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
                         if (gm != null)
                         {
-                            gm.SetDrawInput();
+                            int mySlot = gm.GetLocalSlot();
+                            if (mySlot >= 0) gm.RpcDrawCard(mySlot);
                         }
                     });
                 }
@@ -775,6 +810,12 @@ namespace DoudizhuTower.Gameplay.Systems
                 else
                 {
                     Debug.LogError("[Bootstrapper] FusionService 不存在！");
+                }
+
+                // 添加游戏场景同步组件
+                if (FindFirstObjectByType<DoudizhuTower.Gameplay.Fusion.GameSceneSync>() == null)
+                {
+                    gameObject.AddComponent<DoudizhuTower.Gameplay.Fusion.GameSceneSync>();
                 }
             }
             else

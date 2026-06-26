@@ -14,7 +14,7 @@ namespace DoudizhuTower.Gameplay.Network
     {
         public static NetworkManager Instance { get; private set; }
 
-        [Tooltip("网络服务提供者（拖入实现了 INetworkService 的 MonoBehaviour，如 PhotonService）")]
+        [Tooltip("网络服务提供者（拖入 FusionService，或留空自动查找）")]
         [SerializeField] private MonoBehaviour serviceProvider;
 
         /// <summary>当前使用的网络服务</summary>
@@ -36,33 +36,35 @@ namespace DoudizhuTower.Gameplay.Network
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            // 优先使用 Inspector 指定的服务提供者
+            // 检查 serviceProvider 是否有效
+            if (serviceProvider != null && serviceProvider is not INetworkService)
+            {
+                Debug.LogWarning("[NetworkManager] serviceProvider 不是 INetworkService，尝试自动查找 FusionService");
+                serviceProvider = null;
+            }
+
+            // 自动查找 FusionService
             if (serviceProvider == null)
             {
-                // 优先查找 FusionService（Fusion 2）
                 foreach (var mb in GetComponentsInChildren<MonoBehaviour>())
                 {
                     if (mb is FusionService)
                     {
                         serviceProvider = mb;
-                        Debug.Log("[NetworkManager] 使用 FusionService");
+                        Debug.Log("[NetworkManager] 自动找到 FusionService");
                         break;
                     }
                 }
+            }
 
-                // 如果没找到 FusionService，再查找其他 INetworkService
-                if (serviceProvider == null)
-                {
-                    foreach (var mb in GetComponentsInChildren<MonoBehaviour>())
-                    {
-                        if (mb is INetworkService)
-                        {
-                            serviceProvider = mb;
-                            Debug.Log($"[NetworkManager] 使用 {mb.GetType().Name}");
-                            break;
-                        }
-                    }
-                }
+            // 如果还没找到，创建 FusionService
+            if (serviceProvider == null)
+            {
+                Debug.Log("[NetworkManager] 未找到 FusionService，自动创建");
+                var go = new GameObject("FusionService");
+                var fusionService = go.AddComponent<FusionService>();
+                fusionService.Connect();
+                serviceProvider = fusionService;
             }
 
             if (serviceProvider is INetworkService service)
@@ -75,8 +77,13 @@ namespace DoudizhuTower.Gameplay.Network
             }
             else
             {
-                Debug.LogError("[NetworkManager] 未找到实现 INetworkService 的组件！" +
-                               "请在 Inspector 中拖入，或在同一 GameObject 上挂载实现类。");
+                // 尝试自动创建 FusionService
+                Debug.LogWarning("[NetworkManager] 未找到 INetworkService，尝试创建 FusionService");
+                var fusionGO = new GameObject("FusionService");
+                var fusionService = fusionGO.AddComponent<FusionService>();
+                fusionService.Connect();
+                Service = fusionService;
+                InitIdentityService(fusionService);
             }
         }
 
@@ -85,8 +92,10 @@ namespace DoudizhuTower.Gameplay.Network
             var identityService = FindAnyObjectByType<DoudizhuTower.Gameplay.Fusion.IdentityService>();
             if (identityService == null)
             {
-                Debug.LogError("[NetworkManager] IdentityService missing in scene! 请在场景中添加 IdentitySystem GameObject。");
-                return;
+                // 自动创建 IdentityService
+                Debug.Log("[NetworkManager] 自动创建 IdentityService");
+                var go = new GameObject("IdentityService");
+                identityService = go.AddComponent<DoudizhuTower.Gameplay.Fusion.IdentityService>();
             }
 
             if (service is DoudizhuTower.Gameplay.Network.FusionService)
@@ -94,8 +103,10 @@ namespace DoudizhuTower.Gameplay.Network
                 var lobbyId = FindAnyObjectByType<DoudizhuTower.Gameplay.Fusion.LobbyIdentityService>();
                 if (lobbyId == null)
                 {
-                    Debug.LogError("[NetworkManager] LobbyIdentityService missing in scene! 请在场景中添加。");
-                    return;
+                    // 自动创建 LobbyIdentityService
+                    Debug.Log("[NetworkManager] 自动创建 LobbyIdentityService");
+                    var go = new GameObject("LobbyIdentityService");
+                    lobbyId = go.AddComponent<DoudizhuTower.Gameplay.Fusion.LobbyIdentityService>();
                 }
                 identityService.Initialize(new DoudizhuTower.Gameplay.Fusion.OnlineIdentityProvider());
             }

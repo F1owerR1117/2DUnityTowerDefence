@@ -2,6 +2,9 @@ using System.Collections.Generic;
 using Fusion;
 using UnityEngine;
 using DoudizhuTower.Gameplay.Systems;
+using DoudizhuTower.Core.Cards;
+using DoudizhuTower.Gameplay.Battle;
+using DoudizhuTower.Gameplay.Entities;
 
 namespace DoudizhuTower.Gameplay.Fusion
 {
@@ -53,6 +56,11 @@ namespace DoudizhuTower.Gameplay.Fusion
         private int _biddingDurationTicks = 3000; // 30s × 100 tick/s
         private int _turnDurationTicks = 600;     // 6s × 100 tick/s
 
+        /// <summary>当前阶段起始 Tick（供 UI 层计算剩余时间）</summary>
+        public int StateStartTick => _stateStartTick;
+        /// <summary>叫分阶段总时长 Tick（供 UI 层计算剩余时间）</summary>
+        public int BiddingDurationTicks => _biddingDurationTicks;
+
         // =========================
         // 状态收敛条件
         // =========================
@@ -68,6 +76,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         // AI 节流
         // =========================
         private int _aiTickCounter;
+        private int _tickLogCount;
 
         // =========================
         // 双缓冲单位系统
@@ -82,6 +91,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         private int _nextUnitId = 1;
         private int _currentTick = 0;
         private WorldState _pendingWorld;
+        private DoudizhuTower.Gameplay.Battle.BattleManager _battleManager;
 
         // =========================
         // 叫分输入队列
@@ -131,6 +141,13 @@ namespace DoudizhuTower.Gameplay.Fusion
             _desyncDetector = new DesyncDetector();
             _desyncLogger = new DesyncLogger($"DesyncLog_{gameObject.name}.txt");
 
+            // 查找场景中的 BattleManager（仅 Host 需要）
+            if (HasStateAuthority)
+            {
+                _battleManager = FindFirstObjectByType<DoudizhuTower.Gameplay.Battle.BattleManager>();
+                Debug.Log($"[FusionGameManager] BattleManager 查找结果: {_battleManager != null}");
+            }
+
             // 只有 Host 初始化游戏状态
             if (HasStateAuthority)
             {
@@ -150,7 +167,6 @@ namespace DoudizhuTower.Gameplay.Fusion
         {
             if (!Object.HasStateAuthority) return;
 
-            // Phase 5：slot 分配委托给 LobbyIdentityService
             int slot = -1;
             if (LobbyIdentityService.Instance != null)
             {
@@ -158,7 +174,6 @@ namespace DoudizhuTower.Gameplay.Fusion
             }
             else
             {
-                // 兜底：LobbyIdentityService 未创建时本地分配
                 slot = _nextSlot++;
                 _playerToSlot[player] = slot;
                 _slotToPlayer[slot] = player;
@@ -171,6 +186,16 @@ namespace DoudizhuTower.Gameplay.Fusion
             p.Slot = (byte)slot;
             p.IsAI = 0;
             SetPlayer(ref world, slot, p);
+
+            // 写入 PlayerRef→Slot 映射供 Client 读取
+            byte refByte = (byte)(player.RawEncoded & 0xFF);
+            switch (slot)
+            {
+                case 0: world.Game.Slot0PlayerRef = refByte; break;
+                case 1: world.Game.Slot1PlayerRef = refByte; break;
+                case 2: world.Game.Slot2PlayerRef = refByte; break;
+            }
+
             World = world;
         }
 
@@ -276,13 +301,34 @@ namespace DoudizhuTower.Gameplay.Fusion
         }
 
         /// <summary>
-        /// 获取本机玩家的 slot（Phase 5：委托给 IdentityService）。
+        /// 获取本机玩家的 slot。
+        /// 优先 IdentityService，回退到 WorldState 映射。
         /// </summary>
         public int GetLocalSlot()
         {
-            return IdentityService.Instance != null
-                ? IdentityService.Instance.GetLocalSlot()
-                : -1;
+            // 优先 IdentityService
+            if (IdentityService.Instance != null && IdentityService.Instance.IsReady())
+            {
+                int slot = IdentityService.Instance.GetLocalSlot();
+                if (slot >= 0) return slot;
+            }
+
+            // 回退：Client 从 WorldState 查找非 AI 且非 Host 的槽位
+            if (!HasStateAuthority)
+            {
+                var world = World;
+                for (int i = 0; i < 3; i++)
+                {
+                    var p = GetPlayer(world, i);
+                    if (p.IsAI == 0 && i != 0)
+                        return i;
+                }
+            }
+
+            // Host 始终是 slot 0
+            if (HasStateAuthority) return 0;
+
+            return -1;
         }
 
         /// <summary>
@@ -311,12 +357,13 @@ namespace DoudizhuTower.Gameplay.Fusion
         // =========================
 
         /// <summary>设置叫分输入（UI 调用）</summary>
-        public void SetBidInput(int bidValue)
+        public void SetBidInput(int slot, int bidValue)
         {
-            Debug.Log($"[FusionGameManager] SetBidInput called: bid={bidValue}, Instance={Instance != null}");
+            Debug.Log($"[FusionGameManager] SetBidInput called: slot={slot}, bid={bidValue}");
             _localInput = new FusionPlayerInput
             {
                 Action = 3,
+                Slot = (byte)slot,
                 DataLength = 1,
                 D0 = (byte)bidValue
             };
@@ -375,14 +422,16 @@ namespace DoudizhuTower.Gameplay.Fusion
             _localInput = input;
         }
 
-        /// <summary>供 FusionService.OnInput 调用，读取并清除本机输入缓存</summary>
+        /// <summary>供 FusionService.OnInput 调用，读取本机输入缓存（不清除，由 ReadInputOnce 统一消费）</summary>
         public bool TryGetLocalInput(out FusionPlayerInput input)
         {
             if (_localInput.Action != 0)
             {
                 input = _localInput;
-                Debug.Log($"[FusionGameManager] TryGetLocalInput: Action={input.Action}");
-                _localInput = default;
+                Debug.Log($"[FusionGameManager] TryGetLocalInput: Action={input.Action} Slot={input.Slot}");
+                // Client 端没有 ReadInputOnce 消费，此处清空防重复
+                if (!HasStateAuthority)
+                    _localInput = default;
                 return true;
             }
             input = default;
@@ -392,6 +441,7 @@ namespace DoudizhuTower.Gameplay.Fusion
         private void InitializeGamePhase()
         {
             State = GamePhase.Bidding;
+            _nextState = State;
             OnStateChanged(GamePhase.Lobby, GamePhase.Bidding);
             var world = World;
 
@@ -444,12 +494,26 @@ namespace DoudizhuTower.Gameplay.Fusion
                 world.Game.TurnSlot = 0;
                 world.Game.DeckCount = 54;
 
-                world.Player0 = CreatePlayer(0);
-                world.Player1 = CreatePlayer(1);
-                world.Player2 = CreatePlayer(2);
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    var player = CreatePlayer((byte)slot);
+                    player.IsAI = (byte)(GameSession.AISlots.Contains(slot) ? 1 : 0);
+                    SetPlayer(ref world, slot, player);
+                }
 
-                Debug.LogWarning("[FusionGameManager] 无 GameSession 结果，使用默认值");
+                Debug.LogWarning($"[FusionGameManager] 无 GameSession 结果，使用默认值 ais=[{string.Join(",", GameSession.AISlots)}]");
             }
+
+            // Host 写入自己的 PlayerRef → Slot 映射供 Client 读取
+            if (Runner != null)
+            {
+                byte hostRef = (byte)(Runner.LocalPlayer.RawEncoded & 0xFF);
+                world.Game.Slot0PlayerRef = hostRef;
+                Debug.Log($"[FusionGameManager] Host slot mapping: Slot0=Player_{Runner.LocalPlayer.RawEncoded}");
+            }
+
+            // 释放身份初始化锁
+            world.Game.IdentityReady = 1;
 
             World = world;
         }
@@ -525,6 +589,12 @@ namespace DoudizhuTower.Gameplay.Fusion
             if (!HasStateAuthority) return;
             if (!BeginTick()) return;
 
+            if (_tickLogCount < 2)
+            {
+                Debug.Log($"[Tick] State={State} _nextState={_nextState} Tick={Runner.Tick} Phase={World.Game.Phase}");
+                _tickLogCount++;
+            }
+
             // Phase 1: 输入只读一次
             ReadInputOnce();
 
@@ -565,7 +635,18 @@ namespace DoudizhuTower.Gameplay.Fusion
             if (GetInput(out FusionPlayerInput input))
             {
                 _input = input;
-                Debug.Log($"[FusionGameManager] ReadInput: Action={input.Action} Slot={input.Slot}");
+                _localInput = default;
+                Debug.Log($"[ReadInput] Fusion GetInput: Action={input.Action} Slot={input.Slot}");
+            }
+            else if (_localInput.Action != 0)
+            {
+                _input = _localInput;
+                Debug.Log($"[ReadInput] Fallback _localInput: Action={_localInput.Action} Slot={_localInput.Slot}");
+                _localInput = default;
+            }
+            else
+            {
+                _input = default;
             }
         }
 
@@ -642,7 +723,8 @@ namespace DoudizhuTower.Gameplay.Fusion
                     if (IsBiddingFinished(ref world))
                     {
                         ResolveBidding(ref world);
-                        NextState(GamePhase.Playing);
+                        World = world;
+                        // 不自动推进到 Playing，等 UI 确认按钮触发
                     }
                     break;
                 case GamePhase.Playing:
@@ -667,14 +749,9 @@ namespace DoudizhuTower.Gameplay.Fusion
 
         private bool IsPlayingFinished(ref WorldState world)
         {
-            // 条件：所有玩家手牌为空（简化判定）
-            bool allEmpty = true;
-            for (int i = 0; i < 3; i++)
-            {
-                var p = GetPlayer(world, i);
-                if (p.HandCount > 0) { allEmpty = false; break; }
-            }
-            return allEmpty;
+            // Fusion 版本不主动判定结束
+            // 胜负由 BattleManager.OnGameEnded 驱动
+            return false;
         }
 
         /// <summary>叫分结果判定</summary>
@@ -716,11 +793,15 @@ namespace DoudizhuTower.Gameplay.Fusion
         {
             var world = World;
 
-            // 处理玩家输入
+            // 叫分已结束，跳过处理
+            if (world.Game.IsBiddingFinished == 1) return;
+
+            // 处理本地玩家输入
             if (ConsumeInput(out var input) && input.Action == 3)
             {
                 int slot = input.Slot;
                 int bid = input.DataLength > 0 ? input.D0 : 0;
+                Debug.Log($"[TickBidding] LocalInput slot={slot} bid={bid}");
                 SubmitBid(slot, bid);
             }
 
@@ -759,11 +840,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             ProcessAI();
 
             // 处理出牌队列
-            while (_intentBuffer.HasPlayCard())
-            {
-                var playIntent = _intentBuffer.PopPlayCard();
-                // 执行出牌逻辑
-            }
+            ProcessPlayCards(ref world);
 
             // 处理领域
             ProcessDomain(ref world);
@@ -790,9 +867,8 @@ namespace DoudizhuTower.Gameplay.Fusion
         /// <summary>AI 调用（叫分/战斗分别节流，绑定 State 生命周期）</summary>
         private void ProcessAI()
         {
-            if (_aiSystem == null) return;
+            if (_aiSystem == null) { Debug.LogWarning("[ProcessAI] _aiSystem is null"); return; }
 
-            // 状态切换后等待 20 tick 再启动 AI
             int ticksSinceStateStart = Runner.Tick - _stateStartTick;
             if (ticksSinceStateStart < 20) return;
 
@@ -800,9 +876,9 @@ namespace DoudizhuTower.Gameplay.Fusion
 
             if (State == GamePhase.Bidding)
             {
-                // 叫分 AI：每 120 tick（1.2s）决策一次
                 _aiTickCounter++;
                 if (_aiTickCounter % 120 != 0) return;
+                Debug.Log($"[ProcessAI] Bidding Tick={Runner.Tick} ticksSinceStart={ticksSinceStateStart} counter={_aiTickCounter} CurrentTurn={world.Game.CurrentBidTurn} BidCount={world.Game.BidCount}");
                 _aiSystem.Simulate(world, _unitBuffer, _intentBuffer, _currentTick);
             }
             else if (State == GamePhase.Playing)
@@ -1193,16 +1269,99 @@ namespace DoudizhuTower.Gameplay.Fusion
         // 叫分系统（Step B：唯一状态机入口）
         // =========================
 
+        /// <summary>叫分结果确认后，推进到 Playing 阶段（由 UI 确认按钮调用）</summary>
+        public void ConfirmBidding()
+        {
+            if (State != GamePhase.Bidding) return;
+            var world = World;
+            if (world.Game.IsBiddingFinished != 1) return;
+            GameSession.SetNetworkMode(true);
+            GameSession.SetResultNetwork(world.Game.BidWinnerSlot, world.Game.HighestBid > 0 ? world.Game.HighestBid : 1f);
+            NextState(GamePhase.Playing);
+        }
+
         /// <summary>
-        /// 提交叫分输入（UI / AI 唯一入口）。
-        /// Client → Fusion Input → Host ProcessBidding。
+        /// 提交叫分输入（本地调用）。
         /// </summary>
         public void SubmitBid(int slot, int bid)
         {
             if (State != GamePhase.Bidding) return;
-
             _bidInputs.Enqueue(new BidInput { Slot = slot, Bid = bid });
         }
+
+        /// <summary>
+        /// Client 通过 RPC 向 Host 提交叫分。
+        /// </summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcSubmitBid(int slot, int bid)
+        {
+            Debug.Log($"[RpcSubmitBid] slot={slot} bid={bid} from={Runner.LocalPlayer}");
+            SubmitBid(slot, bid);
+        }
+
+        /// <summary>
+        /// Client 通过 RPC 向 Host 请求摸牌。
+        /// </summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcDrawCard(int slot)
+        {
+            Debug.Log($"[RpcDrawCard] slot={slot}");
+            var world = World;
+            var player = GetPlayer(world, slot);
+            if (player.HandCount >= 20) return;
+            if (world.Game.DeckCount <= 0) return;
+
+            byte newCardId = (byte)((54 - world.Game.DeckCount) % 54);
+            if (!_slotHandCards.TryGetValue(slot, out var handCards))
+            {
+                handCards = new List<byte>();
+                _slotHandCards[slot] = handCards;
+            }
+            handCards.Add(newCardId);
+            player.HandCount = (byte)handCards.Count;
+            SetPlayer(ref world, slot, player);
+            world.Game.DeckCount--;
+            World = world;
+        }
+
+        /// <summary>
+        /// Client 通过 RPC 向 Host 提交出牌。
+        /// </summary>
+        [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+        public void RpcPlayCard(int slot, byte[] cardIndices, int routeIndex, int baseIndex)
+        {
+            Debug.Log($"[RpcPlayCard] slot={slot} cards={cardIndices.Length} route={routeIndex} base={baseIndex}");
+            _intentBuffer.AddPlayCard(slot, cardIndices, routeIndex, baseIndex);
+        }
+
+        // ─── 客户端同步 RPC ───
+
+        private int _syncedDeckCount;
+        private int[] _syncedGold = new int[3];
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        public void RpcSyncDeckCount(int deckCount)
+        {
+            if (HasStateAuthority) return;
+            _syncedDeckCount = deckCount;
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        public void RpcSyncHandCards(int slot, byte[] cardIndices)
+        {
+            if (HasStateAuthority) return;
+            _slotHandCards[slot] = new List<byte>(cardIndices);
+        }
+
+        [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+        public void RpcSyncGold(int slot, int gold)
+        {
+            if (HasStateAuthority) return;
+            if (slot >= 0 && slot < 3) _syncedGold[slot] = gold;
+        }
+
+        public int GetSyncedDeckCount() => _syncedDeckCount;
+        public int GetSyncedGold(int slot) => (slot >= 0 && slot < 3) ? _syncedGold[slot] : 0;
 
         /// <summary>
         /// 提交摸牌请求（UI 唯一入口）。
@@ -1421,6 +1580,42 @@ namespace DoudizhuTower.Gameplay.Fusion
             SetPlayer(ref world, intent.Slot, player);
 
             Debug.Log($"[ProcessPlayCards] slot={intent.Slot} 出牌 {intent.CardDeckIndices.Length} 张, 剩余 {player.HandCount} 张, 金币 {player.Gold}");
+
+            // 连接 BattleManager 生成兵种
+            if (_battleManager != null)
+            {
+                var cards = new DoudizhuTower.Core.Cards.Card[intent.CardDeckIndices.Length];
+                var deck = new DoudizhuTower.Core.Cards.CardDeck(world.Game.Seed);
+                for (int i = 0; i < intent.CardDeckIndices.Length; i++)
+                    cards[i] = deck.GetCardByIndex(intent.CardDeckIndices[i]);
+
+                var result = CardTypeDetector.Detect(cards, 6);
+
+                // 找到该玩家的基地
+                var baseBuildings = FindBaseBuildingsForSlot(intent.Slot);
+                if (baseBuildings != null && baseBuildings.Count > 0)
+                {
+                    var routeGroup = baseBuildings[0].GetComponent<DoudizhuTower.Gameplay.Battle.RouteGroup>();
+                    _battleManager.DeployCards(cards, result, routeGroup, baseBuildings[0]);
+                    Debug.Log($"[ProcessPlayCards] 已调用 BattleManager.DeployCards: {result.Type}");
+                }
+                else
+                {
+                    Debug.LogWarning($"[ProcessPlayCards] slot={intent.Slot} 未找到基地");
+                }
+            }
+        }
+
+        private List<Component> FindBaseBuildingsForSlot(int slot)
+        {
+            var result = new List<Component>();
+            var allBuildings = FindObjectsByType<CardUnit>(FindObjectsSortMode.None);
+            foreach (var cu in allBuildings)
+            {
+                if (cu._isBuilding && cu.OwnerPlayerId == slot)
+                    result.Add(cu);
+            }
+            return result;
         }
 
         /// <summary>
@@ -1431,6 +1626,13 @@ namespace DoudizhuTower.Gameplay.Fusion
             if (_slotHandCards.TryGetValue(slot, out var handCards))
                 return handCards;
             return new List<byte>();
+        }
+
+        public byte[] GetHandCardsArray(int slot)
+        {
+            if (_slotHandCards.TryGetValue(slot, out var handCards))
+                return handCards.ToArray();
+            return null;
         }
 
         /// <summary>

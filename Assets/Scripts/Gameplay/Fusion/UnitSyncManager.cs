@@ -26,7 +26,6 @@ namespace DoudizhuTower.Gameplay.Fusion
 
             if (HasStateAuthority)
             {
-                // Host: 将 _unitBuffer 数据同步到 RPC
                 SyncToClients();
             }
         }
@@ -39,30 +38,24 @@ namespace DoudizhuTower.Gameplay.Fusion
             var buffer = gameManager.GetUnitBuffer();
             if (buffer == null) return;
 
-            // 发送单位数量
             int count = buffer.Count;
             RpcSyncUnitCount(count);
 
-            // 发送每个单位的状态
             for (int i = 0; i < count; i++)
             {
                 var unit = buffer.Get(i);
-                RpcSyncUnitState(unit.UnitId, unit.Owner, unit.PosX, unit.PosY, 
-                    unit.HP, unit.MaxHP, unit.TargetId, unit.State, 
-                    unit.AttackTimer, unit.MoveSpeed, unit.AttackRange, 
-                    unit.IsLandlord, unit.PassiveFlags);
+                RpcSyncUnitState(unit.UnitId, unit.Owner, unit.PosX, unit.PosY,
+                    unit.HP, unit.MaxHP, unit.ATK, unit.AttackSpeed,
+                    unit.AttackTimer, unit.AttackRange,
+                    unit.TargetId, unit.State, unit.MoveSpeed, unit.IsLandlord);
             }
         }
 
-        /// <summary>
-        /// RPC: 同步单位数量
-        /// </summary>
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void RpcSyncUnitCount(int count)
         {
-            if (HasStateAuthority) return; // Host 不需要处理
+            if (HasStateAuthority) return;
 
-            // Client: 确保 _unitBuffer 有正确的数量
             var buffer = gameManager.GetUnitBuffer();
             while (buffer.Count < count)
             {
@@ -70,22 +63,19 @@ namespace DoudizhuTower.Gameplay.Fusion
             }
         }
 
-        /// <summary>
-        /// RPC: 同步单个单位状态
-        /// </summary>
         [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
         private void RpcSyncUnitState(int unitId, int owner, float posX, float posY,
-            int hp, int maxHP, int targetId, byte state, float attackTimer,
-            float moveSpeed, float attackRange, byte isLandlord, byte passiveFlags)
+            int hp, int maxHP, int atk, float attackSpeed,
+            float attackTimer, float attackRange,
+            int targetId, byte state, float moveSpeed, byte isLandlord)
         {
-            if (HasStateAuthority) return; // Host 不需要处理
+            if (HasStateAuthority) return;
 
             var buffer = gameManager.GetUnitBuffer();
             int index = buffer.FindIndex(unitId);
 
             if (index == -1)
             {
-                // 单位不存在，创建新的
                 buffer.Add(new UnitState
                 {
                     UnitId = unitId,
@@ -94,22 +84,24 @@ namespace DoudizhuTower.Gameplay.Fusion
                     PosY = posY,
                     HP = hp,
                     MaxHP = maxHP,
+                    ATK = atk,
+                    AttackSpeed = attackSpeed,
+                    AttackTimer = attackTimer,
+                    AttackRange = attackRange,
                     TargetId = targetId,
                     State = state,
-                    AttackTimer = attackTimer,
                     MoveSpeed = moveSpeed,
-                    AttackRange = attackRange,
-                    IsLandlord = isLandlord,
-                    PassiveFlags = passiveFlags
+                    IsLandlord = isLandlord
                 });
             }
             else
             {
-                // 更新现有单位
                 var unit = buffer.Get(index);
                 unit.PosX = posX;
                 unit.PosY = posY;
                 unit.HP = hp;
+                unit.ATK = atk;
+                unit.AttackSpeed = attackSpeed;
                 unit.TargetId = targetId;
                 unit.State = state;
                 unit.AttackTimer = attackTimer;

@@ -20,7 +20,12 @@ namespace DoudizhuTower.Gameplay.Fusion
         public void PlayCard(byte[] cardDeckIndices, int routeIndex = 0, int baseIndex = 0)
         {
             if (gameManager == null) return;
-            gameManager.SetPlayCardInput(cardDeckIndices, routeIndex, baseIndex);
+            int slot = gameManager.GetLocalSlot();
+            if (slot < 0) slot = 0;
+            if (gameManager.HasStateAuthority)
+                gameManager.SetPlayCardInput(cardDeckIndices, routeIndex, baseIndex);
+            else
+                gameManager.RpcPlayCard(slot, cardDeckIndices, routeIndex, baseIndex);
         }
 
         /// <summary>单张牌出牌</summary>
@@ -33,14 +38,24 @@ namespace DoudizhuTower.Gameplay.Fusion
         public void DrawCard()
         {
             if (gameManager == null) return;
-            gameManager.SetDrawInput();
+            int slot = gameManager.GetLocalSlot();
+            if (slot < 0) slot = 0;
+            if (gameManager.HasStateAuthority)
+                gameManager.SetDrawInput();
+            else
+                gameManager.RpcDrawCard(slot);
         }
 
         /// <summary>叫分操作</summary>
         public void Bid(byte bidValue)
         {
             if (gameManager == null) return;
-            gameManager.SetBidInput(bidValue);
+            int slot = gameManager.GetLocalSlot();
+            if (slot < 0) slot = 0;
+            if (gameManager.HasStateAuthority)
+                gameManager.SetBidInput(slot, bidValue);
+            else
+                gameManager.RpcSubmitBid(slot, bidValue);
         }
 
         /// <summary>领域激活</summary>

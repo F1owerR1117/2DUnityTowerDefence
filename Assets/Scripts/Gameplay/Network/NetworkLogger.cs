@@ -5,7 +5,6 @@ namespace DoudizhuTower.Gameplay.Network
 {
     /// <summary>
     /// 网络日志写入文件。
-    /// 挂载到 NetworkGameManager 同一 GameObject 上。
     /// 日志位置：Application.persistentDataPath/network_log_{slot}.txt
     /// </summary>
     public class NetworkLogger : MonoBehaviour

@@ -10,22 +10,18 @@ namespace DoudizhuTower.Gameplay.Fusion
     {
         private const int DECISION_INTERVAL_TICKS = 240;
         private const int SPAWN_INTERVAL_TICKS = 480;
-        private const int BID_INTERVAL_TICKS = 120;
 
         private int _decisionTickCounter;
         private int _spawnTickCounter;
-        private int _bidTickCounter;
 
         public void Simulate(WorldState world, UnitBuffer units, IntentBuffer intents, int currentTick)
         {
             _decisionTickCounter++;
             _spawnTickCounter++;
-            _bidTickCounter++;
 
-            // 叫分阶段：AI 生成叫分意图
-            if (world.Game.Phase == 0 && _bidTickCounter >= BID_INTERVAL_TICKS)
+            // 叫分阶段：每次 Simulate 调用都尝试决策（节流由 ProcessAI 控制）
+            if (world.Game.Phase == 0)
             {
-                _bidTickCounter = 0;
                 MakeBidDecisions(world, intents);
             }
 
@@ -54,6 +50,7 @@ namespace DoudizhuTower.Gameplay.Fusion
             for (int slot = 0; slot < 3; slot++)
             {
                 var player = GetPlayer(world, slot);
+                Debug.Log($"[AI] slot={slot} IsAI={player.IsAI} Bid={player.Bid} CurrentTurn={world.Game.CurrentBidTurn}");
                 if (player.IsAI == 0) continue;
                 if (player.Bid != 0) continue;
                 if (world.Game.CurrentBidTurn != slot) continue;
