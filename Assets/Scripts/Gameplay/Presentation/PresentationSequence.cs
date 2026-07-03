@@ -4,11 +4,10 @@ using UnityEngine;
 namespace DoudizhuTower.Gameplay.Presentation
 {
     /// <summary>
-    /// 演出序列配置资产（ScriptableObject）。
-    /// 包含镜头、对话、广播、特效的完整演出配置。
+    /// 演出序列配置（MonoBehaviour）。
+    /// 挂在场景中，包含镜头、对话、广播、特效的完整演出配置。
     /// </summary>
-    [CreateAssetMenu(fileName = "PresentationSequence", menuName = "DoudizhuTower/Presentation Sequence")]
-    public class PresentationSequence : ScriptableObject
+    public class PresentationSequence : MonoBehaviour
     {
         [Header("演出控制")]
         [Tooltip("演出期间是否暂停战斗逻辑（AI/索敌/攻击）")]

@@ -1,10 +1,12 @@
 using UnityEngine;
+using DoudizhuTower.Gameplay.Presentation;
 
 namespace DoudizhuTower.UI
 {
     /// <summary>
     /// 摄像机控制。WASD/方向键 + 鼠标边缘滚动移动，
     /// 滚轮缩放 orthographicSize。
+    /// 演出期间由 CameraDirector 接管，本脚本跳过 Update。
     /// </summary>
     public class CameraController : MonoBehaviour
     {
@@ -24,6 +26,7 @@ namespace DoudizhuTower.UI
         public float maxY = 450f;
 
         private Camera _cam;
+        private CameraDirector _director;
 
         private void Awake()
         {
@@ -31,8 +34,16 @@ namespace DoudizhuTower.UI
             if (_cam == null) _cam = Camera.main;
         }
 
+        private void Start()
+        {
+            _director = FindFirstObjectByType<CameraDirector>();
+        }
+
         private void Update()
         {
+            // 演出期间跳过，由 CameraDirector 控制
+            if (_director != null && _director.IsBusy) return;
+
             Vector3 move = Vector3.zero;
 
             // 键盘 WASD / 方向键

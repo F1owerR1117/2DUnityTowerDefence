@@ -8,9 +8,6 @@ using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Core.Economy;
 using DoudizhuTower.Gameplay.Battle;
 using DoudizhuTower.Gameplay.Entities;
-using DoudizhuTower.Gameplay.Fusion;
-using DoudizhuTower.Gameplay.Network;
-using Fusion;
 using DoudizhuTower.UI.Hand;
 using DoudizhuTower.UI.HUD;
 using DoudizhuTower.UI.Battlefield;
@@ -140,6 +137,13 @@ namespace DoudizhuTower.Gameplay.Systems
             int seed = _isNetworkMode ? GameSession.NetworkSeed : System.Environment.TickCount;
             _mainDeck = new CardDeck(seed);
 
+            // 联机模式：核心层初始化由 NetworkGameBootstrapper 接管
+            if (_isNetworkMode)
+            {
+                Debug.Log($"[Bootstrapper] 联机模式，跳过单机初始化步骤，由 NetworkGameBootstrapper 接管");
+                yield break;
+            }
+
             // 启用批量伤害结算：同帧攻击统一结算，消除 Update 执行顺序对战斗结果的影响
             CardUnit.SetBatchDamageEnabled(true);
             bool playerIsLandlord = _playerIsLandlord;
@@ -152,108 +156,23 @@ namespace DoudizhuTower.Gameplay.Systems
             // ── Step 3: 发初始手牌 ──────────────────
             int handCapacity = playerIsLandlord ? 20 : 17;
             var playerHand = new CardHand(handCapacity);
-            if (_isNetworkMode)
-            {
-                // 联机模式：优先从 FusionGameManager 读取，失败则确定性重新发牌
-                var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                int mySlot = gm != null ? gm.GetLocalSlot() : 0;
-                if (mySlot < 0) mySlot = 0;
-
-                bool gotCards = false;
-                if (gm != null)
-                {
-                    var handCards = gm.GetHandCards(mySlot);
-                    if (handCards != null && handCards.Count > 0)
-                    {
-                        foreach (var deckIndex in handCards)
-                        {
-                            var card = _mainDeck.GetCardByIndex(deckIndex);
-                            if (card.DeckIndex >= 0) playerHand.Add(card);
-                        }
-                        gotCards = true;
-                    }
-                }
-
-                // Host 的 _slotHandCards 为空时（Client），用相同 seed 确定性发牌
-                if (!gotCards)
-                {
-                    int landlordSlot = GameSession.LandlordSlot >= 0 ? GameSession.LandlordSlot : 0;
-                    bool isLandlord = (mySlot == landlordSlot);
-                    int capacity = isLandlord ? 20 : 17;
-                    var freshDeck = new DoudizhuTower.Core.Cards.CardDeck(seed);
-                    freshDeck.Deal(mySlot * 7, new DoudizhuTower.Core.Cards.CardHand(capacity));
-                    freshDeck.Deal(7, playerHand);
-                    Debug.Log($"[Bootstrapper] 确定性发牌: slot={mySlot}, count={playerHand.Count}");
-                }
-                else
-                {
-                    Debug.Log($"[Bootstrapper] Fusion 手牌: slot={mySlot}, count={playerHand.Count}");
-                }
-            }
-            else
-            {
-                _mainDeck.Deal(7, playerHand);
-            }
+            _mainDeck.Deal(7, playerHand);
 
             // 为每个 AI 基地创建独立手牌
             var playerBaseRef = GetPlayerBase();
             var aiHands = new Dictionary<Component, CardHand>();
-            if (_isNetworkMode)
+            // 单机模式：非玩家操控的基地 → AI
+            foreach (var baseBldg in baseBuildings)
             {
-                // 联机模式：从 FusionGameManager 读取 AI 手牌，失败则确定性发牌
-                var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                for (int slot = 0; slot < 3; slot++)
+                if (baseBldg == null) continue;
+                var cu = baseBldg.GetComponent<CardUnit>();
+                if (cu == null) continue;
+                bool isPlayerBase = (baseBldg == playerBaseRef);
+                if (!isPlayerBase && baseBldg.GetComponent<BuildingAI>() != null)
                 {
-                    if (slot >= baseBuildings.Length) continue;
-                    var baseBldg = baseBuildings[slot];
-                    if (baseBldg == null) continue;
-
-                    bool isAI = gm != null ? gm.IsAISlot(slot) : !GameSession.AISlots.Contains(slot) == false;
-                    if (!isAI) continue;
-
                     var aiHand = new CardHand(17);
-                    bool gotCards = false;
-
-                    if (gm != null)
-                    {
-                        var handCards = gm.GetHandCards(slot);
-                        if (handCards != null && handCards.Count > 0)
-                        {
-                            foreach (var deckIndex in handCards)
-                            {
-                                var card = _mainDeck.GetCardByIndex(deckIndex);
-                                if (card.DeckIndex >= 0) aiHand.Add(card);
-                            }
-                            gotCards = true;
-                        }
-                    }
-
-                    if (!gotCards)
-                    {
-                        var freshDeck = new DoudizhuTower.Core.Cards.CardDeck(seed);
-                        freshDeck.Deal(slot * 7, new CardHand(17));
-                        freshDeck.Deal(7, aiHand);
-                    }
-
+                    _mainDeck.Deal(7, aiHand);
                     aiHands[baseBldg] = aiHand;
-                    Debug.Log($"[Bootstrapper] Fusion AI 手牌: slot={slot}, count={aiHand.Count}");
-                }
-            }
-            else
-            {
-                // 单机模式：非玩家操控的基地 → AI
-                foreach (var baseBldg in baseBuildings)
-                {
-                    if (baseBldg == null) continue;
-                    var cu = baseBldg.GetComponent<CardUnit>();
-                    if (cu == null) continue;
-                    bool isPlayerBase = (baseBldg == playerBaseRef);
-                    if (!isPlayerBase && baseBldg.GetComponent<BuildingAI>() != null)
-                    {
-                        var aiHand = new CardHand(17);
-                        _mainDeck.Deal(7, aiHand);
-                        aiHands[baseBldg] = aiHand;
-                    }
                 }
             }
 
@@ -310,7 +229,11 @@ namespace DoudizhuTower.Gameplay.Systems
                     if (bossAI != null) bossAI.enabled = true;
 
                     // 演出系统：Event + State 双保险
-                    var bossSequence = Resources.Load<DoudizhuTower.Gameplay.Presentation.PresentationSequence>("Presentation/BossAwaken");
+                    var bossSequence = boss.BossSequence;
+
+                    // 对话气泡：订阅演出管理器事件
+                    var dialogueBubble = boss.GetComponentInChildren<DoudizhuTower.Gameplay.Presentation.BossDialogueBubble>();
+                    if (dialogueBubble != null) dialogueBubble.Initialize();
                     bool bossAwakenedFired = false;
 
                     // Event：监听激活事件（必须在 Inject 之前注册）
@@ -319,6 +242,14 @@ namespace DoudizhuTower.Gameplay.Systems
                         boss.OnBossAwakened += (controller) =>
                         {
                             bossAwakenedFired = true;
+                            // 运行时设置镜头目标为 Boss 自身
+                            if (bossSequence.cameraActions != null)
+                            {
+                                foreach (var cam in bossSequence.cameraActions)
+                                    if (cam.type == DoudizhuTower.Gameplay.Presentation.CameraActionType.FocusTarget
+                                        || cam.type == DoudizhuTower.Gameplay.Presentation.CameraActionType.FollowTarget)
+                                        cam.target = controller.transform;
+                            }
                             Debug.Log($"[Presentation] Event fired at {Time.time:F2}s");
                             DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance?.PlaySequence(bossSequence);
                         };
@@ -330,6 +261,13 @@ namespace DoudizhuTower.Gameplay.Systems
                     // 仅当 Event 未触发时才兜底（避免重复播放）
                     if (boss.IsActive && bossSequence != null && !bossAwakenedFired)
                     {
+                        if (bossSequence.cameraActions != null)
+                        {
+                            foreach (var cam in bossSequence.cameraActions)
+                                if (cam.type == DoudizhuTower.Gameplay.Presentation.CameraActionType.FocusTarget
+                                    || cam.type == DoudizhuTower.Gameplay.Presentation.CameraActionType.FollowTarget)
+                                    cam.target = boss.transform;
+                        }
                         Debug.Log($"[Presentation] State fallback at {Time.time:F2}s");
                         DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance?.PlaySequence(bossSequence);
                     }
@@ -356,8 +294,7 @@ namespace DoudizhuTower.Gameplay.Systems
                 yield break;
             }
 
-            {
-                var playerBase = GetPlayerBase();
+            var playerBase = GetPlayerBase();
                 var playerRouteGroup = playerBase?.GetComponent<RouteGroup>();
                 int maxPlay = playerIsLandlord ? 6 : 5;
                 handArea.Initialize(playerHand, maxPlay, playerRouteGroup);
@@ -369,20 +306,6 @@ namespace DoudizhuTower.Gameplay.Systems
                 _playerIsLandlord = playerIsLandlord;
 
                 // 使用命名方法替代匿名 lambda
-                if (_isNetworkMode)
-                {
-                    // 联机模式：出牌通过 FusionGameManager.IntentBuffer 同步
-                    _onPlayRequestHandler = (cards, result, routeGroup) =>
-                    {
-                        // Fusion 模式：由 FusionGameManager.ProcessPlayCards 处理
-                    };
-                    // 联机模式：弃牌广播到所有客户端（记牌器同步）
-                    handArea.OnCardDiscarded += (card) =>
-                    {
-                        // Fusion 模式：由 EventBuffer 处理
-                    };
-                }
-                else
                 {
                     // 单机模式：直接执行
                     _onPlayRequestHandler = (cards, result, routeGroup) =>
@@ -436,142 +359,105 @@ namespace DoudizhuTower.Gameplay.Systems
                 }
 
                 // ── Step 6b: 焊接传送飞筒 + 暂存槽 ────────
-                if (_isNetworkMode)
+                // 单机模式：查找友方 AI（队友）及其手牌
+                CardHand teammateHand = null;
+                Component teammateBase = null;
+                foreach (var kvp in aiHands)
                 {
-                    // 联机模式：地主隐藏飞筒，农民启用飞筒
-                    if (playerIsLandlord)
+                    var aiCU = kvp.Key.GetComponent<CardUnit>();
+                    bool aiIsLandlord = aiCU != null && aiCU.IsLandlord;
+                    if (aiIsLandlord == playerIsLandlord)
                     {
-                        launchTubeUI?.gameObject.SetActive(false);
-                        tempSlotUI?.gameObject.SetActive(false);
-                        teammateTempSlotUI?.gameObject.SetActive(false);
-                    }
-                    else
-                    {
-                        // 农民：初始化飞筒（网络事件订阅延迟到 Step 11 之后）
-                        if (launchTubeUI != null)
-                        {
-                            launchTubeUI.Initialize(handArea);
-                            launchTubeUI.SetTempSlot(teammateTempSlotUI);
-                        }
-
-                        // 暂存槽：初始化（接收队友的牌）
-                        if (tempSlotUI != null)
-                            tempSlotUI.Initialize(_mainDeck, handArea, playerHand);
-
-                        // 队友暂存槽：联机模式下初始化为可交互（玩家需要从这里取牌）
-                        if (teammateTempSlotUI != null)
-                            teammateTempSlotUI.Initialize(_mainDeck, handArea, playerHand);
-
-                        // 农民：隐藏 LaneArea（联机模式下农民不需要分路选择）
-                        laneArea?.SetActive(false);
-                        handArea?.SetRouteUIVisible(false);
+                        teammateHand = kvp.Value;
+                        teammateBase = kvp.Key;
+                        break;
                     }
                 }
-                else
+
+                // 初始化队友暂存槽并注入到队友 AI
+                if (teammateTempSlotUI != null && teammateHand != null)
                 {
-                    // 单机模式：查找友方 AI（队友）及其手牌
-                    CardHand teammateHand = null;
-                    Component teammateBase = null;
-                    foreach (var kvp in aiHands)
+                    teammateTempSlotUI.Initialize(_mainDeck, null, teammateHand);
+
+                    if (teammateBase != null)
                     {
-                        var aiCU = kvp.Key.GetComponent<CardUnit>();
-                        bool aiIsLandlord = aiCU != null && aiCU.IsLandlord;
-                        if (aiIsLandlord == playerIsLandlord)
-                        {
-                            teammateHand = kvp.Value;
-                            teammateBase = kvp.Key;
-                            break;
-                        }
+                        var teammateAI = teammateBase.GetComponent<BuildingAI>();
+                        if (teammateAI != null)
+                            teammateAI.SetTempSlot(teammateTempSlotUI);
                     }
+                }
 
-                    // 初始化队友暂存槽并注入到队友 AI
-                    if (teammateTempSlotUI != null && teammateHand != null)
+                if (launchTubeUI != null)
+                {
+                    launchTubeUI.Initialize(handArea);
+
+                    // 飞筒检查的是队友暂存槽（有牌时拒绝传送）
+                    if (teammateTempSlotUI != null)
+                        launchTubeUI.SetTempSlot(teammateTempSlotUI);
+
+                    launchTubeUI.OnCardTransmitted += (card) =>
                     {
-                        teammateTempSlotUI.Initialize(_mainDeck, null, teammateHand);
+                        // 从玩家手牌移除
+                        playerHand.Remove(card);
+                        if (cardCounter != null) cardCounter.Refresh();
+                        handArea.NotifyHandChanged();
 
-                        if (teammateBase != null)
-                        {
-                            var teammateAI = teammateBase.GetComponent<BuildingAI>();
-                            if (teammateAI != null)
-                                teammateAI.SetTempSlot(teammateTempSlotUI);
-                        }
-                    }
-
-                    if (launchTubeUI != null)
-                    {
-                        launchTubeUI.Initialize(handArea);
-
-                        // 飞筒检查的是队友暂存槽（有牌时拒绝传送）
+                        // 牌进入队友暂存槽
                         if (teammateTempSlotUI != null)
-                            launchTubeUI.SetTempSlot(teammateTempSlotUI);
-
-                        launchTubeUI.OnCardTransmitted += (card) =>
                         {
-                            // 从玩家手牌移除
-                            playerHand.Remove(card);
-                            if (cardCounter != null) cardCounter.Refresh();
-                            handArea.NotifyHandChanged();
+                            teammateTempSlotUI.ReceiveCard(card);
+                        }
+                        else
+                        {
+                            _mainDeck.Discard(card);
+                        }
+                    };
+                }
 
-                            // 牌进入队友暂存槽
-                            if (teammateTempSlotUI != null)
-                            {
-                                teammateTempSlotUI.ReceiveCard(card);
+                if (tempSlotUI != null)
+                {
+                    tempSlotUI.Initialize(_mainDeck, handArea, playerHand);
 
-                            }
-                            else
-                            {
-                                _mainDeck.Discard(card);
-
-                            }
-                        };
-                    }
-
-                    if (tempSlotUI != null)
+                    // 监听基地摧毁 → 清空暂存槽
+                    if (baseBuildings != null)
                     {
-                        tempSlotUI.Initialize(_mainDeck, handArea, playerHand);
-
-                        // 监听基地摧毁 → 清空暂存槽
-                        if (baseBuildings != null)
+                        foreach (var bldg in baseBuildings)
                         {
-                            foreach (var bldg in baseBuildings)
+                            if (bldg == null) continue;
+                            var cu = bldg.GetComponent<CardUnit>();
+                            if (cu != null && cu._isBuilding)
                             {
-                                if (bldg == null) continue;
-                                var cu = bldg.GetComponent<CardUnit>();
-                                if (cu != null && cu._isBuilding)
+                                bool isPlayerBase = bldg == GetPlayerBase();
+                                bool isTeammateBase = bldg == teammateBase;
+                                cu.OnDestroyed += (_) =>
                                 {
-                                    bool isPlayerBase = bldg == GetPlayerBase();
-                                    bool isTeammateBase = bldg == teammateBase;
-                                    cu.OnDestroyed += (_) =>
+                                    if (isPlayerBase)
                                     {
-                                        if (isPlayerBase)
-                                        {
-                                            tempSlotUI?.Clear();
-                                            if (launchTubeUI != null)
-                                                launchTubeUI.SetLocked(true);
-                                        }
-                                        if (isTeammateBase)
-                                        {
-                                            teammateTempSlotUI?.Clear();
-                                            if (launchTubeUI != null)
-                                                launchTubeUI.SetLocked(true);
-                                        }
-                                    };
-                                }
+                                        tempSlotUI?.Clear();
+                                        if (launchTubeUI != null)
+                                            launchTubeUI.SetLocked(true);
+                                    }
+                                    if (isTeammateBase)
+                                    {
+                                        teammateTempSlotUI?.Clear();
+                                        if (launchTubeUI != null)
+                                            launchTubeUI.SetLocked(true);
+                                    }
+                                };
                             }
                         }
                     }
-
-                    // 根据身份隐藏 UI
-                    if (playerIsLandlord) {
-                        launchTubeUI?.gameObject.SetActive(false);
-                        tempSlotUI?.gameObject.SetActive(false);
-                        teammateTempSlotUI?.gameObject.SetActive(false);
-                    } else {
-                        laneArea?.SetActive(false);
-                        handArea?.SetRouteUIVisible(false);
-                    }
                 }
-            }
+
+                // 根据身份隐藏 UI
+                if (playerIsLandlord) {
+                    launchTubeUI?.gameObject.SetActive(false);
+                    tempSlotUI?.gameObject.SetActive(false);
+                    teammateTempSlotUI?.gameObject.SetActive(false);
+                } else {
+                    laneArea?.SetActive(false);
+                    handArea?.SetRouteUIVisible(false);
+                }
 
             // ── Step 7: 基地血条使用 UnitHealthBar（与兵种共用） ──
 
@@ -581,74 +467,37 @@ namespace DoudizhuTower.Gameplay.Systems
                 float drawCost = playerIsLandlord ? 10f : 12f;
                 float drawInterval = playerIsLandlord ? 5f : 6f;
 
-                if (_isNetworkMode)
+                // 单机模式
+                timerQueue?.ScheduleLoop(drawInterval, () =>
                 {
-                    // 联机模式：摸牌通过 RPC 发送到 Host
-                    // 自动摸牌
-                    timerQueue?.ScheduleLoop(drawInterval, () =>
-                    {
-                        if (playerHand == null || playerHand.IsFull || _mainDeck == null) return;
-                        var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                        if (gm != null)
-                        {
-                            int mySlot = gm.GetLocalSlot();
-                            if (mySlot >= 0) gm.RpcDrawCard(mySlot);
-                        }
-                    });
+                    if (playerHand == null || playerHand.IsFull || _mainDeck == null) return;
+                    var card = _mainDeck.Draw();
+                    playerHand.Add(card);
+                    if (cardCounter != null) cardCounter.Refresh();
+                    handArea?.NotifyHandChanged();
+                    AudioManager.Instance?.PlayDrawCard();
+                });
 
-                    // 手动摸牌按钮
-                    drawButton.onClick.AddListener(() =>
-                    {
-                        if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
-                        var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                        if (gm != null)
-                        {
-                            int mySlot = gm.GetLocalSlot();
-                            if (mySlot >= 0) gm.RpcDrawCard(mySlot);
-                        }
-                    });
-                }
-                else
+                drawButton.onClick.AddListener(() =>
                 {
-                    // 单机模式
-                    timerQueue?.ScheduleLoop(drawInterval, () =>
-                    {
-                        if (playerHand == null || playerHand.IsFull || _mainDeck == null) return;
-                        var card = _mainDeck.Draw();
-                        playerHand.Add(card);
-                        if (cardCounter != null) cardCounter.Refresh();
-                        handArea?.NotifyHandChanged();
-                        AudioManager.Instance?.PlayDrawCard();
-                    });
+                    if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
+                    if (economyManager == null || !economyManager.TrySpendGold(drawCost)) return;
 
-                    drawButton.onClick.AddListener(() =>
-                    {
-                        if (playerHand.IsFull) { handArea?.ShowHandFullFeedback(); return; }
-                        if (economyManager == null || !economyManager.TrySpendGold(drawCost)) return;
-
-                        var card = _mainDeck.Draw();
-                        playerHand.Add(card);
-                        if (cardCounter != null) cardCounter.Refresh();
-                        handArea?.NotifyHandChanged();
-                        AudioManager.Instance?.PlayDrawCard();
-                    });
-                }
+                    var card = _mainDeck.Draw();
+                    playerHand.Add(card);
+                    if (cardCounter != null) cardCounter.Refresh();
+                    handArea?.NotifyHandChanged();
+                    AudioManager.Instance?.PlayDrawCard();
+                });
             }
 
             // ── Step 9: 焊接暂停菜单事件 ────────────
             if (pauseMenu == null) pauseMenu = UIManager.Instance?.PauseMenu;
             if (pauseMenu != null)
             {
-                pauseMenu.SetMultiplayerMode(_isNetworkMode);
-                if (_isNetworkMode)
-                {
-                    pauseMenu.OnQuitRequested += OnQuitToLobby;
-                }
-                else
-                {
-                    pauseMenu.OnRestartRequested += SceneLoader.RestartGame;
-                    pauseMenu.OnQuitRequested += SceneLoader.LoadMainMenu;
-                }
+                pauseMenu.SetMultiplayerMode(false);
+                pauseMenu.OnRestartRequested += SceneLoader.RestartGame;
+                pauseMenu.OnQuitRequested += SceneLoader.LoadMainMenu;
                 _wiredPauseMenu = pauseMenu;
             }
 
@@ -663,19 +512,14 @@ namespace DoudizhuTower.Gameplay.Systems
                     PauseMenu.IsGameOver = true;
                     gameStateMachine?.StopTimer();
                     var stats = CollectVictoryStats();
-                    victoryPanel.Show(playerWon, _isNetworkMode, stats);
+                victoryPanel.Show(playerWon, false, stats);
                     // 保存存档
                     SaveSystem.OnGameEnded(playerWon, stats.goldEarned);
                 };
                 battleManager.OnGameEnded += onGameEnded;
                 _wiredGameEndedHandler = onGameEnded;
 
-                if (_isNetworkMode)
-                {
-                    // 联机模式下也允许返回主菜单
-                    victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
-                }
-                else
+                if (victoryPanel != null)
                 {
                     victoryPanel.OnRestartRequested += SceneLoader.RestartGame;
                     victoryPanel.OnReturnToMenuRequested += SceneLoader.LoadMainMenu;
@@ -732,11 +576,6 @@ namespace DoudizhuTower.Gameplay.Systems
                     }
                     domainSystem.SetCardHands(playerHand, firstEnemyHand);
                 }
-                else
-                {
-                    // 联机模式：领域系统暂不对手牌引用（Phase 2 扩展）
-                    domainSystem.SetCardHands(playerHand, null);
-                }
 
                 // 地主领域按钮 - 点击后标记待激活，出牌后生效
                 if (domainButton != null)
@@ -744,32 +583,15 @@ namespace DoudizhuTower.Gameplay.Systems
                     domainButton.gameObject.SetActive(playerIsLandlord);
                     domainButton.onClick.AddListener(() =>
                     {
-                        if (_isNetworkMode)
+                        if (domainSystem.IsDomainPending)
                         {
-                            // 联机模式：通过 FusionGameManager.ActivateDomain
-                            var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
-                            if (gm != null)
-                            {
-                                int mySlot = gm.GetLocalSlot();
-                                if (mySlot >= 0)
-                                {
-                                    gm.ActivateDomain(mySlot, 1);
-                                    Debug.Log($"[DomainButton] Fusion 领域激活: slot={mySlot}");
-                                }
-                            }
+                            domainSystem.CancelDomainPending();
                         }
                         else
                         {
-                            if (domainSystem.IsDomainPending)
-                            {
-                                domainSystem.CancelDomainPending();
-                            }
-                            else
-                            {
-                                domainSystem.SetDomainPending();
-                                if (!domainSystem.IsDomainPending)
-                                    Debug.LogWarning("[DomainButton] 无法标记领域待激活（可能冷却中或反制护盾生效中）");
-                            }
+                            domainSystem.SetDomainPending();
+                            if (!domainSystem.IsDomainPending)
+                                Debug.LogWarning("[DomainButton] 无法标记领域待激活（可能冷却中或反制护盾生效中）");
                         }
                     });
                 }
@@ -780,14 +602,6 @@ namespace DoudizhuTower.Gameplay.Systems
                 if (domainUIController != null)
                 {
                     domainUIController.Initialize(domainSystem, playerIsLandlord);
-                    // 联机模式：反制按钮走网络同步
-                    if (_isNetworkMode)
-                    {
-                        domainUIController.OnCounterButtonClicked += () =>
-                        {
-                            // Fusion 模式：通过 FusionGameManager 处理
-                        };
-                    }
                 }
                 else
                 {
@@ -795,40 +609,9 @@ namespace DoudizhuTower.Gameplay.Systems
                 }
             }
 
-            // ── Step 11: 联机模式初始化 ──
+            // ── Step 11: 单机模式日志 ──
+            Debug.Log($"[Bootstrapper] 单机模式初始化完成");
 
-            if (_isNetworkMode)
-            {
-                Debug.Log($"[Bootstrapper] Fusion 模式激活: _isNetworkMode={_isNetworkMode}");
-                // FusionGameManager 由 FusionService.Runner.Spawn() 创建
-                var fusionService = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.FusionService>();
-                Debug.Log($"[Bootstrapper] FusionService 查找结果: {fusionService != null}");
-                if (fusionService != null)
-                {
-                    fusionService.SpawnFusionGameManager();
-                }
-                else
-                {
-                    Debug.LogError("[Bootstrapper] FusionService 不存在！");
-                }
-
-                // 添加游戏场景同步组件
-                if (FindFirstObjectByType<DoudizhuTower.Gameplay.Fusion.GameSceneSync>() == null)
-                {
-                    gameObject.AddComponent<DoudizhuTower.Gameplay.Fusion.GameSceneSync>();
-                }
-            }
-            else
-            {
-                Debug.Log($"[Bootstrapper] 单机模式: _isNetworkMode={_isNetworkMode}");
-            }
-
-        }
-
-        private void OnQuitToLobby()
-        {
-            NetworkFacade.LeaveRoom();
-            SceneLoader.LoadOnlineLobby();
         }
 
         private void OnDestroy()
@@ -845,7 +628,6 @@ namespace DoudizhuTower.Gameplay.Systems
             {
                 _wiredPauseMenu.OnRestartRequested -= SceneLoader.RestartGame;
                 _wiredPauseMenu.OnQuitRequested -= SceneLoader.LoadMainMenu;
-                _wiredPauseMenu.OnQuitRequested -= OnQuitToLobby;
                 _wiredPauseMenu = null;
             }
             if (_wiredVictoryPanel != null)
@@ -853,7 +635,6 @@ namespace DoudizhuTower.Gameplay.Systems
                 _wiredVictoryPanel.OnRestartRequested -= SceneLoader.RestartGame;
                 _wiredVictoryPanel.OnReturnToMenuRequested -= SceneLoader.LoadMainMenu;
                 _wiredVictoryPanel.OnNextLevelRequested -= SceneLoader.LoadNextLevel;
-                _wiredVictoryPanel.OnReturnToRoomRequested -= OnQuitToLobby;
                 _wiredVictoryPanel = null;
             }
             if (_wiredGameEndedHandler != null && battleManager != null)
