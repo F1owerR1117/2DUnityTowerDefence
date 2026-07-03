@@ -1,0 +1,22 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e427239fb1e427f44b234fc4c60a6aff, type: 3}
+  m_Name: "\u738B\u70B8"
+  m_EditorClassIdentifier: 
+  Id: 
+  DisplayName: "\u738B\u70B8"
+  Category: 1
+  Icon: {fileID: 0}
+  Description: "\u4E24\u5F20Joker"
+  ExtraInfo: "\u53EC\u5524\u89C9\u9192\u82F1\u96C4\n\u5168\u6E38\u620F\u6700\u5927\u7684\u724C\u578B\n\u6253\u51FA\u540E\u76F4\u63A5\u7834\u89E3\u8981\u4E0D\u8D77\u9886\u57DF/\u53CD\u5236\u62A4\u76FE"
+  Keywords: []
+  RelatedEntries: []

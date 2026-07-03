@@ -13,8 +13,8 @@ MonoBehaviour:
   m_Name: Level_04
   m_EditorClassIdentifier: 
   levelName: "\u6B63\u9762\u4EA4\u950B"
-  description: "BOSS\u62181"
-  difficulty: 1
+  description: "\u7B2C\u56DB\u5173 \u6B63\u9762\u4EA4\u950B\u7B80\u4ECB \nBOSS\u6218"
+  difficulty: 5
   sceneName: Level_4
   thumbnail: {fileID: 5049059679262521404, guid: 752b4da0f46dd4d4fb705b526ea4798a, type: 3}
   isUnlocked: 1

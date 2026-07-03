@@ -358,11 +358,11 @@ Camera:
     y: 0
     width: 1
     height: 1
-  near clip plane: 0.3
+  near clip plane: 0.33
   far clip plane: 472.1
   field of view: 60
   orthographic: 1
-  orthographic size: 180
+  orthographic size: 240
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -387,7 +387,7 @@ Transform:
   m_GameObject: {fileID: 212375605}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 300, y: 274.1, z: -10}
+  m_LocalPosition: {x: 500, y: 250, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -410,10 +410,10 @@ MonoBehaviour:
   zoomSpeed: 30
   minZoom: 180
   maxZoom: 240
-  minX: 300
-  maxX: 900
-  minY: 200
-  maxY: 450
+  minX: 500
+  maxX: 640
+  minY: 230
+  maxY: 370
 --- !u!114 &212375610
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -442,6 +442,14 @@ PrefabInstance:
       propertyPath: _spawnDelay
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: 1189062884531366520, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: _bossSequence
+      value: 
+      objectReference: {fileID: 1579842235}
+    - target: {fileID: 1189062884531366520, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: _onStartDelay
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 1337389511213065079, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: m_Enabled
       value: 0
@@ -455,12 +463,28 @@ PrefabInstance:
       value: Dash
       objectReference: {fileID: 0}
     - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: skills.Array.data[1].effectValue
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: skills.Array.data[1].vfxDuration
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: skills.Array.data[1].effectRadius
-      value: 100
+      value: 200
+      objectReference: {fileID: 0}
+    - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: skills.Array.data[1].skillDialogue
+      value: "\u4F60\u4EEC\u4F1A\u4E3A\u60F9\u6012\u6211\u611F\u5230\u540E\u6094\u3002\u3002"
+      objectReference: {fileID: 0}
+    - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: skills.Array.data[3].skillDialogue
+      value: "\u4F60\u4E0D\u53EF\u80FD\u6218\u80DC\u6211\u3002\u3002"
+      objectReference: {fileID: 0}
+    - target: {fileID: 2350545606296370879, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: typewriterSpeed
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2482168558886913094, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: m_Name
@@ -468,7 +492,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2676149316961884784, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: _hp
-      value: 10000
+      value: 20000
       objectReference: {fileID: 0}
     - target: {fileID: 3645184792156661253, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: m_LocalScale.x
@@ -1086,7 +1110,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 602, y: 301}
+  m_AnchoredPosition: {x: 554.5, y: 301}
   m_SizeDelta: {x: 1920, y: 1080}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!4 &1125210277 stripped
@@ -1505,6 +1529,84 @@ MonoBehaviour:
   timerText: {fileID: 2098583812}
   normalColor: {r: 1, g: 1, b: 1, a: 1}
   suddenDeathColor: {r: 1, g: 0.3, b: 0.3, a: 1}
+--- !u!1 &1579842234
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1579842236}
+  - component: {fileID: 1579842235}
+  m_Layer: 0
+  m_Name: BossAwakenSequence
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1579842235
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1579842234}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8f2bb8e7a3b1c2d4ba2e1863cc68d471, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  pauseBattle: 1
+  allowSkip: 1
+  cameraActions:
+  - type: 0
+    target: {fileID: 913049369}
+    duration: 2
+    delay: 0
+    shakeIntensity: 0
+    zoomSize: 0
+  - type: 1
+    target: {fileID: 913049369}
+    duration: 3
+    delay: 0
+    shakeIntensity: 0
+    zoomSize: 0
+  - type: 2
+    target: {fileID: 913049369}
+    duration: 1
+    delay: 0
+    shakeIntensity: 0
+    zoomSize: 0
+  dialogues:
+  - lines:
+    - speaker: 
+      content: "\u4F60\u7684\u597D\u8FD0\u5230\u6B64\u4E3A\u6B62\u3002"
+      duration: 2
+      waitForClick: 0
+  - lines:
+    - speaker: 
+      content: "\u6211\u5C06\u4E3A\u4F60\u5949\u4E0A\u6B7B\u4EA1\u3002"
+      duration: 2
+      waitForClick: 0
+  announcements: []
+  effects: []
+--- !u!4 &1579842236
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1579842234}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 558.0869, y: 121.7185, z: -2.3916962}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &1625229332 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 7120141481239940928, guid: 989ae938a35155b4fada4bf099cfbe1b, type: 3}
@@ -2019,3 +2121,4 @@ SceneRoots:
   - {fileID: 1028925674}
   - {fileID: 2040002402}
   - {fileID: 1524125680}
+  - {fileID: 1579842236}
