@@ -1604,16 +1604,7 @@ MonoBehaviour:
   dialogues:
   - lines:
     - speaker: 
-      content: "\u560E\u560E\u560E\u560E\u560E\uFF1F"
-      duration: 2
-      waitForClick: 0
-  - lines:
-    - speaker: 
-      content: "\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u2026\u2026"
-      duration: 2
-      waitForClick: 0
-    - speaker: 
-      content: "\u560E\u560E\u560E\u560E\u560E\u560E\u560E\u560E\uFF01\uFF01\uFF01\uFF01\uFF01\uFF01\uFF01\uFF01"
+      content: Noe
       duration: 2
       waitForClick: 0
   announcements: []
