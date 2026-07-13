@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v9.0
+﻿# DoudizhuTower — 架构落地规范 v9.0
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -253,15 +253,7 @@
 | 联机叫分系统 | NetworkBiddingManager（3 人网络轮流叫分 + AI 槽位 + 断线处理）+ BiddingSceneBootstrap（自动切换单机/联机）| UI/Bidding/ |
 | 网络协议层 | NetworkProtocol（事件 Key 常量 + Card/CardTypeResult 序列化 + 玩家槽位工具）| Gameplay/Network/ |
 | 网络接口扩展 | INetworkService 新增：IsInRoom/IsMasterClient/SendToMaster/SendToPlayer/LocalActorNumber/GetPlayerActorNumbers/OnCustomEvent 等 | Gameplay/Network/ |
-| 联机游戏管理器 | FusionGameManager（Tick 状态机 + Host 权威出牌/摸牌/经济/领域） | Gameplay/Fusion/ |
-| 金币同步 | FusionGameManager 通过 WorldState.PlayerX.Gold/IncomeRate 同步，Client 直接读取 | FusionGameManager.cs |
-| 领域同步 | FusionGameManager 通过 WorldState.Game.DomainActive/DomainType 同步领域状态 | FusionGameManager.cs |
-| 摸牌协议 | Client 调用 IntentBuffer.SubmitDrawCard()，Host 执行并更新 WorldState | FusionGameManager.cs |
-| 牌堆同步 | WorldState.Game.DeckCount 记录剩余牌数，Host 递减 | FusionGameManager.cs |
-| 状态版本控制 | Fusion [Networked] 属性自动版本控制，替代旧 StateVersion 机制 | FusionGameState.cs |
-| 网络日志 | DesyncLogger + NetworkDebugPanel 替代旧 Network Trace Log | Gameplay/Network/ |
-| 时间同步 | Fusion Runner.Tick（固定 100 tick/s）替代旧 PhotonNetwork.Time | FusionGameManager.cs |
-| 胜利同步 | WorldState.Game.Phase 同步游戏结束状态 | FusionGameManager.cs |
+| 联机游戏管理器 | ~~NetworkGameManager~~ → FusionGameManager（Tick 状态机 + Host 权威出牌/摸牌/经济/领域） | Gameplay/Fusion/ |
 | 存档系统 | SaveSystem（PlayerPrefs）存储金币/首次胜利/对局统计 | Gameplay/Systems/ |
 | 完胜判定 | 玩家基地满血 → gameStateCoefficient = 1.5 | GameBootstrapper.cs |
 | 叫分配置外置 | BiddingConfig ScriptableObject（叫分时长/AI 策略/超时处理） | Config/ |
@@ -272,7 +264,7 @@
 | 关卡选择系统 | LevelSelectController + LevelCard + LevelConfig（轮播式选择，支持扩展） | UI/LevelSelect/ + Config/ |
 | 联机网络层 | INetworkService + FusionService + NetworkManager（Photon Fusion） | Gameplay/Network/ |
 | 联机大厅 | OnlineLobbyController（单排/创建房间/加入房间/匹配/准备） | UI/Online/ |
-| 联机断线重连 | FusionService（Photon Fusion 内置断线恢复 + NetworkRunner 重连） | Gameplay/Network/ |
+| 联机断线重连 | ~~PhotonService~~ → FusionService（Photon Fusion 内置断线恢复 + NetworkRunner 重连） | Gameplay/Network/ |
 | 召唤师被动 | UnitPassives.enableSummoner（定时召唤 + 击杀召唤，Animation Event 驱动） | UnitPassives.cs |
 | 击杀事件 | CardUnit.OnKillEvent + Summoner 引用 + 击杀归属到召唤师 | CardUnit.cs |
 | 伤害飘字修正 | OnDamageCalculated 事件（含撕裂加成），与 OnTakeDamageEvent 分离 | CardUnit.Combat.cs + FloatingTextPool.cs |
@@ -289,14 +281,24 @@
 | 路线锁定系统 | `RoutePath._locked`/`Unlock()`/`Lock()` + `RouteGroup` 跳过锁定路线 + `GetRoute()`/`SwitchToFirstUnlocked()` | RoutePath.cs + RouteGroup.cs |
 | BOSS 路线解锁 | `BossController.ActivateBoss()` 解锁 `_bossRoute` + `_playerRouteToBoss` | BossController.cs |
 | BuildingAI 路线压力检测 | `ChooseLane()` 根据敌方金币权重 + 玩家路线权重 + 防守需求选择最优路线 | BuildingAI.cs |
-
+| ~~Master 状态同步~~ | ~~每 5s 广播完整游戏状态~~ — PUN 已废弃，Fusion 使用 WorldState [Networked] 自动同步 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~HP 校验与修正~~ | ~~每 5s 校验和对比~~ — PUN 已废弃，Fusion 使用 UnitBuffer 双缓冲 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~Master 迁移处理~~ | ~~OnMasterSwitched 事件~~ — PUN 已废弃，Fusion 使用 Host Migration | ~~PhotonService.cs + NetworkGameManager.cs~~ |
+| ~~飞筒联机同步~~ | ~~CARD_TRANSFER/CARD_ARRIVE/CARD_TAKE 协议~~ — PUN 已废弃，Fusion 使用 IntentBuffer.ProcessTransfers | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~经济同步增强~~ | ~~GOLD_UPDATE 携带 incomeRate~~ — PUN 已废弃，Fusion 使用 WorldState.PlayerX.Gold/IncomeRate | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~网络区域~~ | ~~Photon China SDK~~ — PUN 已废弃，Fusion 使用 Photon Fusion Cloud | ~~PhotonService.cs~~ |
 | 特效缩放统一 | 震波/光环/燃烧/嘲讽特效缩放系数从 `/3f` 改为 `/2f` | UnitVFX.cs |
 | 君王光环特效跟随 | `PlayKingAura` 改用 `Transform` 参数 + `FollowTarget` 组件跟随释放者 | UnitVFX.cs + UnitPassives.cs |
 | 燃烧特效半径 | `PlayBurn` 新增 `radius` 参数，特效缩放匹配实际火海范围 | UnitVFX.cs + UnitPassives.cs |
 | 召唤师攻击中兼容 | 攻击中不打断，直接生成召唤物（`StartSummon` 检查 `IsAttacking`） | UnitPassives.Summon.cs |
 | BOSS 路径缓存修复 | `ActivateBoss` 销毁回调中 `route.CachePositions()`，防止 BOSS 回池后路径点失效 | BattleManager.cs |
 | 伤害分担修复 | `RedistributeDamage` 改用 `SharedDamageOverride` 替代 `ShareRedirected` 跳过，主目标承受 60% + 其他各 20% = 100% | BattleManager.Spawning.cs + CardUnit.Combat.cs |
-
+| ~~牌堆偏移防重复~~ | ~~每个玩家同步牌堆跳过 `slot * 7` 张牌~~ — PUN 已废弃，Fusion 使用 WorldState.DeckCount | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~`_deckId` 不同步修复~~ | ~~手牌验证/移除改用 DeckIndex 比较~~ — PUN 已废弃 | ~~NetworkGameManager.cs~~ → CardHand.cs |
+| ~~经济自动创建~~ | ~~`_slotEconomies` 在 PLAYER_READY 延迟到达时自动创建~~ — PUN 已废弃，Fusion 使用 WorldState.PlayerX | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~客户端金币权威~~ | ~~客户端忽略 Master 对自身金币的覆盖~~ — PUN 已废弃，Fusion 使用 WorldState 同步 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~ReconcileHand 禁用~~ | ~~禁用 Master 状态同步中的手牌校正~~ — PUN 已废弃 | ~~NetworkGameManager.cs~~ |
+| ~~HP 同步改用 UnitId~~ | ~~Master 每 5 秒广播所有单位 HP~~ — PUN 已废弃，Fusion 使用 UnitSyncManager | ~~NetworkGameManager.cs~~ → UnitSyncManager.cs |
 | 联机暂停修复 | 联机模式下 `PauseMenu` 不设置 `Time.timeScale = 0` | PauseMenu.cs |
 | `CardHand.NotifyHandModified` | 公共方法，供网络同步直接操作列表后触发 `OnHandChanged` | CardHand.cs |
 | 网络调试工具 | `NetworkLogger`（日志写入文件）+ `NetworkDebugPanel`（游戏内状态面板） | Gameplay/Network/ |
@@ -328,12 +330,16 @@
 | transform.position 违规修复 | 10 处距离/范围计算改为 `VisualCenter`（英雄被动/三人组/轰炸/溅射/召唤） | BattleManager.Heroes.cs + Spawning.cs + UnitPassives.cs + UnitPassives.Summon.cs |
 | 静态状态跨局清理 | `UnitAudio.ClearClipCounts()` + `DamageQueue.Clear()` 在新局开始时调用，`_shieldWallUnits` 对象池回收注销 | UnitAudio.cs + DamageQueue.cs + UnitPassives.cs + GameBootstrapper.cs |
 | DomainUIController lambda 退订 | `counterCoolDown.OnCoolDownComplete` 匿名 lambda → 存储字段 `_onCounterCoolDownComplete`，OnDestroy 退订 | DomainUIController.cs |
-
+| ~~PLAYER_READY 竞态防护~~ | ~~PUN 特定~~ — Fusion 使用 WorldState.IdentityReady 初始化锁 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~clientGold 金币权威~~ | ~~PUN 特定~~ — Fusion 使用 WorldState.PlayerX.Gold 同步 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~Master 领域封印校验~~ | ~~PUN 特定~~ — Fusion 使用 WorldState.Game.DomainActive/DomainType | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
+| ~~StateVersion 状态版本号~~ | ~~PUN 特定~~ — Fusion 使用 Networked 状态自动版本控制 | ~~NetworkGameManager.cs~~ |
+| ~~Network Trace Log~~ | ~~PUN 特定~~ — Fusion 使用 DesyncLogger + NetworkDebugPanel | ~~NetworkGameManager.cs~~ → DesyncLogger.cs |
 | Master Authority Combat | `SimulatesCombat` 属性控制战斗模拟归属。Client 禁止 OnUpdate/TakeDamage/Die，只做视觉行军。死亡由 Master 广播 UNIT_DIED 驱动 | CardUnit.cs + CardUnit.Combat.cs |
-
+| ~~SimulatesCombat 按单位设置~~ | ~~PUN 特定~~ — Fusion 使用 UnitBuffer 独立管理 | ~~NetworkGameManager.cs~~ → FusionGameManager.cs |
 | 记牌器负值兜底 | `Mathf.Max(0, total - discarded)` 防止联机牌堆不同步时显示负数 | CardCounterUI.cs |
 | 本地联机模拟系统 | `LocalNetworkHub`（消息路由）+ `LocalNetworkService`（INetworkService 本地实现）+ `LocalTestLauncher`（Editor 窗口）。单进程多玩家，零网络延迟 | LocalNetworkHub.cs + LocalNetworkService.cs + LocalTestLauncher.cs |
-
+| ~~摸牌协议分离~~ | ~~PUN 特定~~ — Fusion 使用 IntentBuffer.SubmitDrawCard | ~~NetworkProtocol.cs + NetworkGameManager.cs~~ → FusionGameManager.cs |
 | 叫分槽位转换 | `OnStartGame()` 将大厅位置索引正确转换为 actor-number 排序槽位，AI 槽位 = 全集 {0,1,2} - 真人玩家槽位，修复后加入玩家替代 AI 叫分的 bug | OnlineLobbyController.cs |
 | 叫分槽位同步等待 | `InitializeSlotWhenReady()` 协程等待 Photon PlayerList 同步完成后再计算槽位（最多 3 秒轮询），修复同时进入时所有玩家拿到相同手牌 | NetworkBiddingManager.cs |
 | AI 槽位房间持久化 | AI 槽位通过 Photon 房间属性（`aiSlots`）持久化，后加入玩家从房间属性恢复，修复后加入玩家看不到 AI 的 bug | OnlineLobbyController.cs |
@@ -643,11 +649,18 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 网络连接断开 | `OnConnectionLost()` | INetworkService | OnlineLobbyController |
 | 网络玩家加入 | `OnPlayerJoined(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
 | 网络玩家离开 | `OnPlayerLeft(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
-| 联机金币同步 | WorldState.PlayerX.Gold/IncomeRate | Fusion [Networked] | Client 直接读取 |
-| 联机领域同步 | WorldState.Game.DomainActive/DomainType | Fusion [Networked] | Client 直接读取 |
-| 联机摸牌请求 | IntentBuffer.SubmitDrawCard() | Client → Host | FusionGameManager.ProcessNetworkInput() |
-| HP 同步 | UnitSyncManager（Fusion RPC） | Host → Client | UnitSyncManager.cs |
-
+| ~~联机出牌请求~~ | ~~`RequestPlayCards(cards, result, routeGroup)`~~ | HandArea | ~~NetworkGameManager~~ → FusionGameManager |
+| ~~联机摸牌请求~~ | ~~`RequestDrawCard()`~~ | GameBootstrapper | ~~NetworkGameManager~~ → FusionGameManager |
+| ~~联机金币同步~~ | ~~`BroadcastGoldUpdate(slot, gold)`~~ | EconomyManager | ~~NetworkGameManager~~ → WorldState.PlayerX.Gold |
+| ~~联机领域激活~~ | ~~`RequestDomainActivate(result)`~~ | DomainSystem | ~~NetworkGameManager~~ → FusionGameManager.SubmitDomain |
+| ~~联机反制激活~~ | ~~`RequestCounterActivate(result)`~~ | DomainSystem | ~~NetworkGameManager~~ → FusionGameManager |
+| ~~联机传牌请求~~ | ~~`RequestCardTransfer(card)`~~ | GameBootstrapper | ~~NetworkGameManager~~ → IntentBuffer |
+| ~~联机取牌请求~~ | ~~`RequestCardTake()`~~ | GameBootstrapper | ~~NetworkGameManager~~ → IntentBuffer |
+| ~~飞筒传牌到达~~ | ~~`OnCardArrived(senderSlot, card)`~~ | ~~NetworkGameManager~~ | GameBootstrapper（放入暂存槽） |
+| ~~飞筒取牌完成~~ | ~~`OnCardTaken(takerSlot)`~~ | ~~NetworkGameManager~~ | GameBootstrapper（清空暂存槽） |
+| ~~Master 切换~~ | ~~`OnMasterSwitched()`~~ | INetworkService | ~~NetworkGameManager~~ → Fusion Host Migration |
+| ~~HP 修正~~ | ~~`HP_CORRECTION[unitId, hp, ...]`~~ | ~~NetworkGameManager(Master)~~ | ~~NetworkGameManager(Client)~~ → UnitSyncManager |
+| ~~状态同步~~ | ~~`MASTER_STATE_SYNC[slot, cards, gold, ...]`~~ | ~~NetworkGameManager(Master)~~ | ~~NetworkGameManager(Client)~~ → WorldState [Networked] |
 
 ### 3.2 订阅者生命周期规则
 
@@ -1551,7 +1564,7 @@ Core/ 是纯 C# 且逻辑确定性（Deterministic），联机时只需要服务
 
 ### 13.4 断线重连机制
 
-Fusion 使用 Photon Fusion Cloud 内置的断线恢复机制，NetworkRunner 自动处理重连。
+~~PhotonService 内置应用失焦/暂停时的自动重连~~ → Fusion 使用 Photon Fusion Cloud 内置的断线恢复机制，NetworkRunner 自动处理重连。
 
 **注**：PUN 2 时代的 `DisconnectTimeout=30s` + `ns.photonengine.cn` 配置已不再适用。Fusion 连接由 FusionService.Connect() 管理。
 
@@ -1573,8 +1586,9 @@ Fusion 使用 Photon Fusion Cloud 内置的断线恢复机制，NetworkRunner �
 当 Master 客户端断线时，Photon 自动将 Master 权限转移给其他玩家：
 
 ```
-旧 Master 断线 → Fusion Host Migration（NetworkRunner 自动处理）
-  → 新 Host 继承 WorldState，Client 自动重连
+旧 Master 断线 → ~~Photon.OnMasterClientSwitched(newMaster)~~
+  → Fusion Host Migration（NetworkRunner 自动处理）
+    → 新 Host 继承 WorldState，Client 自动重连
 ```
 
 **状态连续性**：Master 每 5 秒广播完整游戏状态（手牌/经济/牌堆），新 Master 上任后可从最后一次广播恢复。HP 校验和机制确保战斗状态一致。
@@ -1619,14 +1633,28 @@ public static class NetworkProtocol
 | 功能 | 状态 |
 |---|---|
 | 网络抽象层 | ✅ INetworkService 接口（扩展：玩家标识/定向消息/自定义事件） |
-
+| ~~Photon PUN 2 实现~~ | ~~PhotonService~~ → ✅ FusionService（Photon Fusion SDK） |
 | 网络管理器 | ✅ NetworkManager 单例 |
 | 网络协议层 | ✅ NetworkProtocol（事件 Key + Card/CardTypeResult 序列化） |
 | 联机大厅 UI | ✅ OnlineLobbyController（单排/创建房间/加入房间） |
 | 房间系统 | ✅ 创建/加入/离开/准备/AI 槽位/踢人 |
 | 联机叫分 | ✅ NetworkBiddingManager（3 人轮流叫分 + AI 槽位 + 断线处理） |
 | 叫分场景引导 | ✅ BiddingSceneBootstrap（自动检测联机状态 → 切换单机/联机管理器） |
-
+| ~~断线自动重连~~ | ~~PhotonService（超时 30s + 失焦自动重连 + 房间恢复）~~ → Fusion Photon Cloud 内置重连 |
+| ~~联机游戏管理器~~ | ~~NetworkGameManager~~ → ✅ FusionGameManager（Tick 状态机 + WorldState [Networked]） |
+| ~~出牌/兵种同步~~ | ~~NetworkGameManager~~ → ✅ FusionGameManager（Host 权威 + IntentBuffer） |
+| ~~经济同步~~ | ~~NetworkGameManager~~ → ✅ FusionGameManager（WorldState.PlayerX.Gold/IncomeRate） |
+| ~~领域/反制同步~~ | ~~DOMAIN_PENDING/COUNTER_PENDING 广播~~ → ✅ FusionGameManager（WorldState.Game.DomainActive/Type） |
+| ~~时间同步~~ | ~~PhotonNetwork.Time~~ → ✅ Fusion Runner.Tick（固定 100 tick/s） |
+| ~~胜利同步~~ | ~~BroadcastGameEnd~~ → ✅ FusionGameManager（WorldState.Game.Phase） |
+| ~~手牌追踪~~ | ~~Master _slotDecks~~ → ✅ FusionGameManager._slotHandCards（Host 本地维护 + WorldState.HandCount） |
+| ~~断线转 AI~~ | ~~PUN 特定~~ → Fusion 使用 WorldState.PlayerX.IsAI 同步 |
+| ~~飞筒联机~~ | ~~CARD_TRANSFER/ARRIVE/TAKE 协议~~ → ✅ FusionGameManager.ProcessTransfers（IntentBuffer） |
+| ~~Master 状态同步~~ | ~~NetworkGameManager（每 5s 广播）~~ → ✅ WorldState [Networked] 自动同步 |
+| ~~HP 校验与修正~~ | ~~NetworkGameManager（每 5s 校验和）~~ → ✅ UnitSyncManager（Fusion RPC） |
+| ~~Master 迁移~~ | ~~PhotonService.OnMasterSwitched~~ → ✅ Fusion Host Migration |
+| ~~飞筒联机同步~~ | ~~CARD_TRANSFER/ARRIVE/TAKE 协议~~ → ✅ FusionGameManager.ProcessTransfers |
+| ~~经济同步增强~~ | ~~GOLD_UPDATE 携带 incomeRate~~ → ✅ WorldState.PlayerX.IncomeRate |
 
 ### 13.7 联机游戏管理器
 
@@ -2446,13 +2474,16 @@ BOSS 技能施法时间与动画同步机制：
 
 | 债务 | 现状 | 触发偿还条件 |
 |:---|:---|:---|
-
+| ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
+| ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
+| ~~NetworkGameManager 职责过重~~ | **已删除** — PUN NetworkGameManager 已移除，由 FusionGameManager 替代 | ✅ 已偿还 |
 | Authority 未抽象 | `IsMasterClient` 判断分散在 GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
-
+| ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
 | 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2946 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
-
+| ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
+| ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
 | **[ARCH-016] Client 手牌 UI 不同步（P0）** | HandArea 读本地 `playerHand` 引用，不从 WorldState 或 RPC 同步的 `_slotHandCards` 读取 | 联机模式出牌后 Client 手牌不更新 |
 | **[ARCH-017] BattleManager→Fusion 状态机未桥接（P0）** | BattleManager.OnGameEnded 触发但 FusionGameManager 不响应，游戏无法正常结束 | 联机模式游戏永不结束或无结算界面 |
 | **[ARCH-018] Client 经济/领域 UI 未同步（P1）** | _syncedGold 和领域 RPC 存在，但 EconomyManager/DomainUIController 不读取 | 联机模式金币/领域显示错误 |
