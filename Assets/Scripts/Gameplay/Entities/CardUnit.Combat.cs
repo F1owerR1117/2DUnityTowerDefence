@@ -21,7 +21,6 @@ namespace DoudizhuTower.Gameplay.Entities
             {
                 var old = Target;
                 Target = FindNearestEnemy();
-                // target changed
                 return;
             }
 
@@ -232,6 +231,7 @@ namespace DoudizhuTower.Gameplay.Entities
             var bm = BattleManager.Instance;
             if (bm != null && !bm.IsValidCombatTarget(this, target)) return;
 
+            Debug.Log($"[TRY_ATTACK] {name} target={target.name} dist={GetUnitEdgeDistance(target):F1} isLandlord={IsLandlord} targetIsLandlord={target.IsLandlord}");
             _isAttacking = true;
             _attackTarget = target;
             _hitCountDealt = 0;
@@ -323,22 +323,34 @@ namespace DoudizhuTower.Gameplay.Entities
         }
 
         /// <summary>
-        /// 攻击帧伤害逻辑（纯伤害执行，授权由 ExecuteHit 负责）。
-        /// 不再由 Animation Event 触发。
+        /// 攻击帧伤害逻辑（纯伤害执行）。
+        /// 由 Animation Event → AttackEventRelay → OnAttackHitFrame 触发。
         /// </summary>
         public void OnAttackHitFrame()
         {
             if (_isDying) return;
             if (!_isAttacking) return;
 
-            // 门禁：未激活 BOSS 不允许造成伤害（拦截 Animation Event 残留触发）
+            // 门禁：未激活 BOSS 不允许造成伤害
             var boss = GetComponent<BossController>();
             if (boss != null && !boss.IsActive) return;
 
-            // 多目标模式：使用攻击开始时锁定的快照
+            // 多目标模式
             if (_maxTargets > 1)
             {
                 var targets = _attackSnapshotTargets ?? FindAllTargets();
+
+                // 建筑攻击：把 CurrentTarget（建筑）也加入目标列表
+                if (_attackTarget == null && CurrentTarget != null && !CurrentTarget.IsDestroyed)
+                {
+                    var bldgCU = CurrentTarget as CardUnit;
+                    if (bldgCU != null && bldgCU.IsLandlord != IsLandlord && GetEdgeDistance(CurrentTarget) <= Stats.Range)
+                    {
+                        if (targets.Count < _maxTargets)
+                            targets.Add(bldgCU);
+                    }
+                }
+
                 if (targets.Count == 0) { _hitCountDealt++; return; }
 
                 // 一次性计算基础伤害 + 被动加成（人海/冲锋等）
@@ -424,6 +436,7 @@ namespace DoudizhuTower.Gameplay.Entities
         private void UpdateAttackTimeline()
         {
             if (_hitTimes == null || _hitTimes.Length == 0) { _hitTimelineDone = true; return; }
+            if (Stats.HP <= 0f) { InterruptAttack(); return; }
 
             // 门禁：未激活 BOSS 停止 Timeline
             var boss = GetComponent<BossController>();
@@ -453,8 +466,8 @@ namespace DoudizhuTower.Gameplay.Entities
         }
 
         /// <summary>
-        /// 执行单次攻击帧：验证 + 造成伤害。
-        /// 由 UpdateAttackTimeline 调用，不再由 Animation Event 触发。
+        /// 执行单次攻击帧：授权验证。
+        /// 由 UpdateAttackTimeline 调用，伤害由 Animation Event 的 OnAttackHitFrame 触发。
         /// </summary>
         private void ExecuteHit(int hitIndex)
         {
@@ -472,9 +485,6 @@ namespace DoudizhuTower.Gameplay.Entities
                     return;
                 }
             }
-
-            // 委托给 OnAttackHitFrame 执行实际伤害逻辑
-            OnAttackHitFrame();
         }
 
         /// <summary>攻击事件（供外部组件监听，每次攻击触发一次）</summary>
@@ -504,12 +514,6 @@ namespace DoudizhuTower.Gameplay.Entities
             if (!SimulatesCombat) return; // Client 不处理伤害
             if (!IsAlive) return;
             if (Invulnerable) return;
-
-            // [诊断] 伤害来源追踪
-            var src = LastAttacker;
-            var srcBoss = src != null ? src.GetComponent<BossController>() : null;
-            if (srcBoss != null && !srcBoss.IsActive)
-                Debug.LogWarning($"[DAMAGE] target={name} source={src.name} bossActive=false damage={rawDamage} stack={System.Environment.StackTrace}");
 
             // 真实伤害：无视屏障、盾墙减免、伤害减免
             if (type == DamageType.True)

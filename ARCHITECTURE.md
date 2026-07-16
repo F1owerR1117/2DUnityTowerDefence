@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v7.4
+# DoudizhuTower — 架构落地规范 v8.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -120,6 +120,12 @@
 | `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
 | `LocalNetworkService` | 本地联机服务 | Gameplay/Network | INetworkService 本地实现，零网络延迟，用于单进程多玩家测试 |
 | `LocalTestLauncher` | 本地联机测试启动器 | Editor | Editor 窗口（Tools → 本地联机测试），创建多玩家 LocalNetworkService |
+| `GameSnapshot` | Snapshot 层 | Gameplay/Network | 某 Tick 下的完整权威状态（§25），可完全重建游戏，不依赖 Event 历史 |
+| `GameEvent` | Event 层 | Gameplay/Network | 不可变操作记录（§25），append-only，必须携带 Tick，不可直接修改状态 |
+| `CodexUIController` | 图鉴 UI | UI/Codex | 图鉴浏览界面（分类/搜索/详情展示） |
+| `CodexEntry` | 图鉴条目 | Config | ScriptableObject，存储单个图鉴条目（Id/DisplayName/Category/Icon/Description） |
+| `CodexDatabase` | 图鉴数据库 | Config | ScriptableObject，按分类组织 CodexEntry 条目，支持运行时查询 |
+| `UnitDebugToolWindow` | 兵种调试工具 | Editor | Editor 窗口（Tools → 技能可视化 → 综合调试工具），整合属性/被动/音效/特效/动画配置 |
 
 ## 实施状态总览
 
@@ -298,15 +304,13 @@
 | 系统 | 章节 | 说明 |
 |:---|:---|:---|
 | 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
-| 图鉴/索引系统 | — | SaveSystem 图鉴解锁 API 已实现（`UnlockCodexEntry`/`IsCodexEntryUnlocked`），SceneLoader.LoadCodex 已预留，场景/逻辑未完全实现 |
 
 ### P2（增强/可视化）
 
 | 功能 | 章节 | 状态 |
 |:---|:---|:---|
 | 索敌可视化标记 | §3.3(4) | ❌ 未实现 |
-| 被动范围叠加 Gizmos | Editor | ✅ UnitPassivesGizmosOverlay（逻辑范围实线 + VFX 覆盖虚线） |
-| 被动技能调试窗口 | Editor | ✅ UnitPassivesEditorWindow（编辑/运行时参数调整 + 场景预览） |
+| 兵种综合调试工具 | Editor | ✅ UnitDebugToolWindow（整合属性/被动/音效/特效/动画配置 + 批量应用） |
 
 ## 费用与牌值常量参考
 
@@ -428,6 +432,8 @@ Assets/Scripts/
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
 │   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
+│   │   ├── GameSnapshot.cs             # ★ Snapshot 层（某 Tick 下的完整权威状态，可完全重建游戏）
+│   │   ├── GameEvent.cs                # ★ Event 层（不可变操作记录，append-only，必须携带 Tick）
 │   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
 │   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
 │
@@ -454,6 +460,8 @@ Assets/Scripts/
 │   │   └── LevelCard.cs               # ★ 关卡卡片组件（缩略图 + 信息 + 动态缩放）
 │   ├── Online/                         # 联机 UI
 │   │   └── OnlineLobbyController.cs    # ★ 联机大厅（单排/创建房间/加入房间 + 匹配 + 房间管理）
+│   ├── Codex/                          # 图鉴系统
+│   │   └── CodexUIController.cs        # 图鉴 UI 控制器（分类浏览/搜索/详情展示）
 │   ├── Components/
 │   │   ├── CoolDownEffect.cs          # ★ 可复用钟表式冷却视觉（Image.fillAmount Radial 360）
 │   │   └── ButtonEffect.cs            # ★ 按钮悬停放大 + 按压缩小动画
@@ -476,7 +484,9 @@ Assets/Scripts/
 │   ├── BiddingConfig.cs               # ★ 叫分配置（叫分时长/AI 策略/超时处理）
 │   ├── LevelConfig.cs                 # ★ 关卡配置（关卡名称/描述/缩略图/场景名/难度）
 │   ├── UnitStatsConfig.cs             # ★ 兵种数值汇总（CSV 管线中间层，预制体引用+属性）
-│   └── CardSpriteDB.cs                # 卡牌精灵图数据库
+│   ├── CardSpriteDB.cs                # 卡牌精灵图数据库
+│   ├── CodexEntry.cs                  # 图鉴条目 ScriptableObject（Id/DisplayName/Category/Icon/Description）
+│   └── CodexDatabase.cs              # 图鉴数据库 ScriptableObject（按分类组织条目，支持运行时查询）
 │
 └── _DisabledTests/                     # 已禁用的测试目录
     └── CardTypeDetectorTests.cs
@@ -491,12 +501,10 @@ Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线�
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
 ├── ReplaceAllTMPFonts.cs              # 批量替换 TextMeshPro 字体工具
-├── DestroyAllSubMeshUI.cs             # 清理 TMP_SubMeshUI 组件
 ├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
-├── UnitPassivesGizmosOverlay.cs       # ★ 被动范围叠加（Scene View 实线逻辑范围 + 虚线 VFX 覆盖）
-├── UnitPassivesEditorWindow.cs        # ★ 被动技能调试窗口（编辑/运行时参数调整 + 场景预览）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
 ├── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
+├── UnitDebugToolWindow.cs            # ★ 兵种综合调试工具（属性编辑/被动配置/音效预览/批量应用）
 └── LocalTestLauncher.cs              # ★ 本地联机测试启动器（Tools → 本地联机测试，单进程多玩家）
 ```
 
@@ -2343,12 +2351,12 @@ BOSS 技能施法时间与动画同步机制：
 |:---|:---|:---|
 | ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
 | ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
-| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2068 行） | 超过 2500 行或新增观战/回放时拆分 |
+| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2121 行） | 超过 2500 行或新增观战/回放时拆分 |
 | Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager + GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
 | ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
-| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2623 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2331 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
 | ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
 | ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
 
@@ -2515,8 +2523,8 @@ struct DeckState {
 | 当前系统 | v2.0 目标 | 改造要点 |
 |:---|:---|:---|
 | `_stateVersion` | `_tick` | 已完成 ✅ |
-| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **待实现** |
-| `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅ |
+| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），但 NetworkGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
+| `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅（`GameSnapshot.cs` 已独立实现） |
 | `HP_CORRECTION` 独立修正 | 合并入 Snapshot | 已完成 ✅ |
 | `SyncState` 状态机 | 生命周期阶段 | **待升级** |
 

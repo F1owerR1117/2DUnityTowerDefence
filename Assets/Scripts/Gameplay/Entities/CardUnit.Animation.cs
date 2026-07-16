@@ -237,6 +237,9 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         public virtual void OnPoolSpawn()
         {
+            // 0. 重置运行时就绪状态，防止旧对象直接进入战斗
+            _initialized = false;
+
             // 1. 先禁用 Animator，防止 SetActive 时从上次状态恢复
             if (_animator == null) _animator = GetComponentInChildren<Animator>(true);
             if (_animator != null) _animator.enabled = false;
@@ -316,6 +319,7 @@ namespace DoudizhuTower.Gameplay.Entities
             if (passives != null) passives.UnregisterShieldWall();
 
             Target = null;
+            CurrentTarget = null;
             _enemyUnits = null;
             _enemyBuildings = null;
             _isDying = false;

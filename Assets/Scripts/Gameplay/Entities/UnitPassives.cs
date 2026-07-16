@@ -266,11 +266,14 @@ namespace DoudizhuTower.Gameplay.Entities
             if (enableCavalryChase)
                 _owner.OverrideFindTarget = FindCavalryChaseTarget;
 
-            // 冲锋动画状态同步（Animator 已就绪）+ 高度覆盖恢复
+            // 冲锋动画状态同步 + 重置冲锋状态（对象池复用时必须重新激活）
             if (enableCharge)
             {
-                _owner.SetAnimBool("Charge", _isCharged);
-                if (_isCharged && chargeHeightOverride != 0)
+                _isCharged = true;
+                _originalSpeed = _owner.Stats.MoveSpeed;
+                ApplyChargeSpeed(true);
+                _owner.SetAnimBool("Charge", true);
+                if (chargeHeightOverride != 0)
                     _owner.SetHeightOverride(chargeHeightOverride, chargeBlockableByHeight);
             }
 

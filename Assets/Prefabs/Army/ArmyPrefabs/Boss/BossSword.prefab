@@ -728,7 +728,7 @@ MonoBehaviour:
     vfxDuration: 0
     sfxClip: {fileID: 8300000, guid: e06de280faa9fd44b8959a72e566d2e4, type: 3}
     sfxVolume: 0.7
-  - skillName: Stun
+  - skillName: WhirlWind
     trigger: 0
     hpThreshold: 0.5
     cooldown: 5
@@ -737,11 +737,11 @@ MonoBehaviour:
     invulnerable: 1
     clearCC: 1
     animTrigger: BossSkill1
-    effectType: 1
+    effectType: 0
     effectValue: 3
     effectRadius: 100
-    dashDistance: 50
-    dashSpeed: 100
+    dashDistance: 0
+    dashSpeed: 0
     effectDelay: 3
     vfxPrefab: {fileID: 5780880201447165769, guid: 1dd9b5b09e3870e4d9b7932095a1eb98, type: 3}
     vfxDuration: 1

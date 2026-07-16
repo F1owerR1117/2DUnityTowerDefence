@@ -105,6 +105,9 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void Update()
         {
+            // 联机模式：AI 只在 Master 运行（Client 通过网络事件接收 AI 行为）
+            if (_networkGameManager != null && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient) return;
+
             if (Hand == null || Hand.Count == 0 || Economy == null)
             {
                 if (!_initLogged)
@@ -128,7 +131,7 @@ namespace DoudizhuTower.Gameplay.Battle
                         {
                             var card = _deck.Draw();
                             Hand.Add(card);
-
+                            _networkGameManager?.BroadcastAIDraw(_slotIndex, card);
                         }
                     }
                 }
@@ -144,6 +147,8 @@ namespace DoudizhuTower.Gameplay.Battle
                 {
                     var card = _deck.Draw();
                     Hand.Add(card);
+                    // 广播 AI 摸牌给 Client
+                    _networkGameManager?.BroadcastAIDraw(_slotIndex, card);
                 }
             }
 
@@ -158,6 +163,7 @@ namespace DoudizhuTower.Gameplay.Battle
                     if (held.HasValue)
                     {
                         Hand.Add(held.Value);
+                        _networkGameManager?.BroadcastAIDraw(_slotIndex, held.Value);
                         _tempSlot.Clear();
                     }
                 }
@@ -402,7 +408,7 @@ namespace DoudizhuTower.Gameplay.Battle
             foreach (var entry in playable)
             {
                 // v2.0: 仅 Master 端执行金币消耗（联机模式由 NetworkGameManager 驱动）
-                if (_networkGameManager != null && NetworkManager.Instance != null && NetworkManager.Instance.Service != null && !NetworkManager.Instance.Service.IsMasterClient) continue;
+                if (_networkGameManager != null && NetworkFacade.IsInRoom && !NetworkFacade.IsMasterClient) continue;
                 if (Economy.TrySpend(entry.cost))
                 {
                     Hand.RemoveRange(entry.cards);

@@ -327,8 +327,13 @@ namespace DoudizhuTower.Gameplay.Battle
 
         // ─── 主循环 ───────────────────────────────────
 
+        /// <summary>演出期间暂停战斗逻辑（AI/索敌/攻击决策）</summary>
+        public bool IsPresentationActive { get; set; }
+
         private void Update()
         {
+            if (IsPresentationActive) return;
+
             foreach (var unit in _allUnits)
                 if (unit != null && unit.IsAlive)
                 {
@@ -410,6 +415,26 @@ namespace DoudizhuTower.Gameplay.Battle
             return _allBuildingTargets
                 .Where(i => i != null && IsFriendlyInstallation(i, playerIsLandlord))
                 .All(i => i.IsDestroyed);
+        }
+
+        private void OnEnable()
+        {
+            GameSession.OnRuntimeReset += ResetRuntime;
+        }
+
+        private void OnDisable()
+        {
+            GameSession.OnRuntimeReset -= ResetRuntime;
+        }
+
+        private void ResetRuntime()
+        {
+            _allUnits.Clear();
+            _unitById.Clear();
+            _allBuildingTargets = null;
+            _activeBosses.Clear();
+            _pendingDeaths.Clear();
+            _globalUnitId = 0;
         }
     }
 }

@@ -283,12 +283,17 @@ namespace DoudizhuTower.Gameplay.Battle
 
             unit.SourceCardType = cardType;
 
+            Debug.Log($"[SPAWN] {unit.name} isLandlord={isLandlord} pos={spawnPos} lane={lane}");
+
             RegisterUnit(unit);
             var rg = sourceBase.GetComponent<RouteGroup>();
             unit.FollowPath = rg?.CurrentRoute;
             SnapToPathStart(unit);
             unit.OnDied -= OnUnitDied; unit.OnDied += OnUnitDied;
-            unit.SetEnemyUnits(GetEnemiesFor(unit));
+            var enemies = GetEnemiesFor(unit);
+            unit.SetEnemyUnits(enemies);
+            unit.SetEnemyBuildings(_allBuildingTargets);
+            Debug.Log($"[INIT] {unit.name} landlord={isLandlord} enemyCount={enemies.Count} route={unit.FollowPath?.name} pos={spawnPos}");
 
             if (_enableTyrantAura && isLandlord)
             {
