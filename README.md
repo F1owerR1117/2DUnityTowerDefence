@@ -7,7 +7,7 @@
 - **引擎**: Unity 2023.2.20f1c1
 - **语言**: C#
 - **分辨率**: 1920 x 1080
-- **架构文档**: `ARCHITECTURE.md`（v7.4）
+- **架构文档**: `ARCHITECTURE.md`（v9.1）
 
 ---
 
@@ -19,7 +19,7 @@
 
 ### 2. 联机配置
 
-项目使用 Photon PUN 2 进行联机。需要自行注册 App ID：
+项目使用 Photon Fusion 2 进行联机。需要自行注册 App ID：
 
 1. 复制 `Assets/Photon/PhotonUnityNetworking/Resources/PhotonServerSettings.asset.example`
 2. 重命名为 `PhotonServerSettings.asset`
@@ -104,7 +104,8 @@ Assets/
 │   ├── Gameplay/            # 运行时管理层
 │   │   ├── Battle/          # BattleManager, BossController, DomainSystem, SpawnPool
 │   │   ├── Entities/        # CardUnit, UnitPassives, Projectile, BossSkillSystem
-│   │   ├── Network/         # NetworkGameManager, PhotonService
+│   │   ├── Network/         # FusionService, NetworkManager, NetworkFacade
+    │   │   ├── Fusion/          # FusionGameManager, CombatSystem, PassiveSystem, IntentBuffer
 │   │   └── Systems/         # GameBootstrapper, GameStateMachine, SaveSystem
 │   └── UI/                  # 界面层
 │       ├── Battlefield/     # DomainUIController, LaunchTubeUI, TempSlotUI
@@ -127,7 +128,8 @@ Assets/
 | `CardUnit.Combat` | AttackTimeline + ExecuteHit + OnAttackHitFrame |
 | `BossController` | BOSS 生命周期 + IsActive 门禁 |
 | `BossSkillSystem` | BOSS 技能（门禁过滤 + 特效缩放） |
-| `NetworkGameManager` | 联机游戏管理器（Master 权威同步） |
+| `FusionGameManager` | Fusion 联机游戏管理器（Tick 状态机 + Host 权威同步） |
+| `FusionService` | Fusion 网络服务（Runner 生命周期 + 房间管理） |
 | `GameBootstrapper` | 自底向上初始化管线 |
 | `UnitPassives` | 16 种通用被动技能 |
 | `DomainSystem` | 要不起领域 + 反制护盾状态机 |
@@ -157,6 +159,13 @@ Assets/
 ---
 
 ## 最近更新
+
+### 2026-07-17
+
+- **Fusion Runner 生命周期修复**: 移除 `Destroy(_runner)`，改为 `Shutdown()` 复用 Runner，消除每帧 "runner should not" 警告
+- **叫分轮次校验**: `SubmitBid`/`ApplyBid`/`OnBid` 添加 `CurrentBidTurn` 校验，防止所有玩家同时叫分
+- **Slot 分配修复**: Client 回退逻辑改为匹配 `SlotXPlayerRef`，修复多客户端 slot 冲突
+- **ARCHITECTURE.md v9.1**
 
 ### 2026-06-17
 

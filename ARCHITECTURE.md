@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v9.0
+# DoudizhuTower — 架构落地规范 v9.1
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -138,7 +138,7 @@
 | `LevelSelectController` | 关卡选择控制器 | UI/LevelSelect | 轮播式关卡选择（中心最大，两侧缩小，拖拽滑动 + 吸附） |
 | `FollowTarget` | 特效跟随组件 | Gameplay/Entities | 使 VFX 特效跟随目标 Transform 移动（君王光环/嘲讽光环） |
 | `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API + `OnMasterSwitched` 事件 |
-| `FusionService` | Fusion 实现 | Gameplay/Network | 基于 Photon Fusion 的 INetworkService 实现（Runner 管理 + TLS 修复 + 房间创建/加入） |
+| `FusionService` | Fusion 实现 | Gameplay/Network | 基于 Photon Fusion 的 INetworkService 实现（Runner 生命周期管理 + TLS 修复 + 房间创建/加入，`ShutdownRunner()` 不销毁 Runner 以便复用） |
 | `NetworkManager` | 网络管理器 | Gameplay/Network | 单例，持有 INetworkService 引用，DontDestroyOnLoad |
 | `OnlineLobbyController` | 联机大厅控制器 | UI/Online | 联机模式选择（单排/创建房间/加入房间）+ 房间管理 |
 | `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 通过 INetworkService 抽象层通信，支持 Fusion 和本地联机 |
@@ -354,6 +354,9 @@
 | **出牌执行连接** | ApplyPlayCards 连接 BattleManager.DeployCards 生成兵种 | FusionGameManager.cs |
 | **Client 状态同步** | GameSceneSync 每 0.5s 广播牌堆/手牌/金币，RPC 同步到 Client 本地缓存 | GameSceneSync.cs + FusionGameManager.cs |
 | **单机/联机拆分** | NetworkGameBootstrapper 接管联机游戏场景初始化（手牌/摸牌/领域/暂停/胜利面板），GameBootstrapper 移除所有 Fusion 引用 | NetworkGameBootstrapper.cs + GameBootstrapper.cs |
+| **Fusion Runner 生命周期修复** | `ShutdownRunner()` 替代 `Destroy(_runner)`，保留 Runner 组件复用，消除 Fusion 回调循环中的已销毁引用警告 | FusionService.cs |
+| **叫分轮次校验** | `SubmitBid`/`ApplyBid`/`OnBid` 三层校验 `CurrentBidTurn == slot`，防止非轮次叫分 | FusionGameManager.cs + NetworkBiddingManager.cs |
+| **Client Slot 分配修复** | `GetLocalSlot()` Client 回退改为匹配 `SlotXPlayerRef`，替代盲目取第一个非 AI 槽位 | FusionGameManager.cs |
 
 ### P1（仍需实现）
 
