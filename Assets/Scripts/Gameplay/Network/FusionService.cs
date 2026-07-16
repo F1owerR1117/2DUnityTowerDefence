@@ -79,33 +79,25 @@ namespace DoudizhuTower.Gameplay.Network
         {
             if (this == null || gameObject == null) return;
 
-            // 检查 GameObject 上是否已有 NetworkRunner 组件
-            var existingRunner = gameObject.GetComponent<NetworkRunner>();
-            if (existingRunner != null)
-            {
-                if (_runner == null)
-                {
-                    // 复用已存在的 Runner
-                    _runner = existingRunner;
-                    Debug.Log("[Fusion] 复用已存在的 Runner");
-                }
-                else
-                {
-                    Debug.Log("[Fusion] Runner 已存在且运行中，跳过创建");
-                    return;
-                }
-            }
-            else
+            // 复用已有 Runner，或创建新 Runner
+            if (_runner == null)
             {
                 _runner = gameObject.AddComponent<NetworkRunner>();
                 Debug.Log("[Fusion] 创建新 Runner");
             }
 
             _runner.ProvideInput = true;
+
+            // 只注册一次回调，防止重复注册
+            _runner.RemoveCallbacks(this);
             _runner.AddCallbacks(this);
-            _isConnected = true;
-            Debug.Log($"[Fusion] Runner 就绪: ProvideInput={_runner.ProvideInput}");
-            OnServerConnected?.Invoke();
+
+            if (!_isConnected)
+            {
+                _isConnected = true;
+                Debug.Log($"[Fusion] Runner 就绪: ProvideInput={_runner.ProvideInput}");
+                OnServerConnected?.Invoke();
+            }
         }
 
         /// <summary>
@@ -164,13 +156,7 @@ namespace DoudizhuTower.Gameplay.Network
 
         public void Disconnect()
         {
-            if (_runner != null)
-            {
-                _runner.RemoveCallbacks(this);
-                _runner.Shutdown();
-                Destroy(_runner);
-                _runner = null;
-            }
+            ShutdownRunner();
             _isConnected = false;
             _isInRoom = false;
             _isMaster = false;
@@ -178,14 +164,34 @@ namespace DoudizhuTower.Gameplay.Network
             LocalPlayer = default;
         }
 
+        /// <summary>
+        /// 安全关闭 Runner。
+        /// 不调用 Destroy —— Destroy 会使 Runner 组件被标记销毁，
+        /// 但 Fusion 内部的回调循环仍持有引用，导致每帧 "runner should not" 警告。
+        /// 只调用 Shutdown() 让 Runner 回到可复用状态。
+        /// </summary>
+        private void ShutdownRunner()
+        {
+            if (_runner != null)
+            {
+                _runner.RemoveCallbacks(this);
+                if (_runner.IsRunning)
+                {
+                    _runner.Shutdown();
+                }
+                // 不调用 Destroy(_runner) —— 保留 Runner 组件以便复用
+                _runner = null;
+            }
+        }
+
         public bool IsConnected => _isConnected;
 
         public async void CreateRoom(string roomCode, int maxPlayers)
         {
-            if (this == null || gameObject == null) return;  // 对象已销毁
+            if (this == null || gameObject == null) return;
             Debug.Log($"[Fusion] CreateRoom 开始: roomCode={roomCode}, runner={_runner != null}");
             if (_runner == null) Connect();
-            if (this == null || gameObject == null) return;  // Connect 后再次检查
+            if (this == null || gameObject == null) return;
 
             try
             {
@@ -226,10 +232,10 @@ namespace DoudizhuTower.Gameplay.Network
 
         public async void JoinRoom(string roomCode)
         {
-            if (this == null || gameObject == null) return;  // 对象已销毁
+            if (this == null || gameObject == null) return;
             Debug.Log($"[Fusion] JoinRoom 开始: roomCode={roomCode}, runner={_runner != null}");
             if (_runner == null) Connect();
-            if (this == null || gameObject == null) return;  // Connect 后再次检查
+            if (this == null || gameObject == null) return;
 
             try
             {
@@ -300,11 +306,6 @@ namespace DoudizhuTower.Gameplay.Network
             catch (System.Exception ex)
             {
                 Debug.LogError($"[Fusion] JoinRandomRoom 异常: {ex.Message}\n{ex.StackTrace}");
-                if (_runner != null)
-                {
-                    await _runner.Shutdown();
-                    _runner = null;
-                }
             }
         }
 
@@ -335,13 +336,7 @@ namespace DoudizhuTower.Gameplay.Network
 
         public void LeaveRoom()
         {
-            if (_runner != null)
-            {
-                _runner.RemoveCallbacks(this);
-                _runner.Shutdown();
-                Destroy(_runner);
-                _runner = null;
-            }
+            ShutdownRunner();
             _isInRoom = false;
             _isMaster = false;
             _currentRoomName = null;

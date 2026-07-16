@@ -475,12 +475,20 @@ PrefabInstance:
       value: 200
       objectReference: {fileID: 0}
     - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: skills.Array.data[0].skillDialogue
+      value: "\u51B2\u523A"
+      objectReference: {fileID: 0}
+    - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: skills.Array.data[1].skillDialogue
-      value: "\u4F60\u4EEC\u4F1A\u4E3A\u60F9\u6012\u6211\u611F\u5230\u540E\u6094\u3002\u3002"
+      value: "\u6124\u6012"
+      objectReference: {fileID: 0}
+    - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
+      propertyPath: skills.Array.data[2].skillDialogue
+      value: "\u52A0\u5F3A\u51B2\u523A"
       objectReference: {fileID: 0}
     - target: {fileID: 2325837201779083266, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: skills.Array.data[3].skillDialogue
-      value: "\u4F60\u4E0D\u53EF\u80FD\u6218\u80DC\u6211\u3002\u3002"
+      value: "\u65CB\u98CE\u65A9"
       objectReference: {fileID: 0}
     - target: {fileID: 2350545606296370879, guid: 23c3705fb71adb04b9c2dda5997b7370, type: 3}
       propertyPath: typewriterSpeed
@@ -1582,12 +1590,7 @@ MonoBehaviour:
   dialogues:
   - lines:
     - speaker: 
-      content: "\u4F60\u7684\u597D\u8FD0\u5230\u6B64\u4E3A\u6B62\u3002"
-      duration: 2
-      waitForClick: 0
-  - lines:
-    - speaker: 
-      content: "\u6211\u5C06\u4E3A\u4F60\u5949\u4E0A\u6B7B\u4EA1\u3002"
+      content: "\u6218\u6597"
       duration: 2
       waitForClick: 0
   announcements: []

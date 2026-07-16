@@ -313,16 +313,14 @@ namespace DoudizhuTower.Gameplay.Fusion
                 if (slot >= 0) return slot;
             }
 
-            // 回退：Client 从 WorldState 查找非 AI 且非 Host 的槽位
-            if (!HasStateAuthority)
+            // 回退：Client 通过 WorldState 中的 PlayerRef 映射查找自己的 slot
+            if (!HasStateAuthority && Runner != null)
             {
                 var world = World;
-                for (int i = 0; i < 3; i++)
-                {
-                    var p = GetPlayer(world, i);
-                    if (p.IsAI == 0 && i != 0)
-                        return i;
-                }
+                byte myRef = (byte)(Runner.LocalPlayer.RawEncoded & 0xFF);
+                if (world.Game.Slot0PlayerRef == myRef) return 0;
+                if (world.Game.Slot1PlayerRef == myRef) return 1;
+                if (world.Game.Slot2PlayerRef == myRef) return 2;
             }
 
             // Host 始终是 slot 0
@@ -1286,6 +1284,8 @@ namespace DoudizhuTower.Gameplay.Fusion
         public void SubmitBid(int slot, int bid)
         {
             if (State != GamePhase.Bidding) return;
+            var world = World;
+            if (slot != world.Game.CurrentBidTurn) return;
             _bidInputs.Enqueue(new BidInput { Slot = slot, Bid = bid });
         }
 
@@ -1441,6 +1441,9 @@ namespace DoudizhuTower.Gameplay.Fusion
         {
             // 防御：非叫分阶段禁止执行
             if (world.Game.Phase != 0) return;
+
+            // 轮次校验：只能在自己的回合叫分
+            if (slot != world.Game.CurrentBidTurn) return;
 
             var player = GetPlayer(world, slot);
 

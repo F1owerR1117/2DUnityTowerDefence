@@ -324,6 +324,9 @@ namespace DoudizhuTower.UI.Bidding
                 int mySlot = gm.IsLocalSlotReady ? gm.GetLocalSlot() : -1;
                 if (mySlot < 0) mySlot = _mySlot >= 0 ? _mySlot : 0;
 
+                // 轮次校验：不是自己的回合则拒绝
+                if (gm.World.Game.CurrentBidTurn != mySlot) return;
+
                 if (gm.HasStateAuthority)
                 {
                     // Host 直接提交
