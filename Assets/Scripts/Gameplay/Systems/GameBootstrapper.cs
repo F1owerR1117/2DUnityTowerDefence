@@ -146,7 +146,7 @@ namespace DoudizhuTower.Gameplay.Systems
             if (_isNetworkMode)
             {
                 Debug.Log($"[Bootstrapper] 联机模式，激活 NetworkGameBootstrapper 接管");
-                var networkBootstrapper = FindFirstObjectByType<DoudizhuTower.Gameplay.Fusion.NetworkGameBootstrapper>();
+                var networkBootstrapper = FindFirstObjectByType<DoudizhuTower.Gameplay.Fusion.NetworkGameBootstrapper>(FindObjectsInactive.Include);
                 if (networkBootstrapper != null)
                 {
                     networkBootstrapper.gameObject.SetActive(true);
