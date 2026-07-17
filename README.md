@@ -165,7 +165,14 @@ Assets/
 - **Fusion Runner 生命周期修复**: 移除 `Destroy(_runner)`，改为 `Shutdown()` 复用 Runner，消除每帧 "runner should not" 警告
 - **叫分轮次校验**: `SubmitBid`/`ApplyBid`/`OnBid` 添加 `CurrentBidTurn` 校验，防止所有玩家同时叫分
 - **Slot 分配修复**: Client 回退逻辑改为匹配 `SlotXPlayerRef`，修复多客户端 slot 冲突
+- **Slot 排序一致性**: `GetPlayerNames` 按 RawEncoded 排序，Host/Client 显示一致
+- **叫分 Timer 同步**: `StateStartTick` 新增 `[Networked]` 字段，Client 倒计时与 Host 同步
+- **3 位真人玩家 slot 分配**: `AssignExistingPlayerSlots()` 补执行 Lobby 阶段遗漏的 slot 分配
+- **BuildingAI 联机模式保留**: `GameBootstrapper.Awake()` 联机模式跳过禁用，非 BOSS 建筑可正常出兵
+- **NetworkGameBootstrapper 注入**: 补充 BattleManager/BuildingAI/演出系统依赖注入
+- **BidDisplay 日志优化**: 仅在文本变化时输出，消除每帧刷屏
 - **商店系统设计**: 英雄解锁 + 皮肤外观（待实现）
+- **架构债务登记**: ARCH-021~023 联机模式系统性问题
 - **ARCHITECTURE.md v9.2**
 
 ### 2026-06-17
