@@ -254,8 +254,11 @@ namespace DoudizhuTower.UI.Bidding
                     if (bidText != null)
                     {
                         string display = player.Bid > 0 ? $"{player.Bid} 分" : "不叫";
-                        bidText.text = display;
-                        Debug.Log($"[BidDisplay] slot={slot} IsAI={player.IsAI} Bid={player.Bid} → {display}");
+                        if (bidText.text != display)
+                        {
+                            bidText.text = display;
+                            Debug.Log($"[BidDisplay] slot={slot} IsAI={player.IsAI} Bid={player.Bid} → {display}");
+                        }
                     }
                 }
 
