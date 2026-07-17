@@ -291,18 +291,15 @@ namespace DoudizhuTower.UI.Online
                 if (text != null) text.text = _isReady ? "取消准备" : "准备";
             }
 
-            bool allReady = _net.AreAllPlayersReady;
             if (startGameButton != null)
-                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3 && allReady;
+                startGameButton.interactable = _net.IsMasterClient && totalCount >= 3;
 
             if (roomStatusText != null)
             {
                 if (totalCount < 3)
                     roomStatusText.text = $"等待玩家加入... ({totalCount}/3)";
-                else if (!allReady)
-                    roomStatusText.text = $"等待所有玩家准备... ({totalCount}/3)";
                 else
-                    roomStatusText.text = "所有人已就绪，可以开始";
+                    roomStatusText.text = "可以开始游戏";
             }
         }
 
@@ -317,16 +314,14 @@ namespace DoudizhuTower.UI.Online
         private void OnStartGame()
         {
             if (_net == null || !_net.IsMasterClient) return;
-            if (!_net.AreAllPlayersReady) return;
             int totalCount = _net.CurrentPlayerCount + _aiSlots.Count;
             if (totalCount < 3) return;
 
             // 房主同步跳转到叫分场景
             GameSession.Reset();
-
-            // Phase 5：直接写入 GameSession（Fusion 不支持房间属性同步）
-            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
+            GameSession.SetNetworkMode(true);
             GameSession.AISlots = new HashSet<int>(_aiSlots);
+            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
 
             _net.LoadScene(SceneLoader.BIDDING_SCENE);
         }
@@ -397,8 +392,8 @@ namespace DoudizhuTower.UI.Online
                 _mySlot = NetworkProtocol.GetPlayerSlot(_net.LocalActorNumber, actors);
             }
 
-            // 从房间属性恢复 AI 槽位（房主添加 AI 在本机加入之前的情况）
-            RestoreAISlotsFromRoom();
+            // 从 FusionGameManager 读取 AI 槽位（WorldState 自动同步）
+            SyncAIFromWorldState();
 
             if (roomCodeText != null)
                 roomCodeText.text = $"房间号: {roomName}";
@@ -483,18 +478,34 @@ namespace DoudizhuTower.UI.Online
 
             if (targetSlot < 0) return;
 
-            _net.SendToAll(NetworkProtocol.ADD_AI, targetSlot);
+            // 通过 FusionGameManager 修改 WorldState（自动同步）
+            var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+            if (gm != null)
+            {
+                gm.AddAISlot(targetSlot);
+            }
             ApplyAddAI(targetSlot);
         }
 
         private void ApplyAddAI(int slot)
         {
             _aiSlots.Add(slot);
-            // Phase 5：直接写入 GameSession（Fusion 不支持 SetRoomProperty）
-            GameSession.AISlots = new HashSet<int>(_aiSlots);
-            GameSession.RawAISlots = new HashSet<int>(_aiSlots);
             UpdateRoomUI();
             Debug.Log($"[OnlineLobby] 添加 AI 到槽位 {slot}, AISlots=[{string.Join(",", _aiSlots)}]");
+        }
+
+        /// <summary>从 WorldState 同步 AI 槽位到本地 UI</summary>
+        private void SyncAIFromWorldState()
+        {
+            _aiSlots.Clear();
+            var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+            if (gm == null) return;
+
+            for (int i = 0; i < 3; i++)
+            {
+                if (gm.IsAISlotByState(i))
+                    _aiSlots.Add(i);
+            }
         }
 
         private void OnKickPlayer(int slot)
@@ -502,8 +513,12 @@ namespace DoudizhuTower.UI.Online
             if (_net == null || !_net.IsMasterClient) return;
             if (_aiSlots.Contains(slot))
             {
-                // 踢 AI
-                _net.SendToAll(NetworkProtocol.REMOVE_AI, slot);
+                // 移除 AI：通过 FusionGameManager 修改 WorldState
+                var gm = DoudizhuTower.Gameplay.Fusion.FusionGameManager.Instance;
+                if (gm != null)
+                {
+                    gm.RemoveAISlot(slot);
+                }
                 ApplyRemoveAI(slot);
             }
             else
@@ -518,48 +533,15 @@ namespace DoudizhuTower.UI.Online
         private void ApplyRemoveAI(int slot)
         {
             _aiSlots.Remove(slot);
-            SyncAISlotsToRoom();
             UpdateRoomUI();
             Debug.Log($"[OnlineLobby] 移除 AI 槽位 {slot}");
-        }
-
-        private void SyncAISlotsToRoom()
-        {
-            if (_net == null || !_net.IsMasterClient) return;
-            // 将 AI 槽位集合序列化为逗号分隔字符串，存入房间属性
-            var slots = new System.Collections.Generic.List<int>(_aiSlots);
-            slots.Sort();
-            string serialized = string.Join(",", slots);
-            _net.SetRoomProperty("aiSlots", serialized);
-        }
-
-        private void RestoreAISlotsFromRoom()
-        {
-            if (_net == null) return;
-            object val = _net.GetRoomProperty("aiSlots");
-            if (val is string s && !string.IsNullOrEmpty(s))
-            {
-                _aiSlots.Clear();
-                foreach (var part in s.Split(','))
-                {
-                    if (int.TryParse(part.Trim(), out int slot))
-                        _aiSlots.Add(slot);
-                }
-            }
         }
 
         private void OnCustomEvent(string key, object value, int senderActor)
         {
             switch (key)
             {
-                case NetworkProtocol.ADD_AI:
-                    ApplyAddAI((int)value);
-                    break;
-                case NetworkProtocol.REMOVE_AI:
-                    ApplyRemoveAI((int)value);
-                    break;
                 case NetworkProtocol.KICK_PLAYER:
-                    // 被踢玩家收到此事件，离开房间
                     Debug.Log("[OnlineLobby] 你被房主踢出房间");
                     _aiSlots.Clear();
                     if (_net != null && _net.IsInRoom)

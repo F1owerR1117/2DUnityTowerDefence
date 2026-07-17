@@ -4,7 +4,6 @@ namespace DoudizhuTower.Gameplay.Network
 {
     /// <summary>
     /// 游戏内网络状态面板（左上角半透明叠加层）。
-    /// 挂载到 NetworkGameManager 同一 GameObject 上。
     /// </summary>
     public class NetworkDebugPanel : MonoBehaviour
     {

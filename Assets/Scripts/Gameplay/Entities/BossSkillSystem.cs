@@ -87,6 +87,14 @@ namespace DoudizhuTower.Gameplay.Entities
             [Tooltip("音效音量")]
             [Range(0f, 1f)]
             public float sfxVolume = 1f;
+
+            [Header("-- 技能对话 --")]
+            [Tooltip("释放技能时显示的对话文本（留空则不显示）")]
+            [TextArea(1, 3)]
+            public string skillDialogue;
+
+            [Tooltip("对话显示的说话人名字（留空则默认 Boss）")]
+            public string skillSpeaker;
         }
 
         // ── Inspector 配置 ──
@@ -107,6 +115,9 @@ namespace DoudizhuTower.Gameplay.Entities
         private float _castTimer;
         private BossSkill _currentSkill;
         private bool _effectFired;
+
+        /// <summary>技能释放事件（参数：说话人, 对话文本）。供 BossDialogueBubble 等外部监听。</summary>
+        public event Action<string, string> OnSkillActivated;
         private float _effectiveCastDuration;
 
         /// <summary>BOSS 是否正在施法（供 CardUnit 检查，防止被打断）</summary>
@@ -329,6 +340,13 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void ExecuteEffect(BossSkill skill)
         {
+            // 技能对话
+            if (!string.IsNullOrEmpty(skill.skillDialogue))
+            {
+                string speaker = string.IsNullOrEmpty(skill.skillSpeaker) ? "Boss" : skill.skillSpeaker;
+                OnSkillActivated?.Invoke(speaker, skill.skillDialogue);
+            }
+
             switch (skill.effectType)
             {
                 case SkillEffectType.AoeDamage:

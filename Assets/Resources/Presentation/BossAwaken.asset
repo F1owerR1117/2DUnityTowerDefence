@@ -42,5 +42,12 @@ MonoBehaviour:
       content: "\u4F46\u4F60\u7684\u597D\u8FD0\u5230\u6B64\u4E3A\u6B62\u4E86\u3002"
       duration: 0
       waitForClick: 1
-  announcements: []
-  effects: []
+  announcements:
+  - type: 0
+    content: 
+    duration: 0
+    delay: 0
+  effects:
+  - vfxPrefab: {fileID: 0}
+    spawnPoint: {fileID: 0}
+    delay: 0

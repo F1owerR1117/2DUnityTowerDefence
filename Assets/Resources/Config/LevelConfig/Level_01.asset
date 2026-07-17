@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Level_01
   m_EditorClassIdentifier: 
   levelName: "\u9003\u51FA\u5730\u7262"
-  description: "\u9003\u51FA\u5730\u7262"
+  description: "\u7B2C\u4E00\u5173 \u9003\u51FA\u5730\u7262\u7B80\u4ECB"
   difficulty: 1
   sceneName: Level_1
   thumbnail: {fileID: -3957121176482879808, guid: 1b499cc87bc865640800c1c4ee782f7e, type: 3}

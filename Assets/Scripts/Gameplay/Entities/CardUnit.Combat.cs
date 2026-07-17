@@ -9,13 +9,21 @@ namespace DoudizhuTower.Gameplay.Entities
     /// <summary>
     /// CardUnit 战斗模块（partial class）。
     /// 负责索敌、攻击、伤害计算、嘲讽检测等战斗相关逻辑。
+    /// Phase 2：Fusion 模式下通过 SimulationDisabled 禁用旧战斗逻辑。
     /// </summary>
     public partial class CardUnit
     {
+        /// <summary>
+        /// 禁用旧战斗逻辑（Fusion 模式下设为 true）。
+        /// 旧方法保留但跳过执行，由 CombatSystem 驱动战斗。
+        /// </summary>
+        [System.NonSerialized] public bool SimulationDisabled;
+
         // ─── 索敌 ─────────────────────────────────────
 
         protected virtual void UpdateTarget()
         {
+            if (SimulationDisabled) return;
             // 目标已死亡 → 重新索敌
             if (Target == null || !Target.IsAlive)
             {
@@ -267,18 +275,12 @@ namespace DoudizhuTower.Gameplay.Entities
         private void BroadcastAttack(CardUnit target)
         {
             if (!SimulatesCombat) return;
-            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
-            if (ngm != null)
-                ngm.BroadcastUnitAttack(UnitId, target != null ? target.UnitId : 0);
         }
 
         /// <summary>广播受击事件（仅 Master 调用）</summary>
         private void BroadcastHit(float damage, DamageType type)
         {
             if (!SimulatesCombat) return;
-            var ngm = FindFirstObjectByType<DoudizhuTower.Gameplay.Network.NetworkGameManager>();
-            if (ngm != null)
-                ngm.BroadcastUnitHit(UnitId, damage, VisualCenter);
         }
 
         /// <summary>
@@ -511,6 +513,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         public virtual void TakeDamage(float rawDamage, DamageType type)
         {
+            if (SimulationDisabled) return;
             if (!SimulatesCombat) return; // Client 不处理伤害
             if (!IsAlive) return;
             if (Invulnerable) return;
@@ -619,6 +622,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         public virtual void Die()
         {
+            if (SimulationDisabled) return;
             if (!SimulatesCombat) return; // Client 不触发死亡，由 Master 广播驱动
             _isDying = true;
 

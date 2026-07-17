@@ -418,7 +418,7 @@ Transform:
   m_GameObject: {fileID: 212375605}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 300, y: 274.1, z: -10}
+  m_LocalPosition: {x: 772.2, y: 459.7, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -441,10 +441,10 @@ MonoBehaviour:
   zoomSpeed: 30
   minZoom: 240
   maxZoom: 300
-  minX: 450
-  maxX: 680
-  minY: 200
-  maxY: 380
+  minX: 524
+  maxX: 770
+  minY: 150
+  maxY: 450
 --- !u!114 &212375610
 MonoBehaviour:
   m_ObjectHideFlags: 0

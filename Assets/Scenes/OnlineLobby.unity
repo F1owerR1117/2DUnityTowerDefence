@@ -2158,7 +2158,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!114 &620104577
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2824,6 +2824,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _spawnPrefab: {fileID: 0}
+  _fusionGameManagerPrefab: {fileID: 5683835245888893673, guid: 3915cfd41f432d44cb1d2753304b9b0c, type: 3}
 --- !u!1 &862480864
 GameObject:
   m_ObjectHideFlags: 0

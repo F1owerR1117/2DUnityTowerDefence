@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v8.2
+# DoudizhuTower — 架构落地规范 v9.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -6,38 +6,68 @@
 
 ## 目录
 
-1. [核心架构原则](#1-核心架构原则)
-2. [目录结构与职责边界](#2-目录结构与职责边界)
-3. [跨层焊接协议：观察者模式](#3-跨层焊接协议观察者模式)
-4. [工业级初始化装配套管线](#4-工业级初始化装配套管线)
-5. [全局坐标系与路线约定](#5-全局坐标系与路线约定)
-5a. [2.5D 沙盘视觉规范 v2.2](#5a-25d-沙盘视觉规范-v22)
-6. [异步计时器队列规范](#6-异步计时器队列规范)
-7. [致命地雷检查表](#7-致命地雷检查表)
-8. [牌型检测器：Core 层最高优先级模块](#8-牌型检测器core-层最高优先级模块)
-9. [兵种实体规范](#9-兵种实体规范)
-   - [9.7 VisualCenter 使用基准地图](#97-visualcenter-使用基准地图)
-   - [9.8 统一 Buff 系统](#98-统一-buff-系统属性修改)
-   - [9.9 受伤计算流水线](#99-受伤计算流水线takedamage)
-10. [AI 对手系统](#10-ai-对手系统)
-11. [UI 层规范](#11-ui-层规范)
-12. [Config 配置表规范](#12-config-配置表规范)
-13. [网络联机系统](#13-网络联机系统)
-14. [动画状态系统](#14-动画状态系统)
-15. [性能约束](#15-性能约束联机防御编码协议)
-16. [音频优先级管理系统](#16-音频优先级管理系统)
-17. [伤害批量结算系统](#17-伤害批量结算系统damagequeue)
-18. [传送飞筒系统](#18-传送飞筒系统)
-19. [要不起领域系统](#19-要不起领域系统domainsystem)
-20. [存档系统](#20-存档系统savesystem)
-21. [叫分期系统](#21-叫分期系统biddingmanager--networkbiddingmanager--biddingconfig)
-22. [跨场景数据传递](#22-跨场景数据传递gamesession)
-23. [BOSS 系统](#23-boss-系统bosscontroller--buildingai)
-24. [架构债务登记](#24-架构债务登记)
-25. [Event+Snapshot+Tick 三层确定性模型 v2.0](#25-event-snapshot-tick-三层确定性模型-v20final-lock)
-26. [Truth Source Convergence（真相源收敛）](#26-truth-source-convergence真相源收敛)
-27. [Client 战斗表现层（Event-Driven Presentation）](#27-client-战斗表现层event-driven-presentation)
-28. [Combat Gate System（战斗统一门禁）](#28-combat-gate-system战斗统一门禁)
+### 参考速查
+
+| 章节 | 说明 |
+|:---|:---|
+| [术语对照表](#术语对照表) | 类名↔概念↔所在层↔说明 |
+| [实施状态总览](#实施状态总览) | P0/P1/P2 功能完成度 |
+| [费用与牌值常量参考](#费用与牌值常量参考) | 点数映射/费用公式/牌型系数 |
+| [附录 A：Prefab 结构清单](#附录-aprefab-结构清单) | Prefabs/ 目录树 |
+
+### 核心架构
+
+| # | 章节 |
+|:---|:---|
+| 1 | [核心架构原则](#1-核心架构原则) |
+| 2 | [目录结构与职责边界](#2-目录结构与职责边界) |
+| 3 | [跨层焊接协议：观察者模式](#3-跨层焊接协议观察者模式) |
+
+### 系统设计
+
+| # | 章节 |
+|:---|:---|
+| 4 | [工业级初始化装配套管线](#4-工业级初始化装配套管线) |
+| 6 | [异步计时器队列规范](#6-异步计时器队列规范) |
+| 8 | [牌型检测器：Core 层最高优先级模块](#8-牌型检测器core-层最高优先级模块) |
+| 9 | [兵种实体规范](#9-兵种实体规范) |
+| 10 | [AI 对手系统](#10-ai-对手系统) |
+| 17 | [伤害批量结算系统（DamageQueue）](#17-伤害批量结算系统damagequeue) |
+| 18 | [传送飞筒系统](#18-传送飞筒系统) |
+| 19 | [要不起领域系统（DomainSystem）](#19-要不起领域系统domainsystem) |
+| 20 | [存档系统（SaveSystem）](#20-存档系统savesystem) |
+| 21 | [叫分期系统](#21-叫分期系统biddingmanager--networkbiddingmanager--biddingconfig) |
+| 23 | [BOSS 系统（BossController + BuildingAI）](#23-boss-系统bosscontroller--buildingai) |
+| 28 | [Combat Gate System（战斗统一门禁）](#28-combat-gate-system战斗统一门禁) |
+
+### 视觉与交互
+
+| # | 章节 |
+|:---|:---|
+| 5 | [坐标系约定（可编辑地图）](#5-坐标系约定可编辑地图) |
+| 5a | [2.5D 沙盘视觉规范 v2.2](#5a-25d-沙盘视觉规范-v22) |
+| 11 | [UI 层规范](#11-ui-层规范) |
+| 14 | [动画状态系统](#14-动画状态系统) |
+| 16 | [音频优先级管理系统](#16-音频优先级管理系统) |
+
+### 联机与同步
+
+| # | 章节 |
+|:---|:---|
+| 13 | [网络联机系统](#13-网络联机系统) |
+| 22 | [跨场景数据传递（GameSession — 已废弃降级）](#22-跨场景数据传递gamesession) |
+| 25 | [Event+Snapshot+Tick 三层确定性模型 v2.0](#25-event-snapshot-tick-三层确定性模型-v20final-lock) |
+| 26 | [Truth Source Convergence（真相源收敛）](#26-truth-source-convergence真相源收敛) |
+| 27 | [Client 战斗表现层（Event-Driven Presentation）](#27-战斗表现层event-driven-presentation) |
+
+### 规范与债务
+
+| # | 章节 |
+|:---|:---|
+| 7 | [致命地雷检查表](#7-致命地雷检查表) |
+| 12 | [Config 配置表规范](#12-config-配置表规范) |
+| 15 | [性能约束（联机防御编码协议）](#15-性能约束联机防御编码协议) |
+| 24 | [架构债务登记](#24-架构债务登记) |
 
 ---
 
@@ -95,7 +125,7 @@
 | `VictoryStats` | 结算数据 | UI/Panels | struct，含 gameDuration/cardsPlayed/unitsSpawned/unitsKilled/goldEarned + 联机结算公式字段 |
 | `UnitPassivesGizmosOverlay` | 被动范围叠加 | Editor | Scene View 实线（逻辑范围）+ 虚线（VFX 覆盖）+ 数值标注 |
 | `UnitPassivesEditorWindow` | 被动技能调试窗口 | Editor | 编辑/运行时模式下查看和调整所有被动参数，无需进入 Play 模式 |
-| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，存储叫分结果 + 玩家基地映射，支持单机/联机 |
+| `GameSession` | 游戏会话数据 | Gameplay/Systems | 静态类，仅存储叫分结果缓存（BidMultiplier/HasResult/LandlordSlot/AISlots），已废弃降级 |
 | `SaveSystem` | 存档系统 | Gameplay/Systems | 基于 PlayerPrefs，存储金币/首次胜利/对局统计 |
 | `BiddingManager` | 叫分期控制器 | UI/Bidding | 叫分场景主控：倒计时 + AI 叫分 + 玩家叫分 + 跳转 |
 | `BiddingConfig` | 叫分配置 | Config | ScriptableObject，可配叫分时长/AI 策略/超时处理 |
@@ -108,13 +138,12 @@
 | `LevelSelectController` | 关卡选择控制器 | UI/LevelSelect | 轮播式关卡选择（中心最大，两侧缩小，拖拽滑动 + 吸附） |
 | `FollowTarget` | 特效跟随组件 | Gameplay/Entities | 使 VFX 特效跟随目标 Transform 移动（君王光环/嘲讽光环） |
 | `INetworkService` | 网络服务接口 | Gameplay/Network | 抽象接口，定义连接/房间/消息/场景同步 API + `OnMasterSwitched` 事件 |
-| `PhotonService` | Photon 实现 | Gameplay/Network | 基于 Photon PUN 2 的 INetworkService 实现（含断线自动重连 + `OnMasterSwitched` + 中国区 nameserver `ns.photonengine.cn`） |
+| `FusionService` | Fusion 实现 | Gameplay/Network | 基于 Photon Fusion 的 INetworkService 实现（Runner 生命周期管理 + TLS 修复 + 房间创建/加入，`ShutdownRunner()` 不销毁 Runner 以便复用） |
 | `NetworkManager` | 网络管理器 | Gameplay/Network | 单例，持有 INetworkService 引用，DontDestroyOnLoad |
 | `OnlineLobbyController` | 联机大厅控制器 | UI/Online | 联机模式选择（单排/创建房间/加入房间）+ 房间管理 |
-| `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 3 人网络轮流叫分，Master 端轮次管理 + AI 槽位支持 + 断线处理 |
+| `NetworkBiddingManager` | 联机叫分控制器 | UI/Bidding | 通过 INetworkService 抽象层通信，支持 Fusion 和本地联机 |
 | `BiddingSceneBootstrap` | 叫分场景引导 | UI/Bidding | 检测联机房间状态，自动切换单机/联机叫分管理器 |
 | `NetworkProtocol` | 网络协议常量 | Gameplay/Network | 事件 Key 定义 + Card/CardTypeResult 序列化 + 玩家槽位工具 |
-| `NetworkGameManager` | 联机游戏管理器 | Gameplay/Network | Master 权威架构，出牌/摸牌/经济/领域/断线/HP 同步，挂载到游戏场景 |
 | `NetworkLogger` | 网络日志 | Gameplay/Network | 将网络相关日志写入 `Logs/network_log_slotN.txt` 文件 |
 | `NetworkDebugPanel` | 网络调试面板 | Gameplay/Network | 游戏内左上角显示槽位/手牌/金币/单位数/最近事件 |
 | `LocalNetworkHub` | 本地联机消息路由 | Gameplay/Network | 静态类，所有 LocalNetworkService 共享，消息直接方法调用 |
@@ -126,6 +155,27 @@
 | `CodexEntry` | 图鉴条目 | Config | ScriptableObject，存储单个图鉴条目（Id/DisplayName/Category/Icon/Description） |
 | `CodexDatabase` | 图鉴数据库 | Config | ScriptableObject，按分类组织 CodexEntry 条目，支持运行时查询 |
 | `UnitDebugToolWindow` | 兵种调试工具 | Editor | Editor 窗口（Tools → 技能可视化 → 综合调试工具），整合属性/被动/音效/特效/动画配置 |
+| `FusionGameManager` | Fusion 游戏管理器 | Gameplay/Fusion | 替代 NetworkGameManager，基于 Tick 状态机 + 双缓冲战斗系统 |
+| `FusionGameState` | Fusion 世界状态 | Gameplay/Fusion | WorldState struct，[Networked] 同步，唯一真相源 |
+| `FusionBattleManager` | Fusion 战场管理器 | Gameplay/Fusion | Host 权威战斗逻辑 |
+| `CombatSystem` | Fusion 战斗系统 | Gameplay/Fusion | FindTarget → AttackTick → ApplyDamage 流水线 |
+| `PassiveSystem` | Fusion 被动系统 | Gameplay/Fusion | 16 种通用被动的 Fusion 实现 |
+| `CardUnitView` | Fusion 单位视图 | Gameplay/Fusion | Client 侧视觉表现（行军/动画/血条） |
+| `IntentBuffer` | 输入意图缓冲 | Gameplay/Fusion | Client 输入 → Host 处理的桥梁 |
+| `UnitSyncManager` | 单位同步管理器 | Gameplay/Fusion | Fusion 网络对象生命周期管理 |
+| `PlayerInputHandler` | 玩家输入处理 | Gameplay/Fusion | Fusion 输入采集 + 发送 |
+| `ViewBinder` | 视图绑定器 | Gameplay/Fusion | Fusion 状态 → UI 视图的映射 |
+| `DesyncDetector` | 失步检测器 | Gameplay/Fusion | Client/Host 状态偏差检测 |
+| `IdentityService` | 身份服务 | Gameplay/Fusion/Identity | Singleton Facade，场景显式绑定 |
+| `NetworkFacade` | 网络门面 | Gameplay/Network | 统一 Photon/Fusion/本地联机的调用入口 |
+| `BattlePresentationManager` | 战斗演出管理器 | Gameplay/Presentation | 统一调度所有演出序列（镜头/对话/广播/特效并行执行），管理 CameraDirector.IsBusy |
+| `PresentationSequence` | 演出序列配置 | Gameplay/Presentation | MonoBehaviour，挂在场景中，包含镜头/对话/广播/特效动作列表 |
+| `CameraDirector` | 镜头导演 | Gameplay/Presentation | 镜头切换/聚焦/震动/缩放，IsBusy 标志供 CameraController 跳过 Update |
+| `IRuntimeReady` | 运行时就绪接口 | Core/Lifecycle | 控制 Update 是否执行游戏逻辑 |
+| `ShopItemConfig` | 商品配置 | Config | ScriptableObject，定义单个商品（ID/名称/图标/价格/类型） |
+| `ShopDatabase` | 商品数据库 | Config | ScriptableObject，商品集合 |
+| `ShopManager` | 商店管理器 | Systems | 购买逻辑（余额检查/扣款/解锁，基于 SaveSystem 持久化） |
+| `ShopUIController` | 商店 UI | UI | 商品网格展示 + 购买确认 + 余额显示 |
 
 ## 实施状态总览
 
@@ -207,7 +257,15 @@
 | 联机叫分系统 | NetworkBiddingManager（3 人网络轮流叫分 + AI 槽位 + 断线处理）+ BiddingSceneBootstrap（自动切换单机/联机）| UI/Bidding/ |
 | 网络协议层 | NetworkProtocol（事件 Key 常量 + Card/CardTypeResult 序列化 + 玩家槽位工具）| Gameplay/Network/ |
 | 网络接口扩展 | INetworkService 新增：IsInRoom/IsMasterClient/SendToMaster/SendToPlayer/LocalActorNumber/GetPlayerActorNumbers/OnCustomEvent 等 | Gameplay/Network/ |
-| 联机游戏管理器 | NetworkGameManager（Master 权威：出牌/摸牌/经济/领域/断线同步） | Gameplay/Network/ |
+| 联机游戏管理器 | FusionGameManager（Tick 状态机 + Host 权威出牌/摸牌/经济/领域） | Gameplay/Fusion/ |
+| 金币同步 | FusionGameManager 通过 WorldState.PlayerX.Gold/IncomeRate 同步，Client 直接读取 | FusionGameManager.cs |
+| 领域同步 | FusionGameManager 通过 WorldState.Game.DomainActive/DomainType 同步领域状态 | FusionGameManager.cs |
+| 摸牌协议 | Client 调用 IntentBuffer.SubmitDrawCard()，Host 执行并更新 WorldState | FusionGameManager.cs |
+| 牌堆同步 | WorldState.Game.DeckCount 记录剩余牌数，Host 递减 | FusionGameManager.cs |
+| 状态版本控制 | Fusion [Networked] 属性自动版本控制，替代旧 StateVersion 机制 | FusionGameState.cs |
+| 网络日志 | DesyncLogger + NetworkDebugPanel 替代旧 Network Trace Log | Gameplay/Network/ |
+| 时间同步 | Fusion Runner.Tick（固定 100 tick/s）替代旧 PhotonNetwork.Time | FusionGameManager.cs |
+| 胜利同步 | WorldState.Game.Phase 同步游戏结束状态 | FusionGameManager.cs |
 | 存档系统 | SaveSystem（PlayerPrefs）存储金币/首次胜利/对局统计 | Gameplay/Systems/ |
 | 完胜判定 | 玩家基地满血 → gameStateCoefficient = 1.5 | GameBootstrapper.cs |
 | 叫分配置外置 | BiddingConfig ScriptableObject（叫分时长/AI 策略/超时处理） | Config/ |
@@ -216,9 +274,9 @@
 | 领域出牌校验 | PlayValidator 拒绝不能管上领域的牌 + _playerClickedCounter 区分玩家/AI | GameBootstrapper.cs + DomainSystem.cs |
 | 主菜单场景 | MainMenuController（单人/对战/商店/图鉴/设置/退出） | UI/ |
 | 关卡选择系统 | LevelSelectController + LevelCard + LevelConfig（轮播式选择，支持扩展） | UI/LevelSelect/ + Config/ |
-| 联机网络层 | INetworkService + PhotonService + NetworkManager（Photon PUN 2） | Gameplay/Network/ |
+| 联机网络层 | INetworkService + FusionService + NetworkManager（Photon Fusion） | Gameplay/Network/ |
 | 联机大厅 | OnlineLobbyController（单排/创建房间/加入房间/匹配/准备） | UI/Online/ |
-| 联机断线重连 | PhotonService DisconnectTimeout=30s + OnApplicationFocus/OnApplicationPause 自动重连 + _shouldRejoinRoom 房间恢复 | Gameplay/Network/ |
+| 联机断线重连 | FusionService（Photon Fusion 内置断线恢复 + NetworkRunner 重连） | Gameplay/Network/ |
 | 召唤师被动 | UnitPassives.enableSummoner（定时召唤 + 击杀召唤，Animation Event 驱动） | UnitPassives.cs |
 | 击杀事件 | CardUnit.OnKillEvent + Summoner 引用 + 击杀归属到召唤师 | CardUnit.cs |
 | 伤害飘字修正 | OnDamageCalculated 事件（含撕裂加成），与 OnTakeDamageEvent 分离 | CardUnit.Combat.cs + FloatingTextPool.cs |
@@ -235,24 +293,14 @@
 | 路线锁定系统 | `RoutePath._locked`/`Unlock()`/`Lock()` + `RouteGroup` 跳过锁定路线 + `GetRoute()`/`SwitchToFirstUnlocked()` | RoutePath.cs + RouteGroup.cs |
 | BOSS 路线解锁 | `BossController.ActivateBoss()` 解锁 `_bossRoute` + `_playerRouteToBoss` | BossController.cs |
 | BuildingAI 路线压力检测 | `ChooseLane()` 根据敌方金币权重 + 玩家路线权重 + 防守需求选择最优路线 | BuildingAI.cs |
-| Master 状态同步 | 每 5s 广播完整游戏状态（手牌/经济/牌堆）+ Master 切换前广播 | NetworkGameManager.cs |
-| HP 校验与修正 | 每 5s 校验和对比 + 不一致时自动请求修正 + `SetHP()`/`ForceDie()` | NetworkGameManager.cs + CardUnit.Combat.cs |
-| Master 迁移处理 | `OnMasterSwitched` 事件 + 新 Master 请求时间同步 | PhotonService.cs + NetworkGameManager.cs |
-| 飞筒联机同步 | `CARD_TRANSFER`/`CARD_ARRIVE`/`CARD_TAKE` 协议，联机模式农民可用飞筒 | NetworkGameManager.cs + GameBootstrapper.cs |
-| 经济同步增强 | `GOLD_UPDATE` 携带 `incomeRate`，所有客户端同步回金速度 | NetworkGameManager.cs |
-| 网络区域 | Photon China SDK，nameserver 为 `ns.photonengine.cn`，固定区域 "cn" | PhotonService.cs + LoadBalancingClient.cs + ChatPeer.cs |
+
 | 特效缩放统一 | 震波/光环/燃烧/嘲讽特效缩放系数从 `/3f` 改为 `/2f` | UnitVFX.cs |
 | 君王光环特效跟随 | `PlayKingAura` 改用 `Transform` 参数 + `FollowTarget` 组件跟随释放者 | UnitVFX.cs + UnitPassives.cs |
 | 燃烧特效半径 | `PlayBurn` 新增 `radius` 参数，特效缩放匹配实际火海范围 | UnitVFX.cs + UnitPassives.cs |
 | 召唤师攻击中兼容 | 攻击中不打断，直接生成召唤物（`StartSummon` 检查 `IsAttacking`） | UnitPassives.Summon.cs |
 | BOSS 路径缓存修复 | `ActivateBoss` 销毁回调中 `route.CachePositions()`，防止 BOSS 回池后路径点失效 | BattleManager.cs |
 | 伤害分担修复 | `RedistributeDamage` 改用 `SharedDamageOverride` 替代 `ShareRedirected` 跳过，主目标承受 60% + 其他各 20% = 100% | BattleManager.Spawning.cs + CardUnit.Combat.cs |
-| 牌堆偏移防重复 | 每个玩家同步牌堆跳过 `slot * 7` 张牌，防止多名玩家拿到相同手牌 | NetworkGameManager.cs + GameBootstrapper.cs |
-| `_deckId` 不同步修复 | 手牌验证/移除改用 `DeckIndex` 比较（`ContainsByDeckIndex`/`RemoveRangeByDeckIndex`） | NetworkGameManager.cs + CardHand.cs |
-| 经济自动创建 | `_slotEconomies` 在 PLAYER_READY 延迟到达时自动创建（验证/摸牌时） | NetworkGameManager.cs |
-| 客户端金币权威 | 客户端忽略 Master 对自身金币的覆盖 + 每 3 秒同步金币到 Master | NetworkGameManager.cs |
-| `ReconcileHand` 禁用 | 禁用 Master 状态同步中的手牌校正（Master `_slotHands` 同步延迟导致误删初始手牌） | NetworkGameManager.cs |
-| HP 同步改用 UnitId | Master 每 5 秒广播所有单位 HP（用 `UnitId` 标识，跨客户端一致），客户端直接覆盖 | NetworkGameManager.cs |
+
 | 联机暂停修复 | 联机模式下 `PauseMenu` 不设置 `Time.timeScale = 0` | PauseMenu.cs |
 | `CardHand.NotifyHandModified` | 公共方法，供网络同步直接操作列表后触发 `OnHandChanged` | CardHand.cs |
 | 网络调试工具 | `NetworkLogger`（日志写入文件）+ `NetworkDebugPanel`（游戏内状态面板） | Gameplay/Network/ |
@@ -284,32 +332,47 @@
 | transform.position 违规修复 | 10 处距离/范围计算改为 `VisualCenter`（英雄被动/三人组/轰炸/溅射/召唤） | BattleManager.Heroes.cs + Spawning.cs + UnitPassives.cs + UnitPassives.Summon.cs |
 | 静态状态跨局清理 | `UnitAudio.ClearClipCounts()` + `DamageQueue.Clear()` 在新局开始时调用，`_shieldWallUnits` 对象池回收注销 | UnitAudio.cs + DamageQueue.cs + UnitPassives.cs + GameBootstrapper.cs |
 | DomainUIController lambda 退订 | `counterCoolDown.OnCoolDownComplete` 匿名 lambda → 存储字段 `_onCounterCoolDownComplete`，OnDestroy 退订 | DomainUIController.cs |
-| PLAYER_READY 竞态防护 | `_playerReadyReceived` 集合，MasterDrawCard 拒绝未就绪槽位摸牌，Master 自身槽位初始化时注册 | NetworkGameManager.cs |
-| clientGold 金币权威 | 删除 3 处客户端金币覆盖（出牌/摸牌/HandlePlayCards），Master 只信自己追踪的金币 | NetworkGameManager.cs |
-| Master 领域封印校验 | `MasterValidateAndPlay` 新增领域封印检查（炸弹破封 + 能管上放行），`HandlePlayRejected` 补充反馈 | NetworkGameManager.cs |
-| StateVersion 状态版本号 | `MASTER_STATE_SYNC` 携带 `_stateVersion`，客户端丢弃旧版本广播，防止乱序覆盖 | NetworkGameManager.cs |
-| Network Trace Log | `Trace()` 方法，关键消息统一 `[NET][M/C][seq][msg]` 格式，支持同步问题快速定位 | NetworkGameManager.cs |
-| Master Authority Combat | `SimulatesCombat` 属性控制战斗模拟归属。Client 禁止 OnUpdate/TakeDamage/Die，只做视觉行军。死亡由 Master 广播 UNIT_DIED 驱动 | CardUnit.cs + CardUnit.Combat.cs + NetworkGameManager.cs |
-| SimulatesCombat 按单位设置 | `OnUnitSpawned` 事件中按所属 NGM 实例设置（解决本地多玩家 static 冲突） | NetworkGameManager.cs |
+
+| Master Authority Combat | `SimulatesCombat` 属性控制战斗模拟归属。Client 禁止 OnUpdate/TakeDamage/Die，只做视觉行军。死亡由 Master 广播 UNIT_DIED 驱动 | CardUnit.cs + CardUnit.Combat.cs |
+
 | 记牌器负值兜底 | `Mathf.Max(0, total - discarded)` 防止联机牌堆不同步时显示负数 | CardCounterUI.cs |
 | 本地联机模拟系统 | `LocalNetworkHub`（消息路由）+ `LocalNetworkService`（INetworkService 本地实现）+ `LocalTestLauncher`（Editor 窗口）。单进程多玩家，零网络延迟 | LocalNetworkHub.cs + LocalNetworkService.cs + LocalTestLauncher.cs |
-| 摸牌协议分离 | `DRAW_CARD`（请求）与 `DRAW_CARD_RESULT`（结果）使用独立协议 Key，防止 Master 收到自己的广播后误判为新请求导致无限摸牌循环 | NetworkProtocol.cs + NetworkGameManager.cs |
+
 | 叫分槽位转换 | `OnStartGame()` 将大厅位置索引正确转换为 actor-number 排序槽位，AI 槽位 = 全集 {0,1,2} - 真人玩家槽位，修复后加入玩家替代 AI 叫分的 bug | OnlineLobbyController.cs |
 | 叫分槽位同步等待 | `InitializeSlotWhenReady()` 协程等待 Photon PlayerList 同步完成后再计算槽位（最多 3 秒轮询），修复同时进入时所有玩家拿到相同手牌 | NetworkBiddingManager.cs |
 | AI 槽位房间持久化 | AI 槽位通过 Photon 房间属性（`aiSlots`）持久化，后加入玩家从房间属性恢复，修复后加入玩家看不到 AI 的 bug | OnlineLobbyController.cs |
 | 农民路线 UI 隐藏 | `HandArea.SetRouteUIVisible(false)` 隐藏农民不需要的路线选择 UI（prev/nextButton, routeLabel, routeIndicator） | HandArea.cs + GameBootstrapper.cs |
+| **Fusion 联机架构（Phase 5）** | FusionGameManager（GamePhase 状态机 + BeginTick/ReadInputOnce/ConsumeInput 管道 + TryAdvanceState 收敛器 + OnStateChanged 生命周期）+ FusionGameState（WorldState [Networked] + GamePhase 枚举 + PlayerState.IsAI）+ CombatSystem + PassiveSystem + IntentBuffer + ViewBinder + PlayerInputHandler + UnitSyncManager + DesyncDetector + Identity 系统（IIdentityProvider 策略模式）| Gameplay/Fusion/ + Gameplay/Fusion/Identity/ + Gameplay/Fusion/UI/ |
+| **AI 槽位 WorldState 同步** | FusionGameManager.AddAISlot/RemoveAISlot/IsAISlotByState — 通过 WorldState.PlayerX.IsAI 同步，替代 PUN SendToAll/SetRoomProperty | FusionGameManager.cs + OnlineLobbyController.cs |
+| **UnitPassives BOSS 守卫** | UnitPassives.Update() 开头检查 BossController.IsActive，BOSS 未激活时跳过所有被动逻辑 | UnitPassives.cs |
+| **战斗演出系统** | BattlePresentationManager（并行调度所有动作类型）+ PresentationSequence（MonoBehaviour，场景级配置）+ CameraDirector（镜头，IsBusy 演出锁）+ BattleAnnouncementManager（广播）+ BossDialogueBubble（BOSS 对话，支持技能对话）| Gameplay/Presentation/ |
+| **网络门面** | NetworkFacade（统一 Photon/Fusion/本地联机调用入口）| Gameplay/Network/ |
+| **Fusion 网络基础设施** | FusionService + NetworkRunnerSetup + FusionTestSpawner + FusionTestObject + FusionMinimalDebug + FileLogger | Gameplay/Network/ |
+| **运行时就绪接口** | IRuntimeReady（控制 Update 是否执行游戏逻辑）| Core/Lifecycle/ |
+| **Fusion 叫分 RPC 管道** | Client→Host 叫分/摸牌/出牌通过 `[Rpc(RpcSources.All, RpcTargets.StateAuthority)]` 发送，Host 统一执行 | FusionGameManager.cs + NetworkBiddingManager.cs |
+| **IdentityReady 初始化锁** | GameState.IdentityReady 字段，Host 写入 1 后 Client 才允许读取 WorldState，防止时序竞态 | FusionGameState.cs + FusionGameManager.cs + NetworkBiddingManager.cs |
+| **GameSession 模式锁定** | SetNetworkMode(bool) 单次写入不可逆，Reset() 不再覆盖 IsNetworkMode | GameSession.cs |
+| **叫分状态机修正** | TryAdvanceState 叫分完成后不自动推进 Playing，等 UI 确认按钮触发 ConfirmBidding() | FusionGameManager.cs |
+| **AI 叫分节流修复** | 删除 AISystem 内部 BID_INTERVAL_TICKS 双重节流，由 ProcessAI 统一控制频率 | AISystem.cs |
+| **IsPlayingFinished 修正** | 返回 false，胜负由 BattleManager.OnGameEnded 驱动，不再误判手牌为空为游戏结束 | FusionGameManager.cs |
+| **出牌执行连接** | ApplyPlayCards 连接 BattleManager.DeployCards 生成兵种 | FusionGameManager.cs |
+| **Client 状态同步** | GameSceneSync 每 0.5s 广播牌堆/手牌/金币，RPC 同步到 Client 本地缓存 | GameSceneSync.cs + FusionGameManager.cs |
+| **单机/联机拆分** | NetworkGameBootstrapper 接管联机游戏场景初始化（手牌/摸牌/领域/暂停/胜利面板），GameBootstrapper 移除所有 Fusion 引用 | NetworkGameBootstrapper.cs + GameBootstrapper.cs |
+| **Fusion Runner 生命周期修复** | `ShutdownRunner()` 替代 `Destroy(_runner)`，保留 Runner 组件复用，消除 Fusion 回调循环中的已销毁引用警告 | FusionService.cs |
+| **叫分轮次校验** | `SubmitBid`/`ApplyBid`/`OnBid` 三层校验 `CurrentBidTurn == slot`，防止非轮次叫分 | FusionGameManager.cs + NetworkBiddingManager.cs |
+| **Client Slot 分配修复** | `GetLocalSlot()` Client 回退改为匹配 `SlotXPlayerRef`，替代盲目取第一个非 AI 槽位 | FusionGameManager.cs |
 
 ### P1（仍需实现）
 
 | 系统 | 章节 | 说明 |
 |:---|:---|:---|
-| 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
+| 商店系统 | §29 | 主菜单按钮已预留。商品类型：英雄解锁（200-500 金币）+ 皮肤外观（100-300 金币）。需新增 ShopItemConfig/ShopDatabase/ShopManager/ShopUIController |
 
 ### P2（增强/可视化）
 
 | 功能 | 章节 | 状态 |
 |:---|:---|:---|
-| 索敌可视化标记 | §3.3(4) | ❌ 未实现 |
+| 索敌可视化标记 | §28（Combat Gate） | ❌ 未实现 |
 | 兵种综合调试工具 | Editor | ✅ UnitDebugToolWindow（整合属性/被动/音效/特效/动画配置 + 批量应用） |
 
 ## 费用与牌值常量参考
@@ -378,10 +441,12 @@ Assets/Scripts/
 │   ├── Economy/
 │   │   ├── EconomySystem.cs           # 金币增减 + 回金速度成长曲线
 │   │   └── CardCostCalculator.cs      # §2.3 Cost = ΣC_n × M_type 公式
+│   └── Lifecycle/
+│       └── IRuntimeReady.cs           # 运行时就绪接口（IsRuntimeReady 属性，控制 Update 是否执行游戏逻辑）
 │
 ├── Gameplay/                          # 运行时管理层（MonoBehaviour）
 │   ├── Systems/
-│   │   ├── GameBootstrapper.cs        # ★ 自底向上装配套管线（12 步初始化）
+│   │   ├── GameBootstrapper.cs        # ★ 单机装配套管线（12 步初始化，联机模式 yield break）
 │   │   ├── GameStateMachine.cs        # ★ FSM + 自动计时（Playing→SuddenDeath→GameOver，OnTimeUp 事件）
 │   │   ├── TimerQueue.cs              # 全局异步计时器队列
 │   │   ├── EconomyManager.cs          # 焊接 Core.EconomySystem → UI + 骤死期双倍回金
@@ -389,7 +454,7 @@ Assets/Scripts/
 │   │   ├── VFXManager.cs             # ★ 单例粒子特效对象池（DontDestroyOnLoad）
 │   │   ├── UIManager.cs              # ★ 跨场景 UI 管理器（单例，管理 UI_Scene 加载 + PauseMenu/VictoryPanel 引用）
 │   │   ├── SceneLoader.cs            # 场景加载工具（LoadBidding/LoadGame/LoadMainMenu/LoadCodex/QuitGame）
-│   │   ├── GameSession.cs            # ★ 跨场景会话数据（叫分结果 + 玩家基地映射，支持联机扩展）
+│   │   ├── GameSession.cs            # 叫分结果缓存（已废弃降级，核心逻辑由 WorldState 替代）
 │   │   └── SaveSystem.cs             # ★ 存档系统（PlayerPrefs，金币/首次胜利/对局统计）
 │   ├── Entities/
 │   │   ├── CardUnit.cs                # ★ 兵种基类（4 个 partial 文件）
@@ -426,16 +491,58 @@ Assets/Scripts/
 │   │   └── MapController.cs           # 地图坐标常量与工具方法（WinCondition 枚举定义在 BattleManager.cs 中）
 │   ├── Network/                        # 联机网络层
 │   │   ├── INetworkService.cs          # ★ 网络服务抽象接口（连接/房间/消息/场景同步 + OnMasterSwitched）
-│   │   ├── PhotonService.cs            # ★ Photon PUN 2 实现（房间/匹配/RPC/同步 + 断线自动重连 + 中国区 nameserver）
 │   │   ├── NetworkManager.cs           # ★ 网络管理器单例（持有 INetworkService，DontDestroyOnLoad）
-│   │   ├── NetworkGameManager.cs       # ★ 联机游戏管理器（Master 权威：出牌/摸牌/经济/HP/飞筒同步 + 牌堆偏移）
+│   │   ├── NetworkFacade.cs           # 网络门面（统一 Photon/Fusion/本地联机的调用入口）
 │   │   ├── NetworkProtocol.cs          # ★ 网络协议常量 + Card/CardTypeResult 序列化 + 玩家槽位工具
 │   │   ├── NetworkLogger.cs            # ★ 网络日志写入文件（Logs/network_log_slotN.txt）
 │   │   ├── NetworkDebugPanel.cs        # ★ 游戏内网络状态面板（左上角：槽位/手牌/金币/单位数/最近事件）
 │   │   ├── GameSnapshot.cs             # ★ Snapshot 层（某 Tick 下的完整权威状态，可完全重建游戏）
 │   │   ├── GameEvent.cs                # ★ Event 层（不可变操作记录，append-only，必须携带 Tick）
+│   │   ├── FusionService.cs            # Fusion 网络服务实现（Photon Fusion SDK）
+│   │   ├── FusionTestSpawner.cs        # Fusion 测试生成器（Editor 调试用）
+│   │   ├── FusionTestObject.cs         # Fusion 测试对象（网络对象测试）
+│   │   ├── FusionMinimalDebug.cs       # Fusion 最小调试组件
+│   │   ├── NetworkRunnerSetup.cs       # NetworkRunner 配置（Fusion 运行时初始化）
+│   │   ├── FileLogger.cs              # 文件日志（调试用）
 │   │   ├── LocalNetworkHub.cs          # ★ 本地联机模拟消息路由中心（静态类，直接方法调用）
 │   │   └── LocalNetworkService.cs      # ★ INetworkService 本地实现（零网络延迟，用于单进程多玩家测试）
+│   ├── Fusion/                         # Fusion 联机架构（替代 PUN NetworkGameManager）
+│   │   ├── FusionGameManager.cs        # ★ Fusion 游戏管理器（替代 NetworkGameManager，基于 Tick 状态机 + 双缓冲战斗）
+│   │   ├── NetworkGameBootstrapper.cs  # ★ 联机游戏场景初始化器（手牌/摸牌/领域/暂停/胜利面板 RPC 桥接）
+│   │   ├── FusionGameState.cs          # ★ Fusion 世界状态（WorldState struct，[Networked] 同步）
+│   │   ├── FusionBattleManager.cs      # ★ Fusion 战场管理器（Host 权威战斗逻辑）
+│   │   ├── CombatSystem.cs            # ★ Fusion 战斗系统（FindTarget → AttackTick → ApplyDamage）
+│   │   ├── PassiveSystem.cs           # ★ Fusion 被动系统（16 种通用被动的 Fusion 实现）
+│   │   ├── BossSkillSystem.cs         # Fusion 版 BOSS 技能系统（HP 阶段/定时/击杀触发）
+│   │   ├── CardUnitView.cs            # ★ Fusion 单位视图（Client 侧视觉表现，行军/动画/血条）
+│   │   ├── IntentBuffer.cs            # ★ 输入意图缓冲（Client 输入 → Host 处理的桥梁）
+│   │   ├── EventBuffer.cs             # 事件缓冲（Fusion 事件队列）
+│   │   ├── UnitSyncManager.cs         # ★ 单位同步管理器（Fusion 网络对象生命周期）
+│   │   ├── UnitBuffer.cs              # 单位缓冲（Fusion 单位池）
+│   │   ├── UnitConfig.cs              # 单位配置（Fusion 单位预制体映射）
+│   │   ├── PlayerInputHandler.cs      # ★ 玩家输入处理（Fusion 输入采集 + 发送）
+│   │   ├── AISystem.cs               # Fusion AI 系统（Host 侧 AI 决策）
+│   │   ├── ViewBinder.cs             # ★ 视图绑定器（Fusion 状态 → UI 视图的映射）
+│   │   ├── DesyncDetector.cs         # ★ 失步检测器（Client/Host 状态偏差检测）
+│   │   ├── DesyncLogger.cs           # 失步日志（失步事件记录）
+│   │   ├── TickDisplay.cs            # Tick 显示（调试用，显示当前 Tick 号）
+│   │   ├── GameSceneSync.cs          # ★ Client 状态同步（每 0.5s 广播牌堆/手牌/金币，RPC 同步）
+│   │   ├── Identity/                  # 身份系统（IIdentityProvider 策略模式）
+│   │   │   ├── IIdentityProvider.cs    # 身份提供者接口（Offline/Online 统一抽象）
+│   │   │   ├── OfflineIdentityProvider.cs  # 单机身份提供者
+│   │   │   ├── OnlineIdentityProvider.cs   # 联机身份提供者
+│   │   │   ├── LobbyIdentityService.cs    # 大厅身份服务（联机房间身份分配）
+│   │   │   └── IdentityService.cs         # 身份服务 Facade（Singleton，场景显式绑定）
+│   │   └── UI/                        # Fusion UI 层
+│   │       ├── GameUIController.cs     # Fusion 游戏 UI 控制器
+│   │       ├── GoldView.cs            # Fusion 金币视图
+│   │       └── HandView.cs            # Fusion 手牌视图
+│   └── Presentation/                  # 战斗演出系统
+│       ├── BattlePresentationManager.cs  # ★ 战斗演出管理器（并行调度镜头/对话/广播/特效）
+│       ├── PresentationSequence.cs    # ★ 演出序列配置（MonoBehaviour，场景级，支持镜头target运行时绑定）
+│       ├── CameraDirector.cs          # ★ 镜头导演（IsBusy 演出锁 + SyncOriginalPosition）
+│       ├── BattleAnnouncementManager.cs  # 战场广播管理器（屏幕广播文字显示）
+│       └── BossDialogueBubble.cs      # ★ BOSS 对话气泡（演出对话 + 技能对话，订阅 OnSkillActivated）
 │
 ├── UI/                                # 界面层（仅作为 View）
 │   ├── Audio/
@@ -491,15 +598,9 @@ Assets/Scripts/
 └── _DisabledTests/                     # 已禁用的测试目录
     └── CardTypeDetectorTests.cs
 
-Assets/StreamingData/Config/            # CSV 数据文件（双向同步管线）
-├── Units.csv                          # 兵种数值表
-├── Heroes.csv                         # 英雄配置表
-├── Economy.csv                        # 经济配置表
-├── Bidding.csv                        # 叫分配置表
-└── Levels.csv                         # 关卡配置表
-
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
+├── CreateRunnerPrefab.cs              # 创建 Fusion NetworkRunner 预制体工具
 ├── ReplaceAllTMPFonts.cs              # 批量替换 TextMeshPro 字体工具
 ├── AudioClipTrimmer.cs                # ★ 音频剪辑工具（波形可视化 + 裁剪 + 试听 + 导出 WAV）
 ├── CsvIO.cs                          # ★ CSV 读写工具（支持引号字段、UTF-8 BOM）
@@ -550,18 +651,11 @@ Core/ 层是 Pure C# Class，**无法**使用 `GameObject.Find` 或 Inspector �
 | 网络连接断开 | `OnConnectionLost()` | INetworkService | OnlineLobbyController |
 | 网络玩家加入 | `OnPlayerJoined(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
 | 网络玩家离开 | `OnPlayerLeft(string)` | INetworkService | OnlineLobbyController, NetworkBiddingManager |
-| 联机出牌请求 | `RequestPlayCards(cards, result, routeGroup)` | HandArea | NetworkGameManager |
-| 联机摸牌请求 | `RequestDrawCard()` | GameBootstrapper | NetworkGameManager |
-| 联机金币同步 | `BroadcastGoldUpdate(slot, gold)` | EconomyManager | NetworkGameManager |
-| 联机领域激活 | `RequestDomainActivate(result)` | DomainSystem | NetworkGameManager |
-| 联机反制激活 | `RequestCounterActivate(result)` | DomainSystem | NetworkGameManager |
-| 联机传牌请求 | `RequestCardTransfer(card)` | GameBootstrapper | NetworkGameManager |
-| 联机取牌请求 | `RequestCardTake()` | GameBootstrapper | NetworkGameManager |
-| 飞筒传牌到达 | `OnCardArrived(senderSlot, card)` | NetworkGameManager | GameBootstrapper（放入暂存槽） |
-| 飞筒取牌完成 | `OnCardTaken(takerSlot)` | NetworkGameManager | GameBootstrapper（清空暂存槽） |
-| Master 切换 | `OnMasterSwitched()` | INetworkService | NetworkGameManager（请求时间同步） |
-| HP 修正 | `HP_CORRECTION[unitId, hp, ...]` | NetworkGameManager(Master) | NetworkGameManager(Client)（覆盖本地 HP） |
-| 状态同步 | `MASTER_STATE_SYNC[slot, cards, gold, ...]` | NetworkGameManager(Master) | NetworkGameManager(Client)（经济追踪更新） |
+| 联机金币同步 | WorldState.PlayerX.Gold/IncomeRate | Fusion [Networked] | Client 直接读取 |
+| 联机领域同步 | WorldState.Game.DomainActive/DomainType | Fusion [Networked] | Client 直接读取 |
+| 联机摸牌请求 | IntentBuffer.SubmitDrawCard() | Client → Host | FusionGameManager.ProcessNetworkInput() |
+| HP 同步 | UnitSyncManager（Fusion RPC） | Host → Client | UnitSyncManager.cs |
+
 
 ### 3.2 订阅者生命周期规则
 
@@ -600,7 +694,7 @@ Step 5:  依赖注入焊接（EconomyManager.Initialize(gameStateMachine), Battl
 Step 5b: BOSS 控制器注入（FindObjectsByType<BossController> → 纠正阵营 SetLandlord → 刷新血条颜色 → 启用 BuildingAI → boss.Inject(battleManager, deck)）
 Step 5a: AI 对手初始化（遍历 aiHands，非玩家基地注入 BuildingAI + DomainSystem 引用）
 Step 6:  焊接 UI（HandArea 空值保护 → return, 出牌事件, PlayValidator）
-Step 6b: 焊接传送飞筒 + 暂存槽（单机：查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线 / 联机：地主隐藏飞筒，农民启用飞筒 + NetworkGameManager 传牌/取牌同步）+ 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
+Step 6b: 焊接传送飞筒 + 暂存槽（单机：查找队友 AI → 初始化队友暂存槽 → 注入 BuildingAI → 飞筒接线 / 联机：地主隐藏飞筒，农民启用飞筒 + FusionGameManager IntentBuffer 传牌/取牌同步）+ 根据身份隐藏 UI（地主隐藏飞筒/暂存槽/队友暂存槽，农民隐藏分路）
 Step 7:  基地血条使用 UnitHealthBar（与兵种共用）
 Step 8:  焊接摸牌按钮（自动摸牌定时器 + 手动摸牌按钮，地主 5s/10g，农民 6s/12g）
 Step 9:  暂停菜单事件焊接
@@ -1380,7 +1474,7 @@ Master 立即 apply 状态 + 广播结果，Client 只接收 RESULT 事件镜像
 4. **No client-side state mutation** — Client 不修改手牌/金币/HP 等游戏状态
 5. **No dual simulation（ARCH-001）** — Client 禁止独立于 Master 运行游戏逻辑模拟。所有状态转换仅由 Master 产生。Client 与 Master 之间的状态偏差视为同步 bug，不视为合法的游戏分歧
 6. **All protocol keys must be request/result paired** — 请求和结果使用独立 Key（如 `DRAW_CARD` / `DRAW_CARD_RESULT`、`PLAY_CARDS` / `PLAY_APPROVED`）。例外：内部同步事件（`MASTER_STATE_SYNC`、`HP_CORRECTION`）、心跳/状态快照无需配对
-7. **UI state from Master snapshot, not local derivation** — `NetworkRemaining` 等 UI 显示状态由 Master 计算后通过 RESULT 广播，Client 直接使用，禁止本地推导。实现：`_sharedPoolRemaining`（NetworkGameManager，Master 独有）→ 广播 → `_deck.NetworkRemaining`（CardDeck，纯属性，所有客户端统一读取）→ CardCounterUI 显示。Client 不得调用 `_deck.Draw()` 或自行计算 remaining
+7. **UI state from Master snapshot, not local derivation** — `NetworkRemaining` 等 UI 显示状态由 Master 计算后通过 WorldState 同步，Client 直接使用，禁止本地推导。实现：FusionGameManager 维护 `_slotHandCards` + `WorldState.Game.DeckCount` → Client 读取 WorldState → CardCounterUI 显示
 
 > 当前系统的问题不是架构错误，而是协议复用 + 同步时序 + 数据映射的工程问题，已逐一修复。
 
@@ -1397,9 +1491,9 @@ Master 立即 apply 状态 + 广播结果，Client 只接收 RESULT 事件镜像
 ```
 UI 层（OnlineLobbyController / NetworkBiddingManager）
     ↓ 调用接口
-INetworkService（抽象接口）← NetworkGameManager（出牌/摸牌/经济/领域同步）
+INetworkService（抽象接口）← FusionGameManager（Tick 状态机 + WorldState 同步）
     ↑ 实现
-PhotonService（Photon PUN 2）
+FusionService（Photon Fusion）
     ↑ 持有
 NetworkManager（单例，DontDestroyOnLoad）
 ```
@@ -1463,11 +1557,11 @@ public interface INetworkService
 
 Core/ 是纯 C# 且逻辑确定性（Deterministic），联机时只需要服务端生成 Random Seed → 同步给所有客户端。
 
-### 13.4 断线自动重连机制
+### 13.4 断线重连机制
 
-PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocusRecent` 导致的 `TimeoutDisconnect`。
+Fusion 使用 Photon Fusion Cloud 内置的断线恢复机制，NetworkRunner 自动处理重连。
 
-**超时配置**：`Connect()` 时将 `DisconnectTimeout` 增大至 30 秒（默认约 10 秒），容忍应用失焦期间的心跳丢失。固定区域为 "cn"（中国区，nameserver `ns.photonengine.cn`）。
+**注**：PUN 2 时代的 `DisconnectTimeout=30s` + `ns.photonengine.cn` 配置已不再适用。Fusion 连接由 FusionService.Connect() 管理。
 
 **自动重连触发**：`OnApplicationFocus(hasFocus)` 和 `OnApplicationPause(pauseStatus)` 在应用恢复时检测连接状态，若已断开则自动重连。
 
@@ -1487,12 +1581,8 @@ PhotonService 内置应用失焦/暂停时的自动重连，解决 `AppOutOfFocu
 当 Master 客户端断线时，Photon 自动将 Master 权限转移给其他玩家：
 
 ```
-旧 Master 断线 → Photon.OnMasterClientSwitched(newMaster)
-  → PhotonService.OnMasterSwitched 事件
-  → NetworkGameManager.OnMasterSwitched()
-    → SyncGameTime()（新 Master 请求时间同步）
-    → 等待旧 Master 最后一次状态广播（5s 内）
-    → 新 Master 开始定期 BroadcastGameState() + BroadcastHPChecksum()
+旧 Master 断线 → Fusion Host Migration（NetworkRunner 自动处理）
+  → 新 Host 继承 WorldState，Client 自动重连
 ```
 
 **状态连续性**：Master 每 5 秒广播完整游戏状态（手牌/经济/牌堆），新 Master 上任后可从最后一次广播恢复。HP 校验和机制确保战斗状态一致。
@@ -1537,69 +1627,39 @@ public static class NetworkProtocol
 | 功能 | 状态 |
 |---|---|
 | 网络抽象层 | ✅ INetworkService 接口（扩展：玩家标识/定向消息/自定义事件） |
-| Photon 实现 | ✅ PhotonService（房间/匹配/RPC/同步） |
+
 | 网络管理器 | ✅ NetworkManager 单例 |
 | 网络协议层 | ✅ NetworkProtocol（事件 Key + Card/CardTypeResult 序列化） |
 | 联机大厅 UI | ✅ OnlineLobbyController（单排/创建房间/加入房间） |
 | 房间系统 | ✅ 创建/加入/离开/准备/AI 槽位/踢人 |
 | 联机叫分 | ✅ NetworkBiddingManager（3 人轮流叫分 + AI 槽位 + 断线处理） |
 | 叫分场景引导 | ✅ BiddingSceneBootstrap（自动检测联机状态 → 切换单机/联机管理器） |
-| 断线自动重连 | ✅ PhotonService（超时 30s + 失焦自动重连 + 房间恢复） |
-| 联机游戏管理器 | ✅ NetworkGameManager（Master 权威：出牌/摸牌/经济/领域/断线同步） |
-| 出牌/兵种同步 | ✅ NetworkGameManager（Master 验证金币 + PLAY_APPROVED 广播执行） |
-| 经济同步 | ✅ NetworkGameManager（GOLD_UPDATE 广播 + PLAYER_READY 上报 + Master 独立追踪） |
-| 领域/反制同步 | ✅ DOMAIN_PENDING/COUNTER_PENDING 广播 pending 状态，所有客户端同步 |
-| 时间同步 | ✅ PhotonNetwork.Time 基准 + 单调性保护 + 后加入自动同步 |
-| 胜利同步 | ✅ BroadcastGameEnd 广播赢家阵营 + 客户端自行判断胜负 |
-| 手牌追踪 | ✅ Master 为远程玩家创建同步牌堆 _slotDecks，摸牌/出牌双向同步 |
-| 断线转 AI | ✅ 保留实际金币和剩余手牌，AI 继承断线玩家状态 |
-| 飞筒联机 | ✅ 农民可用飞筒，Master 验证传牌/取牌，CARD_TRANSFER/ARRIVE/TAKE 协议 |
-| Master 状态同步 | ✅ NetworkGameManager（每 5s 广播完整游戏状态 + 切换前广播） |
-| HP 校验与修正 | ✅ NetworkGameManager（每 5s 校验和对比 + 自动请求修正） |
-| Master 迁移 | ✅ PhotonService.OnMasterSwitched → NetworkGameManager 请求时间同步 |
-| 飞筒联机同步 | ✅ CARD_TRANSFER/ARRIVE/TAKE 协议，Master 验证 + 广播 |
-| 经济同步增强 | ✅ GOLD_UPDATE 携带 incomeRate，所有客户端同步回金速度 |
 
-### 13.7 联机游戏管理器（NetworkGameManager）
 
-Master 权威架构，挂载到游戏场景 GameObject，由 `GameBootstrapper` 调用 `Initialize()` 注入依赖。
+### 13.7 联机游戏管理器
 
-**核心职责：**
-- **出牌同步**：Client → `SendToMaster(PLAY_CARDS, [cards, result, route, base, gold])` → Master 验证手牌 + 金币 + 领域封印（不信任客户端报告的金币）→ `SendToAll(PLAY_APPROVED)` → 所有客户端 `ExecutePlayApproved()`
-- **摸牌同步**：Client → `SendToMaster(DRAW_CARD, [slot, gold, cost])` → Master 验证 PLAYER_READY 已到达 + 扣费 → `SendToAll(DRAW_CARD_RESULT, [slot, cardIndex, cost])` → 客户端添加手牌 + 扣费
-- **经济同步**：Master 使用自己追踪的金币，不接受客户端报告的金币覆盖（防止金币伪造）；`GOLD_UPDATE` 不覆盖客户端自身金币
-- **领域/反制同步**：`RequestDomainPending/RequestCounterPending` → Master 广播 pending 状态 → 所有客户端设置；`RequestDomainActivate/RequestCounterActivate` → Master 验证 → 广播执行
-- **时间同步**：Master 广播 `PhotonNetwork.Time` 基准 + 已经过时间 → 客户端映射到本地 `Time.time` 坐标系（单调性保护）
-- **胜利同步**：Master 的 `BattleManager.OnGameEnded` → `BroadcastGameEnd(winnerIsLandlord)` → 客户端判断本机胜负
-- **断线处理**：`OnPlayerLeft` → 保留断线玩家实际金币 → 转为 AI 控制
-- **飞筒传牌同步**：`RequestCardTransfer(card)` → Master 验证手牌 → 广播 `CARD_ARRIVE` → 接收方暂存槽；`RequestCardTake()` → Master 广播 `CARD_TAKE` → 清空暂存槽
-- **HP 同步**：Master 每 5 秒广播所有存活单位 HP（用 `UnitId` 标识，跨客户端一致），客户端直接覆盖本地 HP
-- **Master 迁移**：`OnMasterSwitched` → 新 Master 请求时间同步
-- **牌堆偏移**：每个玩家的同步牌堆跳过 `slot * 7` 张牌，防止多名玩家拿到相同手牌
-- **手牌验证**：用 `DeckIndex` 比较（`ContainsByDeckIndex`），避免 `_deckId` 跨客户端不一致导致验证失败
-- **调试工具**：`NetworkLogger`（日志写入 `Logs/` 文件）+ `NetworkDebugPanel`（游戏内左上角状态面板）
+> ⚠️ **PUN NetworkGameManager 已删除**，由 `FusionGameManager`（§Fusion）替代。
+
+**当前架构（Fusion）：**
+- `FusionGameManager`：基于 Tick 状态机 + `[Networked]` 同步
+- `WorldState` struct：唯一真相源，Fusion 自动同步
+- `CombatSystem`：Host 权威战斗逻辑
+- `IntentBuffer`：Client 输入 → Host 处理的桥梁
+- `UnitSyncManager`：单位状态 RPC 同步
+- `AISystem`：Host 侧 AI 决策
 
 **数据流：**
 ```
-玩家出牌 → HandArea → NetworkGameManager.RequestPlayCards()
-  ├─ Master: MasterValidateAndPlay() → 验证手牌 + 金币 + 领域封印 → SendToAll(PLAY_APPROVED)
-  └─ Client: SendToMaster(PLAY_CARDS) → 等待 PLAY_APPROVED
+玩家出牌 → HandArea → FusionGameManager.SetPlayCardInput() → IntentBuffer.AddPlayCard()
+  → Fusion OnInput → FusionGameManager.ProcessNetworkInput() → IntentBuffer → ProcessPlayCards()
+  → 验证手牌 + 金币 + 领域封印 → DeployCards() → DomainSystem.OnCardPlayed()
 
-所有客户端: ExecutePlayApproved()
-  → 扣费(仅本机玩家) → 移除手牌 → DeployCards() → DomainSystem.OnCardPlayed()
+飞筒传牌 → LaunchTubeUI → FusionGameManager.IntentBuffer.AddTransfer()
+  → ProcessTransfers() → 验证手牌 → ApplyTransfer() → 同步 WorldState.PlayerX.HandCount
 
-飞筒传牌 → LaunchTubeUI → NetworkGameManager.RequestCardTransfer(card)
-  ├─ Master: MasterHandleCardTransfer() → 验证手牌 → SendToAll(CARD_ARRIVE)
-  └─ Client: SendToMaster(CARD_TRANSFER) → 等待 CARD_ARRIVE
-
-接收方: OnCardArrived → teammateTempSlotUI.ReceiveCard(card)
-取牌方: RequestCardTake() → SendToAll(CARD_TAKE) → OnCardTaken → Clear()
-
-摸牌流程（Request/Result 分离）:
-  Client: SendToMaster(DRAW_CARD, [slot, gold, cost])
-  Master: MasterDrawCard() → 验证 + 抽牌 + 本地执行 → SendToAll(DRAW_CARD_RESULT, [slot, cardIndex, cost])
-  Client: HandleDrawCard() → 添加手牌 + 扣费
-  ⚠️ Master 收到自己的 DRAW_CARD_RESULT 不重复执行（!IsMasterClient 防护）
+摸牌流程:
+  Client: FusionGameManager.SubmitDrawCard() → 修改 WorldState（Host 权威）
+  Host: WorldState.Game.DeckCount 递减，WorldState.PlayerX.HandCount 递增
 ```
 
 **手牌同步机制：**
@@ -1944,10 +2004,9 @@ TakeDamage(rawDamage, type)
 
 ### 18.4 联机模式
 
-联机模式下飞筒系统通过 `NetworkGameManager` 同步：
-- 农民可用飞筒（地主隐藏），传牌通过 `CARD_TRANSFER`/`CARD_ARRIVE` 协议同步
-- `RequestCardTransfer(card)` → Master 验证手牌 → 广播给接收方暂存槽
-- `RequestCardTake()` → Master 广播 `CARD_TAKE` → 所有客户端清空暂存槽
+联机模式下飞筒系统通过 `FusionGameManager` 的 `IntentBuffer` 同步：
+- 农民可用飞筒（地主隐藏），传牌通过 `IntentBuffer.AddTransfer()` → `ProcessTransfers()` 处理
+- Host 验证手牌 → `ApplyTransfer()` 移动牌 → 同步 `WorldState.PlayerX.HandCount`
 - `FindTeammateSlot()` 自动查找同阵营队友槽位
 
 ### 18.5 基地摧毁处理
@@ -2139,44 +2198,42 @@ AI 槽位（仅 Master 执行）:
 
 ---
 
-## 22. 跨场景数据传递（GameSession）
+## 22. 跨场景数据传递（GameSession — 已废弃降级）
+
+> ⚠️ Phase 5 后 GameSession 仅作为桥接数据缓存，核心逻辑由 FusionGameManager WorldState 替代。
 
 ### 22.1 单机模式
 
 ```csharp
 GameSession.SetResult(isLandlord, multiplier, landlordIdx, farmerIndices);
-// 自动构建 PlayerBaseMapping[3]，随机分配农民基地
-GameSession.MyBaseIndex       // 本机玩家操控的基地索引
 GameSession.PlayerIsLandlord  // 本机玩家是否地主
 GameSession.BidMultiplier     // 叫分倍数
-GameSession.HasResult         // 是否有叫分结果（GameBootstrapper.Awake 据此决定是否读取 GameSession）
-GameSession.Reset()           // 清除所有会话数据（调试/重新开始用）
+GameSession.HasResult         // 是否有叫分结果
+GameSession.Reset()           // 清除所有会话数据
 ```
 
-### 22.2 联机模式（已实现）
+### 22.2 联机模式
 
 ```csharp
-GameSession.IsNetworkMode = true;              // 标记联机模式
-GameSession.NetworkSeed = seed;                // 同步随机种子（Master 生成）
-GameSession.LocalPlayerId = localId;           // 本机玩家 ID（0/1/2）
-GameSession.SetResultNetwork(localId, baseMapping, multiplier);
+GameSession.IsNetworkMode = true;
+GameSession.NetworkSeed = seed;
+GameSession.SetResultNetwork(landlordSlot, multiplier);
 GameSession.SetLocalPlayerIsLandlord(isLandlord);
-GameSession.AISlots                            // AI 槽位 HashSet<int>
-GameSession.IsAISlot(slot)                     // 判断指定槽位是否为 AI
-// localId = 网络分配的玩家 ID（0/1/2）
-// baseMapping = 完整的 [playerId → baseIndex] 映射
-// seed = Environment.TickCount，Master 端生成，通过 BID_RESULT 广播
+GameSession.AISlots           // AI 槽位（Lobby 阶段临时存储）
 ```
 
-**联机初始化流程**：
+**AI 槽位同步**：通过 `FusionGameManager.AddAISlot()`/`RemoveAISlot()` 写入 `WorldState.PlayerX.IsAI`，Fusion 自动同步到所有客户端。
+
+### 22.3 联机初始化流程
+
 ```
 NetworkBiddingManager.HandleBidResult()
   → GameSession.IsNetworkMode = true
   → GameSession.NetworkSeed = seed
-  → GameSession.SetResultNetwork(_mySlot, baseMapping, multiplier)
+  → GameSession.SetResultNetwork(landlordSlot, multiplier)
   → GameSession.SetLocalPlayerIsLandlord(localIsLandlord)
-  → Master 点击确认 → LoadScene(GAME_SCENE)
-  → GameBootstrapper 读取 GameSession 启动游戏
+  → LoadScene(GAME_SCENE)
+  → GameBootstrapper 读取 GameSession.LandlordSlot
 ```
 
 ---
@@ -2199,13 +2256,20 @@ NetworkBiddingManager.HandleBidResult()
     ├─ Step 5b:
     │   ├─ SetLandlord(!PlayerIsLandlord) 纠正阵营
     │   ├─ 刷新血条颜色
+    │   ├─ BossDialogueBubble.Initialize()（订阅演出+技能对话事件）
     │   ├─ 启用 BuildingAI（确保 enabled=true）
     │   └─ boss.Inject(battleManager, deck)
-    │       └─ OnStart → ActivateBoss()
+    │       └─ OnStart → ActivateBoss()（若 _onStartDelay>0 则延迟）
     │           ├─ 恢复 Renderer/Collider/HealthBar/BossSkillSystem
-    │           ├─ BattleManager.ActivateBoss(route)
-    │           └─ RegisterBossAsSummoner()
-    │               └─ BuildingAI.Initialize(hand, economy, ...)
+    │           ├─ 解锁路线
+    │           ├─ BattleManager.ActivateBoss(route)（设置 FollowPath + SetEnemyUnits）
+    │           ├─ RegisterBossAsSummoner()
+    │           │   └─ BuildingAI.Initialize(hand, economy, ...)
+    │           └─ OnBossAwakened 事件 → PlaySequence(_bossSequence)
+    │               ├─ CameraDirector.SyncOriginalPosition + IsBusy=true
+    │               ├─ 镜头 FocusTarget → FollowTarget → Return（并行）
+    │               ├─ BossDialogueBubble 打字机效果（并行）
+    │               └─ 镜头归位 IsBusy=false
   → BuildingAI.Update()
     ├─ 摸牌（每 drawInterval 秒）
     ├─ 经济增长
@@ -2219,6 +2283,8 @@ NetworkBiddingManager.HandleBidResult()
 BossGiantBird / BossSword (CardUnit, BossController, BuildingAI, SpawnPool, RouteGroup, UnitPassives, UnitVFX)
 ├── Visual (SpriteRenderer, SimpleAnimator, Animator, AttackEventRelay)
 ├── HealthBar (UnitHealthBar, SpriteRenderer)
+├── DialogueBubble (BossDialogueBubble)
+│   └── Canvas (World Space, CanvasGroup, SpeakerText, ContentText)
 ├── Audio (UnitAudio)  ← 解耦到子物体
 ├── KingPoint (Transform, SpawnPool._spawnPoint)
 └── AttackPoint (Transform)
@@ -2234,12 +2300,16 @@ BossGiantBird / BossSword (CardUnit, BossController, BuildingAI, SpawnPool, Rout
 | BossController | `_bossRoute` | BOSS 行进路线（RoutePath） |
 | BossController | `_playerRouteToBoss` | 玩家主堡到 BOSS 的路线（BOSS 激活后解锁） |
 | BossController | `_enableSummoner` | 启用召唤师能力 |
+| BossController | `_onStartDelay` | OnStart 模式注入后固定延迟（秒），确保演出时间一致 |
+| BossController | `_bossSequence` | 本 Boss 的演出配置（引用场景中的 PresentationSequence 组件） |
 | BossController | `IsActive` | 只读属性，`_activated` 的公开访问。供 BattleManager.GetEnemiesFor 检查 |
 | BuildingAI | `decisionInterval` | 出牌判定间隔（秒） |
 | SpawnPool | `_rankPrefabs[13]` | 按点数映射的召唤物预制体 |
 | SpawnPool | `_spawnPoint` | 召唤物生成位置（应为 BOSS 子物体） |
 | RouteGroup | `_routes[]` | 召唤物行进路线 |
 | BossSkillSystem | `skills[]` | BOSS 技能列表（按数组顺序检查触发） |
+| BossSkillSystem.Skill | `skillDialogue` | 释放技能时显示的对话文本（留空不显示） |
+| BossSkillSystem.Skill | `skillSpeaker` | 技能对话的说话人名字（留空默认 Boss） |
 
 ### 23.4 路径跟随
 
@@ -2278,6 +2348,17 @@ BOSS 的 RoutePath 需要**取消勾选 `_cachePositions`**，使路径点实时
 | `animTrigger` | 施法动画名（多个技能可共用同一个 Trigger，如不同 HP 阶段的 Dash 共用 "Dash" 动画） |
 | `effectDelay` | 施法后多久触发效果 |
 
+**技能对话：**
+
+| 字段 | 说明 |
+|---|---|
+| `skillDialogue` | 释放技能时显示的对话文本（留空则不显示） |
+| `skillSpeaker` | 对话显示的说话人名字（留空默认 "Boss"） |
+
+- `BossSkillSystem.OnSkillActivated(speaker, text)` 事件在 `ExecuteEffect()` 中触发
+- `BossDialogueBubble` 监听此事件，自动显示 2 秒后淡出，SpeakerText 隐藏
+- 演出对话（BattlePresentationManager 触发）与技能对话使用同一个气泡，互斥（新对话中断旧对话）
+
 **冲刺（Dash）机制：**
 - 方向：朝当前目标 → 路径前进方向 → 默认向右
 - 碰撞检测：使用 Boss 碰撞箱实际宽度扫描路径上的敌人
@@ -2308,6 +2389,9 @@ Update() → 检查触发条件 → StartCast() → 施法动画+效果 → EndC
 - `Invulnerable` 状态在 BOSS 死亡时由 `ForceEndCast()` 自动清除，防止残留
 - **BOSS 未激活时完全不参与战斗**：Renderer/Collider/HealthBar/BossSkillSystem 全部禁用，GetEnemiesFor 排除未激活 BOSS
 - **BossSkillSystem 组件级禁用**：Awake 禁用 → ActivateBoss 启用，确保 Update 不执行
+- **演出序列挂场景**：PresentationSequence 为 MonoBehaviour，每关场景各自挂载，BossController._bossSequence 引用。镜头 target 运行时由 GameBootstrapper 自动绑定 Boss Transform，无需手动拖入
+- **CameraDirector.IsBusy 演出锁**：演出期间 IsBusy=true，CameraController.Update() 跳过，防止镜头冲突颤抖
+- **技能对话**：BossSkill.skillDialogue 非空时触发 OnSkillActivated 事件，BossDialogueBubble 订阅后自动显示（无 SpeakerText，2 秒自动消失）
 - 攻击状态超时安全阀：`AttackInterval×3` 秒未完成自动重置
 - 多个 HP 阶段技能可共用同一个 `animTrigger`（如 75%/50%/25% 都填 "Dash"），动画相同但效果参数独立配置
 
@@ -2345,20 +2429,46 @@ BOSS 技能施法时间与动画同步机制：
 
 ## 24. 架构债务登记
 
+### Fusion 游戏场景集成状态（2026-06-26 更新）
+
+| 子系统 | 状态 | 说明 |
+|:---|:---|:---|
+| 叫分输入 RPC | ✅ 完成 | Client→Host RpcSubmitBid |
+| 摸牌 RPC | ✅ 完成 | Client→Host RpcDrawCard |
+| 出牌 RPC | ✅ 完成 | Client→Host RpcPlayCard |
+| IdentityReady 锁 | ✅ 完成 | 防止 Client 在 Host 初始化前读取 WorldState |
+| Slot/Identity 同步 | ✅ 完成 | WorldState 映射 + GetLocalSlot 回退 |
+| AI 叫分 | ✅ 完成 | 双重节流已修复 |
+| 出牌执行 | ✅ 完成 | ApplyPlayCards 连接 BattleManager.DeployCards |
+| IsPlayingFinished | ✅ 完成 | 返回 false，由 BattleManager 驱动结束 |
+| GameSession 模式锁定 | ✅ 完成 | SetNetworkMode 单次写入 |
+| 退出联机解锁 | ✅ 完成 | ResetNetworkModeLock |
+| Client 手牌 UI 同步 | ❌ 未完成 | HandArea 仍读本地引用 |
+| Client 牌堆显示 | ❌ 未完成 | CardCounterUI 不同步 |
+| Client 经济显示 | ❌ 未完成 | EconomyManager 不读 _syncedGold |
+| Client 领域 UI | ❌ 未完成 | DomainUIController 不同步 |
+| BattleManager→Fusion 桥接 | ❌ 未完成 | OnGameEnded 不触发状态机 |
+| 兵种视觉同步 | ❌ 未完成 | Client 无 UnitView |
+
 以下为已识别但暂不偿还的架构债务，待功能扩展时根据实际痛点决定是否升级。
 
 | 债务 | 现状 | 触发偿还条件 |
 |:---|:---|:---|
-| ~~**[ARCH-001] 战斗模拟双端运行（P0）**~~ | **已收敛** — Buff/Stun/Knockback/HP/Target/Position 已通过 `SimulatesCombat` 保护，Master Only | ✅ 已偿还 |
-| ~~双模拟同步（经济）~~ | **已收敛** — `EconomyManager.Update()` 和 `BuildingAI.Update()` 已添加 `IsMaster` 检查，Client 不再执行 `UpdateEconomy()` | ✅ 已偿还 |
-| NetworkGameManager 职责过重 | 出牌/摸牌/经济/领域/飞筒/HP/状态同步均集中在一个类（当前 2121 行） | 超过 2500 行或新增观战/回放时拆分 |
-| Authority 未抽象 | `IsMasterClient` 判断分散在 NetworkGameManager + GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
+
+| Authority 未抽象 | `IsMasterClient` 判断分散在 GameBootstrapper + BuildingAI 等处 | 新增观战/AI/回放/专用服务器中任意 2 项 |
 | 网络协议未模型化 | 消息使用 `string Key + object[]` 模式，协议定义散落在 NetworkProtocol 常量中 | 协议数量超过 30 种或需要版本兼容 |
-| ~~状态同步体系较简单~~ | **已升级为 §25 Event+Snapshot+Tick 三层确定性模型** | ✅ 已偿还 |
+
 | 客户端预测 | 无。所有操作等 Master 确认后才执行，高延迟下操作感差 | 延迟 > 100ms 时玩家体验明显下降 |
-| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2331 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
-| ~~Client 战斗表现层缺失~~ | **部分完成** — 攻击动画/受击反馈/血条动画/音效系统已实现，攻击特效/技能特效待实现 | ⏳ P1 进行中 |
-| ~~非伤害战斗效果双端运行~~ | **已修复** — BossSkillSystem 中的 Stun/Knockback/Dash + UnitPassives 中的 Shockwave/Knockback 已添加 `SimulatesCombat` 保护 | ✅ 已偿还 |
+| 文档职责过重 | ARCHITECTURE.md 承担架构/规范/决策/债务 4 种职责（当前 2946 行） | 联机稳定化完成后拆分为 Architecture.md + Debt.md + ADR/ |
+
+| **[ARCH-016] Client 手牌 UI 不同步（P0）** | HandArea 读本地 `playerHand` 引用，不从 WorldState 或 RPC 同步的 `_slotHandCards` 读取 | 联机模式出牌后 Client 手牌不更新 |
+| **[ARCH-017] BattleManager→Fusion 状态机未桥接（P0）** | BattleManager.OnGameEnded 触发但 FusionGameManager 不响应，游戏无法正常结束 | 联机模式游戏永不结束或无结算界面 |
+| **[ARCH-018] Client 经济/领域 UI 未同步（P1）** | _syncedGold 和领域 RPC 存在，但 EconomyManager/DomainUIController 不读取 | 联机模式金币/领域显示错误 |
+| **[ARCH-019] _slotHandCards 跨进程不同步（P1）** | Host 本地字典，Client 依赖 RPC 同步，但同步时机和完整性不足 | Client 手牌与 Host 不一致 |
+| **[ARCH-020] GameSession 静态污染源未完全清除（P2）** | AISlots/RawAISlots 仍为 static HashSet，退出联机后可能残留。已通过 ResetNetworkModeLock() 改善 | 多次切换单机/联机后状态异常 |
+| **[ARCH-021] 联机模式游戏场景运行不完整（P0）** | 血条/手牌已渲染，但兵种生成/出牌/经济/战斗等核心逻辑未正常运行。疑似 FusionGameManager 与 BattleManager 之间的桥接不完整 | 联机模式可进入游戏但无法正常对战 |
+| **[ARCH-022] LobbyIdentityService 与 FusionGameManager 双重 slot 管理（P1）** | 两套独立的 slot 字典（_playerToSlot / LobbyIdentityService._playerToSlot），需 AssignExistingPlayerSlots 补偿同步 | 联机模式 slot 分配不一致 |
+| **[ARCH-023] GameBootstrapper 联机/单机逻辑耦合（P1）** | GameBootstrapper.Awake() 在联机模式仍执行部分逻辑（CardUnit.PlayerIsLandlord），Start() 通过 yield break 跳过但依赖 Activate NetworkGameBootstrapper 兜底 | 联机模式初始化路径脆弱 |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
 
@@ -2523,7 +2633,7 @@ struct DeckState {
 | 当前系统 | v2.0 目标 | 改造要点 |
 |:---|:---|:---|
 | `_stateVersion` | `_tick` | 已完成 ✅ |
-| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），但 NetworkGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
+| Event 直接修改状态 | Event 仅缓存，Snapshot 授权执行 | **部分完成** — `GameEvent` struct 已实现（append-only），`GameSnapshot` 类已实现（完整快照），FusionGameManager 中尚未完全切换到 Event→Snapshot 授权执行模式 |
 | `MASTER_STATE_SYNC` | `GameSnapshot` 完整快照 | 已完成 ✅（`GameSnapshot.cs` 已独立实现） |
 | `HP_CORRECTION` 独立修正 | 合并入 Snapshot | 已完成 ✅ |
 | `SyncState` 状态机 | 生命周期阶段 | **待升级** |
@@ -2603,7 +2713,6 @@ AI     = 只读决策（联机模式）
 | `EconomyManager.AddGold()` | ✅ `!IsMasterClient → return` | Client 不增加金币 |
 | `BuildingAI.Update()` | ✅ 联机模式不调用 `UpdateEconomy()` | AI 不自动增长金币 |
 | `BuildingAI.MakeDecision()` | ✅ `!IsMasterClient → continue` | AI 不执行 `TrySpend()` |
-| `NetworkGameManager.Update()` | ✅ `_net.IsMasterClient` 检查 | 仅 Master 执行 `_slotEconomies.UpdateEconomy()` |
 
 ### 26.5 数据流
 
@@ -2656,13 +2765,13 @@ EconomyManager.UpdateGoldUI()
 ```
 Master = 唯一战斗逻辑权威
 Client = 纯投影层（动画 + 特效 + UI + 音效）
-NetworkGameManager = 事件转发层（不直接播放音效）
+FusionGameManager = 事件转发层（不直接播放音效）
 ```
 
 **禁止**：
 - Client 修改任何战斗状态
 - Client 执行战斗计算
-- NetworkGameManager 直接播放音效
+- FusionGameManager 直接播放音效
 - 新增事件类型（CombatEvent struct 等）
 
 ### 27.2 事件体系（已冻结）
@@ -2680,13 +2789,13 @@ NetworkGameManager = 事件转发层（不直接播放音效）
 
 ```
 Master: TakeDamage() → OnTakeDamageEvent → UnitAudio.OnTakeDamage() → 播放音效
-Client: UNIT_HIT → NetworkGameManager → UnitAudio.PlayHitNetwork() → 播放音效
+Client: UNIT_HIT → FusionGameManager → UnitAudio.PlayHitNetwork() → 播放音效
 ```
 
 **关键规则**：
 - Master 保留本地事件驱动音效（不修改）
 - Client 通过网络事件驱动音效
-- `NetworkGameManager` 不直接播放音效，转发到 `UnitAudio`
+- `FusionGameManager` 不直接播放音效，转发到 `UnitAudio`
 - `HandleUnitAttack()` 检查 `IsMasterClient`，Master 不执行
 
 ### 27.4 VisualStunTimer（Client 专用）

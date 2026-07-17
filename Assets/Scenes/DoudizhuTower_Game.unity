@@ -494,6 +494,68 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &605096853
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 605096854}
+  - component: {fileID: 605096855}
+  m_Layer: 0
+  m_Name: NetworkGameBootstrapper
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 0
+--- !u!4 &605096854
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 605096853}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 880402628}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &605096855
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 605096853}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1744da97c80845e4ea6c3d8d0643444e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  handArea: {fileID: 867466404}
+  cardCounter: {fileID: 708858468}
+  battleManager: {fileID: 1496974332}
+  gameStateMachine: {fileID: 842581713}
+  timerQueue: {fileID: 842581714}
+  launchTubeUI: {fileID: 1377809786}
+  tempSlotUI: {fileID: 968813652}
+  teammateTempSlotUI: {fileID: 2086972964}
+  drawButton: {fileID: 647138684}
+  domainSystem: {fileID: 886368684}
+  domainUIController: {fileID: 785272170}
+  domainButton: {fileID: 365207624}
+  pauseMenu: {fileID: 0}
+  victoryPanel: {fileID: 0}
+  baseBuildings:
+  - {fileID: 6972902}
+  - {fileID: 838232512}
+  - {fileID: 1031332516}
 --- !u!114 &647138684 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 841823563829016200, guid: 989ae938a35155b4fada4bf099cfbe1b, type: 3}
@@ -772,6 +834,7 @@ Transform:
   - {fileID: 842581717}
   - {fileID: 886368685}
   - {fileID: 1496974333}
+  - {fileID: 605096854}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &886368683
@@ -2169,11 +2232,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 7612705752403997135, guid: 665649bf27906e342a922c5a36a5767e, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 969
+      value: 518
       objectReference: {fileID: 0}
     - target: {fileID: 7612705752403997135, guid: 665649bf27906e342a922c5a36a5767e, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 294
+      value: 313
       objectReference: {fileID: 0}
     - target: {fileID: 7612705752403997135, guid: 665649bf27906e342a922c5a36a5767e, type: 3}
       propertyPath: m_LocalPosition.z

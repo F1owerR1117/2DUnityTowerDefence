@@ -332,6 +332,9 @@ namespace DoudizhuTower.Gameplay.Battle
 
         private void Update()
         {
+            // 清理死亡单位不受演出状态影响，确保击杀后及时回收
+            CleanupDeadUnits();
+
             if (IsPresentationActive) return;
 
             foreach (var unit in _allUnits)
@@ -340,7 +343,6 @@ namespace DoudizhuTower.Gameplay.Battle
                     unit.SetEnemyUnits(GetEnemiesFor(unit));
                     unit.SetEnemyBuildings(_allBuildingTargets);
                 }
-            CleanupDeadUnits();
         }
 
         private void OnUnitDied(int unitId)

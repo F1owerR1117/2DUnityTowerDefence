@@ -1,6 +1,7 @@
 using System;
 using DoudizhuTower.Core.Cards;
 using DoudizhuTower.Gameplay.Entities;
+using DoudizhuTower.Gameplay.Presentation;
 using DoudizhuTower.Gameplay.Systems;
 using UnityEngine;
 
@@ -16,10 +17,16 @@ namespace DoudizhuTower.Gameplay.Battle
 
         [Header("触发条件")]
         [SerializeField] private SpawnTrigger _trigger = SpawnTrigger.OnStart;
+        [Tooltip("OnStart 模式：注入后的固定延迟（秒），确保演出时间一致")]
+        [SerializeField] private float _onStartDelay = 0f;
         [Tooltip("OnTimer 模式：延迟秒数")]
         [SerializeField] private float _spawnDelay = 60f;
         [Tooltip("OnBuildingDestroyed 模式：监听哪个建筑的死亡")]
         [SerializeField] private CardUnit _triggerBuilding;
+
+        [Header("演出序列")]
+        [Tooltip("本 Boss 的演出配置（挂载在场景中的 PresentationSequence 组件）")]
+        [SerializeField] private PresentationSequence _bossSequence;
 
         [Header("BOSS 路线")]
         [SerializeField] private RoutePath _bossRoute;
@@ -50,15 +57,31 @@ namespace DoudizhuTower.Gameplay.Battle
         /// <summary>BOSS 是否已激活（供 BattleManager.GetEnemiesFor 检查）</summary>
         public bool IsActive => _activated;
 
+        /// <summary>本 Boss 的演出序列（供 GameBootstrapper 读取）</summary>
+        public PresentationSequence BossSequence => _bossSequence;
+
         /// <summary>注入依赖（由 GameBootstrapper 调用）。显示恢复延迟到 ActivateBoss()。</summary>
         public void Inject(BattleManager battleManager, CardDeck deck)
         {
             _battleManager = battleManager;
             _deck = deck;
 
-            // OnStart 模式：注入完成后直接激活（ActivateBoss 内部恢复显示）
+            // OnStart 模式：注入后延迟激活，确保演出时间一致
             if (_trigger == SpawnTrigger.OnStart)
-                ActivateBoss();
+            {
+                if (_onStartDelay > 0f)
+                {
+                    var timerQueue = FindFirstObjectByType<TimerQueue>();
+                    if (timerQueue != null)
+                        timerQueue.Schedule(_onStartDelay, ActivateBoss);
+                    else
+                        Invoke(nameof(ActivateBoss), _onStartDelay);
+                }
+                else
+                {
+                    ActivateBoss();
+                }
+            }
         }
 
         /// <summary>设置触发条件（可覆盖 Inspector 配置）</summary>
@@ -141,9 +164,6 @@ namespace DoudizhuTower.Gameplay.Battle
             if (_activated || _battleManager == null || _bossUnit == null) return;
             _activated = true;
 
-            // 广播激活事件（演出系统在此处介入）
-            OnBossAwakened?.Invoke(this);
-
             // 0. 恢复显示、碰撞、血条和技能系统（Inject 时延迟到这里）
             if (_renderers != null)
                 foreach (var r in _renderers) if (r != null) r.enabled = true;
@@ -158,13 +178,16 @@ namespace DoudizhuTower.Gameplay.Battle
             if (_bossRoute != null) _bossRoute.Unlock();
             if (_playerRouteToBoss != null) _playerRouteToBoss.Unlock();
 
-            // 2. 激活 BOSS 战斗行为，注入路径/目标
+            // 2. 激活 BOSS 战斗行为，注入路径/目标（移动到路线起点）
             _battleManager.ActivateBoss(_bossUnit, _bossRoute);
 
             // 3. 注册召唤师能力
             if (_enableSummoner && _deck != null)
                 _battleManager.RegisterBossAsSummoner(_bossUnit, _deck,
                     _bossInitialGold, _bossIncomeRate, _bossMaxSelection, _bossDrawInterval);
+
+            // 广播激活事件（演出系统在此处介入，此时 Boss 已在正确位置）
+            OnBossAwakened?.Invoke(this);
         }
     }
 }

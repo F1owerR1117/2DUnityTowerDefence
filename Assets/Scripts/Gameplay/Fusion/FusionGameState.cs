@@ -13,13 +13,33 @@ namespace DoudizhuTower.Gameplay.Fusion
         public byte Phase;           // 0=叫分 1=出牌 2=结算
         public byte TurnSlot;        // 当前行动玩家
         public byte DeckCount;       // 剩余牌数
+
+        // 叫分状态（Fusion Networked）
         public byte CurrentBidTurn;  // 当前叫分轮到谁
         public byte HighestBid;      // 最高叫分
         public byte HighestBidder;   // 最高叫分者 slot
         public byte BidCount;        // 已叫分人数
-        public int TickCounter;      // Heartbeat：保证 snapshot 捕捉
-        public int StateHash;        // 同步验证：Client 对比用
-        public int BidTick;          // 叫分节拍（Host 写，Client 只读）
+        public byte BidWinnerSlot;   // 叫分赢家 slot
+        public byte IsBiddingFinished; // 0=进行中 1=已结束
+
+        public int TickCounter;      // Heartbeat
+        public int StateHash;        // 同步验证
+
+        // 领域状态
+        public byte DomainActive;
+        public byte DomainType;
+        public byte DomainSlot;
+
+        // 身份初始化锁（0=未就绪 1=Host 已写入全部身份数据）
+        public byte IdentityReady;
+
+        // 叫分阶段起始 Tick（网络同步，供 Client 计算倒计时）
+        public int StateStartTick;
+
+        // Host 分配的 PlayerRef → Slot 映射（存储 PlayerRef.RawEncoded 的低 8 位）
+        public byte Slot0PlayerRef;
+        public byte Slot1PlayerRef;
+        public byte Slot2PlayerRef;
     }
 
     // =========================
@@ -48,40 +68,23 @@ namespace DoudizhuTower.Gameplay.Fusion
         public int UnitId;
         public int Owner;         // 所属玩家 Slot
 
-        public float PosX;        // 位置（避免 Vector2，Fusion 更友好）
+        public float PosX;        // 位置
         public float PosY;
 
         public int HP;
         public int MaxHP;
 
+        public int ATK;           // 攻击力
+        public float AttackSpeed; // 攻击间隔（秒）
+        public float AttackTimer; // 攻击冷却计时
+        public float AttackRange; // 攻击范围
+
         public int TargetId;      // 攻击目标 (-1=无目标)
 
         public byte State;        // 0=Idle 1=Move 2=Attack 3=Dead
 
-        public float AttackTimer; // 攻击冷却计时
         public float MoveSpeed;   // 移动速度
-        public float AttackRange; // 攻击范围
-
         public byte IsLandlord;   // 0=false, 1=true
-
-        // 被动标志位
-        public byte PassiveFlags; // PassiveFlags 枚举
-    }
-
-    // =========================
-    // ③-a 被动标志枚举
-    // =========================
-    [System.Flags]
-    public enum PassiveFlags : byte
-    {
-        None = 0,
-        HasAura = 1 << 0,
-        HasRegen = 1 << 1,
-        HasThorns = 1 << 2,
-        HasShield = 1 << 3,
-        HasSlow = 1 << 4,
-        IsSlowed = 1 << 5,
-        IsShielded = 1 << 6,
     }
 
     // =========================
@@ -93,18 +96,65 @@ namespace DoudizhuTower.Gameplay.Fusion
     }
 
     // =========================
-    // ⑤ 输入系统
+    // ⑤ 输入系统（传输层：指令容器，不绑定业务数据结构）
     // =========================
     public struct FusionPlayerInput : INetworkInput
     {
-        public byte Action;     // 0=none,1=play,2=draw,3=bid
-        public byte CardId;
-        public byte Target;
+        public byte Action;       // 0=none, 1=play, 2=draw, 3=bid, 4=domain
+        public byte Slot;         // 玩家槽位
+        public byte DataLength;   // 有效数据长度（D0-Dn）
+        public byte D0;           // 通用数据缓冲区
+        public byte D1;
+        public byte D2;
+        public byte D3;
+        public byte D4;
+        public byte D5;
+        public byte D6;
+        public byte D7;
+
+        /// <summary>写入任意字节数据</summary>
+        public void SetData(byte[] data)
+        {
+            DataLength = (byte)(data?.Length ?? 0);
+            if (DataLength > 0) D0 = data[0];
+            if (DataLength > 1) D1 = data[1];
+            if (DataLength > 2) D2 = data[2];
+            if (DataLength > 3) D3 = data[3];
+            if (DataLength > 4) D4 = data[4];
+            if (DataLength > 5) D5 = data[5];
+            if (DataLength > 6) D6 = data[6];
+            if (DataLength > 7) D7 = data[7];
+        }
+
+        /// <summary>读取任意字节数据</summary>
+        public byte[] GetData()
+        {
+            if (DataLength == 0) return System.Array.Empty<byte>();
+            var result = new byte[DataLength];
+            if (DataLength > 0) result[0] = D0;
+            if (DataLength > 1) result[1] = D1;
+            if (DataLength > 2) result[2] = D2;
+            if (DataLength > 3) result[3] = D3;
+            if (DataLength > 4) result[4] = D4;
+            if (DataLength > 5) result[5] = D5;
+            if (DataLength > 6) result[6] = D6;
+            if (DataLength > 7) result[7] = D7;
+            return result;
+        }
     }
 
     // =========================
     // ⑥ 世界状态容器
     // =========================
+
+    public enum GamePhase : byte
+    {
+        Lobby = 0,
+        Bidding = 1,
+        Playing = 2,
+        End = 3,
+    }
+
     public struct WorldState : INetworkStruct
     {
         public GameState Game;

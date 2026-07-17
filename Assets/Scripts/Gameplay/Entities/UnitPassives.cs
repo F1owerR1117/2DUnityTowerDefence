@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using DoudizhuTower.Core.Battle;
+using DoudizhuTower.Gameplay.Battle;
 using UnityEngine;
 
 namespace DoudizhuTower.Gameplay.Entities
@@ -383,6 +384,13 @@ namespace DoudizhuTower.Gameplay.Entities
 
         private void Update()
         {
+            // BOSS 未激活时跳过所有被动逻辑
+            if (_owner._isBoss)
+            {
+                var bossCtrl = _owner.GetComponent<BossController>();
+                if (bossCtrl != null && !bossCtrl.IsActive) return;
+            }
+
             // 首帧同步冲锋动画状态（Awake 时 Animator 可能未就绪）
             if (enableCharge && !_chargeAnimSynced)
             {

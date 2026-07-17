@@ -194,7 +194,7 @@ namespace DoudizhuTower.Gameplay.Entities
 
         /// <summary>是否参与战斗模拟（Master=true, Client 联机=false）。Client 仅做视觉表现。</summary>
         public bool SimulatesCombat { get; set; } = true;
-        /// <summary>新生成单位的默认 SimulatesCombat 值（由 NetworkGameManager 设置）</summary>
+        /// <summary>新生成单位的默认 SimulatesCombat 值</summary>
         public static bool SimulatesCombatDefault { get; set; } = true;
 
         /// <summary>撕裂层数（由 UnitPassives 管理）</summary>
@@ -686,6 +686,9 @@ namespace DoudizhuTower.Gameplay.Entities
         /// </summary>
         protected virtual void OnUpdate()
         {
+            // Fusion 模式：禁用旧战斗逻辑
+            if (SimulationDisabled) return;
+
             // 建筑静止：不移动、不攻击、不索敌
             if (_isBuilding) return;
 

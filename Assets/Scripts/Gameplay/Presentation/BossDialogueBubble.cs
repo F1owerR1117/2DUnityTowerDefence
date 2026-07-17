@@ -1,6 +1,7 @@
 using System.Collections;
 using TMPro;
 using UnityEngine;
+using DoudizhuTower.Gameplay.Entities;
 
 namespace DoudizhuTower.Gameplay.Presentation
 {
@@ -36,6 +37,51 @@ namespace DoudizhuTower.Gameplay.Presentation
             if (canvasGroup != null) canvasGroup.alpha = 0f;
         }
 
+        /// <summary>订阅演出管理器事件（由 GameBootstrapper 调用）</summary>
+        public void Initialize()
+        {
+            var mgr = BattlePresentationManager.Instance;
+            if (mgr != null)
+            {
+                mgr.OnDialogueStart += HandleDialogueStart;
+                mgr.OnDialogueEnd += HandleDialogueEnd;
+            }
+
+            // 监听 Boss 技能对话
+            var skillSystem = GetComponentInParent<BossSkillSystem>();
+            if (skillSystem != null)
+                skillSystem.OnSkillActivated += HandleSkillDialogue;
+        }
+
+        private void HandleDialogueStart(DialogueLine line)
+        {
+            Show(line.speaker, line.content, line.duration, line.waitForClick);
+        }
+
+        private void HandleDialogueEnd()
+        {
+            Hide();
+        }
+
+        private void HandleSkillDialogue(string speaker, string text)
+        {
+            Show(speaker, text, 2f, false, showSpeaker: false);
+        }
+
+        private void OnDestroy()
+        {
+            var mgr = BattlePresentationManager.Instance;
+            if (mgr != null)
+            {
+                mgr.OnDialogueStart -= HandleDialogueStart;
+                mgr.OnDialogueEnd -= HandleDialogueEnd;
+            }
+
+            var skillSystem = GetComponentInParent<BossSkillSystem>();
+            if (skillSystem != null)
+                skillSystem.OnSkillActivated -= HandleSkillDialogue;
+        }
+
         private void LateUpdate()
         {
             // 始终面向摄像机
@@ -46,10 +92,18 @@ namespace DoudizhuTower.Gameplay.Presentation
         }
 
         /// <summary>显示对话（逐字打字机效果）</summary>
-        public void Show(string speaker, string content, float duration, bool waitForClick)
+        public void Show(string speaker, string content, float duration, bool waitForClick, bool showSpeaker = true)
         {
-            if (speakerText != null) speakerText.text = speaker;
+            // 强制中断上一个对话，重置状态
             if (_currentRoutine != null) StopCoroutine(_currentRoutine);
+            if (canvasGroup != null) canvasGroup.alpha = 0f;
+            if (contentText != null) contentText.text = "";
+
+            if (speakerText != null)
+            {
+                speakerText.gameObject.SetActive(showSpeaker);
+                speakerText.text = speaker;
+            }
             _skipRequested = false;
             _currentRoutine = StartCoroutine(ShowCoroutine(content, duration, waitForClick));
         }

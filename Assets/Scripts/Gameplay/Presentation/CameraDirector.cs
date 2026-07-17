@@ -14,6 +14,9 @@ namespace DoudizhuTower.Gameplay.Presentation
         private float _originalSize;
         private Coroutine _activeCoroutine;
 
+        /// <summary>演出期间为 true，CameraController 应跳过 Update</summary>
+        public bool IsBusy { get; set; }
+
         private void Awake()
         {
             _cam = GetComponent<Camera>();
@@ -25,11 +28,19 @@ namespace DoudizhuTower.Gameplay.Presentation
             }
         }
 
+        /// <summary>每次演出开始前由 CameraController 调用，同步原始位置</summary>
+        public void SyncOriginalPosition()
+        {
+            if (_cam != null)
+                _originalPosition = _cam.transform.position;
+        }
+
         /// <summary>聚焦到目标位置</summary>
         public void FocusTarget(Transform target, float duration)
         {
             if (target == null) return;
             if (_activeCoroutine != null) StopCoroutine(_activeCoroutine);
+            IsBusy = true;
             _activeCoroutine = StartCoroutine(FocusTargetCoroutine(target, duration));
         }
 
@@ -38,6 +49,7 @@ namespace DoudizhuTower.Gameplay.Presentation
         {
             if (target == null) return;
             if (_activeCoroutine != null) StopCoroutine(_activeCoroutine);
+            IsBusy = true;
             _activeCoroutine = StartCoroutine(FollowTargetCoroutine(target, duration));
         }
 
@@ -45,6 +57,7 @@ namespace DoudizhuTower.Gameplay.Presentation
         public void Return(float duration)
         {
             if (_activeCoroutine != null) StopCoroutine(_activeCoroutine);
+            IsBusy = true;
             _activeCoroutine = StartCoroutine(ReturnCoroutine(duration));
         }
 
@@ -52,6 +65,7 @@ namespace DoudizhuTower.Gameplay.Presentation
         public void Shake(float duration, float intensity)
         {
             if (_activeCoroutine != null) StopCoroutine(_activeCoroutine);
+            IsBusy = true;
             _activeCoroutine = StartCoroutine(ShakeCoroutine(duration, intensity));
         }
 
@@ -60,7 +74,27 @@ namespace DoudizhuTower.Gameplay.Presentation
         {
             if (_cam == null) return;
             if (_activeCoroutine != null) StopCoroutine(_activeCoroutine);
+            IsBusy = true;
             _activeCoroutine = StartCoroutine(ZoomCoroutine(targetSize, duration));
+        }
+
+        /// <summary>强制停止所有镜头动作并恢复原始位置</summary>
+        public void StopAll()
+        {
+            if (_activeCoroutine != null)
+            {
+                StopCoroutine(_activeCoroutine);
+                _activeCoroutine = null;
+            }
+            if (_cam != null)
+                _cam.transform.position = _originalPosition;
+            IsBusy = false;
+        }
+
+        private void OnPresentationEnd()
+        {
+            _activeCoroutine = null;
+            IsBusy = false;
         }
 
         private IEnumerator FocusTargetCoroutine(Transform target, float duration)

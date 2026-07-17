@@ -28,7 +28,7 @@ namespace DoudizhuTower.Gameplay.Systems
         /// <summary>当前金币（委托给 Core）</summary>
         public float CurrentGold => _coreEconomy?.CurrentGold ?? 0f;
 
-        /// <summary>底层纯逻辑经济系统（供 NetworkGameManager 联机校验使用）</summary>
+        /// <summary>底层纯逻辑经济系统</summary>
         public EconomySystem CoreEconomy => _coreEconomy;
 
         /// <summary>每次消耗时触发，参数为消耗金额</summary>
@@ -189,20 +189,7 @@ namespace DoudizhuTower.Gameplay.Systems
 
         private void Update()
         {
-            // v2.0: 仅 Master 端执行经济增长，Client 端由 Snapshot 覆盖
-            // 如果 _coreEconomy 未注入（联机模式），跳过
-            // Fusion 迁移：PUN 冻结时按单机模式运行
-            bool isNetworkActive = GameSession.IsNetworkMode && !NetworkGameManager.PUNFrozen && NetworkFacade.IsInRoom;
-            if (_coreEconomy != null && isNetworkActive)
-            {
-                // 联机模式：由 NetworkGameManager._slotEconomies 驱动
-                // 此处不调用 UpdateEconomy()
-            }
-            else
-            {
-                // 单人模式：正常驱动
-                _coreEconomy?.UpdateEconomy(Time.deltaTime);
-            }
+            _coreEconomy?.UpdateEconomy(Time.deltaTime);
             UpdateGoldFlash();
         }
 

@@ -33,6 +33,9 @@ namespace DoudizhuTower.Gameplay.Fusion
             hash = hash * 31 + world.Game.Phase;
             hash = hash * 31 + world.Game.TurnSlot;
             hash = hash * 31 + world.Game.DeckCount;
+            hash = hash * 31 + world.Game.DomainActive;
+            hash = hash * 31 + world.Game.DomainType;
+            hash = hash * 31 + world.Game.DomainSlot;
 
             // PlayerState Hash
             hash = HashPlayerState(hash, world.Player0);
@@ -69,13 +72,14 @@ namespace DoudizhuTower.Gameplay.Fusion
             hash = hash * 31 + FloatToUint(unit.PosY);
             hash = hash * 31 + (uint)unit.HP;
             hash = hash * 31 + (uint)unit.MaxHP;
+            hash = hash * 31 + (uint)unit.ATK;
+            hash = hash * 31 + FloatToUint(unit.AttackSpeed);
+            hash = hash * 31 + FloatToUint(unit.AttackTimer);
+            hash = hash * 31 + FloatToUint(unit.AttackRange);
             hash = hash * 31 + (uint)unit.TargetId;
             hash = hash * 31 + unit.State;
-            hash = hash * 31 + FloatToUint(unit.AttackTimer);
             hash = hash * 31 + FloatToUint(unit.MoveSpeed);
-            hash = hash * 31 + FloatToUint(unit.AttackRange);
             hash = hash * 31 + unit.IsLandlord;
-            hash = hash * 31 + unit.PassiveFlags;
             return hash;
         }
 

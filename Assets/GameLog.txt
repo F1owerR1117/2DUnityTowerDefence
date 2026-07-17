@@ -1,0 +1,36 @@
+=== Log Started: 2026/6/19 3:56:42 ===
+[03:56:42.738] [Log] [FileLogger] 日志文件: F:/unity3dxiangmu/My project (4)/Assets\GameLog.txt
+[03:56:47.989] [Log] NetworkRunner does not have any component implementing INetworkSceneManager interface, adding NetworkSceneManagerDefault.
+[03:56:47.990] [Log] NetworkRunner does not have any component implementing INetworkObjectProvider interface, adding NetworkObjectProviderDefault.
+[03:56:55.742] [Log] <color=#73ACE5>[Fusion]</color> adding player [Player:1]
+[03:56:58.173] [Log] <color=#73ACE5>[Fusion]</color> RegisterUniqueIdPlayerMapping actorid:2 id:9633228941958615383, player:[Player:2]
+[03:56:59.114] [Log] <color=#73ACE5>[Fusion]</color> adding player [Player:2]
+=== Log Started: 2026/6/19 4:05:23 ===
+[04:05:23.768] [Log] [FileLogger] 日志文件: F:/unity3dxiangmu/My project (4)/Assets\GameLog.txt
+[04:05:28.249] [Log] NetworkRunner does not have any component implementing INetworkSceneManager interface, adding NetworkSceneManagerDefault.
+[04:05:28.250] [Log] NetworkRunner does not have any component implementing INetworkObjectProvider interface, adding NetworkObjectProviderDefault.
+[04:05:36.174] [Log] <color=#73ACE5>[Fusion]</color> adding player [Player:1]
+[04:05:36.338] [Log] [FusionTest] ===== SPAWNED ===== Role=HOST, HasStateAuthority=True
+[04:05:36.434] [Log] [FusionTest] ===== SPAWNED ===== Role=HOST, HasStateAuthority=True
+[04:05:36.434] [Log] [TestSpawner] FusionTestObject 已 Spawn
+[04:05:36.532] [Log] [FusionTest] ===== HOST写入 ===== TestTick=60, TestValue=60
+[04:05:37.092] [Log] [FusionTest] ===== HOST写入 ===== TestTick=60, TestValue=60
+[04:05:37.467] [Log] [FusionTest] ===== HOST写入 ===== TestTick=120, TestValue=120
+[04:05:38.030] [Log] [FusionTest] ===== HOST写入 ===== TestTick=120, TestValue=120
+[04:05:38.405] [Log] [FusionTest] ===== HOST写入 ===== TestTick=180, TestValue=180
+[04:05:38.969] [Log] [FusionTest] ===== HOST写入 ===== TestTick=180, TestValue=180
+[04:05:39.250] [Log] <color=#73ACE5>[Fusion]</color> RegisterUniqueIdPlayerMapping actorid:2 id:12209981515600131351, player:[Player:2]
+[04:05:39.341] [Log] [FusionTest] ===== HOST写入 ===== TestTick=240, TestValue=240
+[04:05:39.905] [Log] [FusionTest] ===== HOST写入 ===== TestTick=240, TestValue=240
+[04:05:40.191] [Log] <color=#73ACE5>[Fusion]</color> adding player [Player:2]
+[04:05:40.282] [Log] [FusionTest] ===== HOST写入 ===== TestTick=300, TestValue=300
+[04:05:40.843] [Log] [FusionTest] ===== HOST写入 ===== TestTick=300, TestValue=300
+[04:05:41.218] [Log] [FusionTest] ===== HOST写入 ===== TestTick=360, TestValue=360
+[04:05:41.780] [Log] [FusionTest] ===== HOST写入 ===== TestTick=360, TestValue=360
+[04:05:42.157] [Log] [FusionTest] ===== HOST写入 ===== TestTick=420, TestValue=420
+[04:05:42.716] [Log] [FusionTest] ===== HOST写入 ===== TestTick=420, TestValue=420
+[04:05:43.094] [Log] [FusionTest] ===== HOST写入 ===== TestTick=480, TestValue=480
+[04:05:43.654] [Log] [FusionTest] ===== HOST写入 ===== TestTick=480, TestValue=480
+[04:05:44.030] [Log] [FusionTest] ===== HOST写入 ===== TestTick=540, TestValue=540
+[04:05:44.593] [Log] [FusionTest] ===== HOST写入 ===== TestTick=540, TestValue=540
+[04:05:44.966] [Log] [FusionTest] ===== HOST写入 ===== TestTick=600, TestValue=600

@@ -80,50 +80,79 @@ namespace DoudizhuTower.Gameplay.Presentation
             if (sequence.pauseBattle)
                 OnPresentationStart?.Invoke();
 
-            // 执行镜头动作
+            // 所有动作类型并行执行
+            var runningCoroutines = new List<Coroutine>();
+
+            // 镜头动作（内部串行：Focus → Follow → Return）
             if (sequence.cameraActions != null && cameraDirector != null)
             {
-                foreach (var cam in sequence.cameraActions)
-                {
-                    if (cam.delay > 0f) yield return new WaitForSecondsRealtime(cam.delay);
-                    ExecuteCameraAction(cam);
-                }
+                cameraDirector.SyncOriginalPosition();
+                cameraDirector.IsBusy = true;
+                runningCoroutines.Add(StartCoroutine(RunCameraActions(sequence.cameraActions)));
             }
 
-            // 执行对话动作
+            // 对话动作（内部串行：每句等点击）
             if (sequence.dialogues != null)
             {
-                foreach (var dialogue in sequence.dialogues)
-                {
-                    yield return PlayDialogue(dialogue);
-                }
+                runningCoroutines.Add(StartCoroutine(RunDialogues(sequence.dialogues)));
             }
 
-            // 执行广播动作
+            // 广播动作（内部串行，有 delay）
             if (sequence.announcements != null && announcementManager != null)
             {
-                foreach (var ann in sequence.announcements)
-                {
-                    if (ann.delay > 0f) yield return new WaitForSecondsRealtime(ann.delay);
-                    announcementManager.ShowAnnouncement(ann.type, ann.content, ann.duration);
-                }
+                runningCoroutines.Add(StartCoroutine(RunAnnouncements(sequence.announcements)));
             }
 
-            // 执行特效动作
+            // 特效动作（内部串行，有 delay）
             if (sequence.effects != null)
             {
-                foreach (var fx in sequence.effects)
-                {
-                    if (fx.delay > 0f) yield return new WaitForSecondsRealtime(fx.delay);
-                    if (fx.vfxPrefab != null && fx.spawnPoint != null)
-                        Instantiate(fx.vfxPrefab, fx.spawnPoint.position, Quaternion.identity);
-                }
+                runningCoroutines.Add(StartCoroutine(RunEffects(sequence.effects)));
             }
 
-            // 等待最后一句对话结束
-            yield return new WaitForSecondsRealtime(0.5f);
+            // 等待所有并行协程结束
+            foreach (var c in runningCoroutines)
+                yield return c;
+
+            // 镜头归位
+            if (cameraDirector != null)
+                cameraDirector.IsBusy = false;
 
             OnSequenceComplete();
+        }
+
+        private IEnumerator RunCameraActions(CameraAction[] actions)
+        {
+            foreach (var cam in actions)
+            {
+                if (cam.delay > 0f) yield return new WaitForSecondsRealtime(cam.delay);
+                ExecuteCameraAction(cam);
+                yield return new WaitForSecondsRealtime(cam.duration + 0.05f);
+            }
+        }
+
+        private IEnumerator RunDialogues(DialogueAction[] dialogues)
+        {
+            foreach (var dialogue in dialogues)
+                yield return PlayDialogue(dialogue);
+        }
+
+        private IEnumerator RunAnnouncements(AnnouncementAction[] announcements)
+        {
+            foreach (var ann in announcements)
+            {
+                if (ann.delay > 0f) yield return new WaitForSecondsRealtime(ann.delay);
+                announcementManager.ShowAnnouncement(ann.type, ann.content, ann.duration);
+            }
+        }
+
+        private IEnumerator RunEffects(VfxAction[] effects)
+        {
+            foreach (var fx in effects)
+            {
+                if (fx.delay > 0f) yield return new WaitForSecondsRealtime(fx.delay);
+                if (fx.vfxPrefab != null && fx.spawnPoint != null)
+                    Instantiate(fx.vfxPrefab, fx.spawnPoint.position, Quaternion.identity);
+            }
         }
 
         private void ExecuteCameraAction(CameraAction cam)

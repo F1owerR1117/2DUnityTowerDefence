@@ -269,7 +269,7 @@ MonoBehaviour:
   tearMaxStacks: 4
   tearDuration: 4
   enableShockwave: 1
-  shockwaveRadius: 100
+  shockwaveRadius: 124.7
   shockwaveDamagePct: 1
   enableBurnOnDeath: 0
   burnRadius: 0.5

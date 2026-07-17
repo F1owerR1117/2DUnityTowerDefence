@@ -97,5 +97,44 @@ namespace DoudizhuTower.Gameplay.Fusion
             // 延迟销毁或回收
             Destroy(gameObject, 1f);
         }
+
+        // =========================
+        // 事件响应（由 EventBuffer 触发）
+        // =========================
+
+        /// <summary>
+        /// 播放受击效果（闪白 + 飘字）。
+        /// 由 FusionGameManager.ProcessEvents() 调用。
+        /// </summary>
+        public void PlayHitEffect()
+        {
+            // 受击闪白
+            if (_spriteRenderer != null)
+            {
+                StartCoroutine(HitFlashCoroutine());
+            }
+        }
+
+        private System.Collections.IEnumerator HitFlashCoroutine()
+        {
+            _spriteRenderer.color = Color.red;
+            yield return new WaitForSeconds(0.1f);
+            _spriteRenderer.color = Color.white;
+        }
+
+        /// <summary>
+        /// 播放死亡效果（淡出 + 缩小）。
+        /// 由 FusionGameManager.ProcessEvents() 调用。
+        /// </summary>
+        public void PlayDeathEffect()
+        {
+            if (_animator != null)
+            {
+                _animator.SetInteger("State", 3);
+            }
+
+            // 延迟销毁
+            Destroy(gameObject, 1f);
+        }
     }
 }
