@@ -200,8 +200,9 @@ namespace DoudizhuTower.UI.Bidding
 
             var world = gm.World;
 
-            // ── 倒计时：从 Fusion Tick 差值计算（唯一权威） ──
-            int elapsed = gm.Runner.Tick - gm.StateStartTick;
+            // ── 倒计时：从 WorldState 读取（Host 写入，Client 同步） ──
+            int stateStartTick = world.Game.StateStartTick;
+            int elapsed = gm.Runner.Tick - stateStartTick;
             int remaining = Mathf.Max(0, gm.BiddingDurationTicks - elapsed);
             int seconds = Mathf.CeilToInt(remaining / 100f);
             if (timerText != null)

@@ -33,6 +33,9 @@ namespace DoudizhuTower.Gameplay.Fusion
         // 身份初始化锁（0=未就绪 1=Host 已写入全部身份数据）
         public byte IdentityReady;
 
+        // 叫分阶段起始 Tick（网络同步，供 Client 计算倒计时）
+        public int StateStartTick;
+
         // Host 分配的 PlayerRef → Slot 映射（存储 PlayerRef.RawEncoded 的低 8 位）
         public byte Slot0PlayerRef;
         public byte Slot1PlayerRef;

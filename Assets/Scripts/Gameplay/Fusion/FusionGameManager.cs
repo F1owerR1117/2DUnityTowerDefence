@@ -502,12 +502,30 @@ namespace DoudizhuTower.Gameplay.Fusion
                 Debug.LogWarning($"[FusionGameManager] 无 GameSession 结果，使用默认值 ais=[{string.Join(",", GameSession.AISlots)}]");
             }
 
-            // Host 写入自己的 PlayerRef → Slot 映射供 Client 读取
-            if (Runner != null)
+            // Host 写入全部 PlayerRef → Slot 映射供 Client 读取
+            if (Runner != null && LobbyIdentityService.Instance != null)
             {
+                for (int slot = 0; slot < 3; slot++)
+                {
+                    var playerRef = LobbyIdentityService.Instance.GetPlayer(slot);
+                    if (playerRef.PlayerId != 0)
+                    {
+                        byte refByte = (byte)(playerRef.RawEncoded & 0xFF);
+                        switch (slot)
+                        {
+                            case 0: world.Game.Slot0PlayerRef = refByte; break;
+                            case 1: world.Game.Slot1PlayerRef = refByte; break;
+                            case 2: world.Game.Slot2PlayerRef = refByte; break;
+                        }
+                    }
+                }
+                Debug.Log($"[FusionGameManager] Host slot mapping: S0={world.Game.Slot0PlayerRef} S1={world.Game.Slot1PlayerRef} S2={world.Game.Slot2PlayerRef}");
+            }
+            else if (Runner != null)
+            {
+                // 兜底：无 LobbyIdentityService 时只写 Host 自己
                 byte hostRef = (byte)(Runner.LocalPlayer.RawEncoded & 0xFF);
                 world.Game.Slot0PlayerRef = hostRef;
-                Debug.Log($"[FusionGameManager] Host slot mapping: Slot0=Player_{Runner.LocalPlayer.RawEncoded}");
             }
 
             // 释放身份初始化锁
@@ -693,6 +711,11 @@ namespace DoudizhuTower.Gameplay.Fusion
 
             // 计时器唯一写入点
             _stateStartTick = Runner.Tick;
+
+            // 同步到 WorldState 供 Client 读取
+            var world = World;
+            world.Game.StateStartTick = _stateStartTick;
+            World = world;
 
             // 重置 AI 计数器
             _aiTickCounter = 0;

@@ -370,12 +370,7 @@ namespace DoudizhuTower.Gameplay.Network
                     : $"Player_{p.RawEncoded}";
                 list.Add((p.RawEncoded, name));
             }
-            list.Sort((a, b) =>
-            {
-                if (a.raw == _runner.LocalPlayer.RawEncoded) return -1;
-                if (b.raw == _runner.LocalPlayer.RawEncoded) return 1;
-                return a.raw.CompareTo(b.raw);
-            });
+            list.Sort((a, b) => a.raw.CompareTo(b.raw));
             var result = new string[list.Count];
             for (int i = 0; i < list.Count; i++)
                 result[i] = list[i].name;
