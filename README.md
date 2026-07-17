@@ -165,7 +165,8 @@ Assets/
 - **Fusion Runner 生命周期修复**: 移除 `Destroy(_runner)`，改为 `Shutdown()` 复用 Runner，消除每帧 "runner should not" 警告
 - **叫分轮次校验**: `SubmitBid`/`ApplyBid`/`OnBid` 添加 `CurrentBidTurn` 校验，防止所有玩家同时叫分
 - **Slot 分配修复**: Client 回退逻辑改为匹配 `SlotXPlayerRef`，修复多客户端 slot 冲突
-- **ARCHITECTURE.md v9.1**
+- **商店系统设计**: 英雄解锁 + 皮肤外观（待实现）
+- **ARCHITECTURE.md v9.2**
 
 ### 2026-06-17
 

@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v9.1
+# DoudizhuTower — 架构落地规范 v9.2
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -172,6 +172,10 @@
 | `PresentationSequence` | 演出序列配置 | Gameplay/Presentation | MonoBehaviour，挂在场景中，包含镜头/对话/广播/特效动作列表 |
 | `CameraDirector` | 镜头导演 | Gameplay/Presentation | 镜头切换/聚焦/震动/缩放，IsBusy 标志供 CameraController 跳过 Update |
 | `IRuntimeReady` | 运行时就绪接口 | Core/Lifecycle | 控制 Update 是否执行游戏逻辑 |
+| `ShopItemConfig` | 商品配置 | Config | ScriptableObject，定义单个商品（ID/名称/图标/价格/类型） |
+| `ShopDatabase` | 商品数据库 | Config | ScriptableObject，商品集合 |
+| `ShopManager` | 商店管理器 | Systems | 购买逻辑（余额检查/扣款/解锁，基于 SaveSystem 持久化） |
+| `ShopUIController` | 商店 UI | UI | 商品网格展示 + 购买确认 + 余额显示 |
 
 ## 实施状态总览
 
@@ -362,7 +366,7 @@
 
 | 系统 | 章节 | 说明 |
 |:---|:---|:---|
-| 商店系统 | — | 主菜单按钮已预留，场景/逻辑未实现 |
+| 商店系统 | §29 | 主菜单按钮已预留。商品类型：英雄解锁（200-500 金币）+ 皮肤外观（100-300 金币）。需新增 ShopItemConfig/ShopDatabase/ShopManager/ShopUIController |
 
 ### P2（增强/可视化）
 
@@ -2462,6 +2466,9 @@ BOSS 技能施法时间与动画同步机制：
 | **[ARCH-018] Client 经济/领域 UI 未同步（P1）** | _syncedGold 和领域 RPC 存在，但 EconomyManager/DomainUIController 不读取 | 联机模式金币/领域显示错误 |
 | **[ARCH-019] _slotHandCards 跨进程不同步（P1）** | Host 本地字典，Client 依赖 RPC 同步，但同步时机和完整性不足 | Client 手牌与 Host 不一致 |
 | **[ARCH-020] GameSession 静态污染源未完全清除（P2）** | AISlots/RawAISlots 仍为 static HashSet，退出联机后可能残留。已通过 ResetNetworkModeLock() 改善 | 多次切换单机/联机后状态异常 |
+| **[ARCH-021] 联机模式游戏场景运行不完整（P0）** | 血条/手牌已渲染，但兵种生成/出牌/经济/战斗等核心逻辑未正常运行。疑似 FusionGameManager 与 BattleManager 之间的桥接不完整 | 联机模式可进入游戏但无法正常对战 |
+| **[ARCH-022] LobbyIdentityService 与 FusionGameManager 双重 slot 管理（P1）** | 两套独立的 slot 字典（_playerToSlot / LobbyIdentityService._playerToSlot），需 AssignExistingPlayerSlots 补偿同步 | 联机模式 slot 分配不一致 |
+| **[ARCH-023] GameBootstrapper 联机/单机逻辑耦合（P1）** | GameBootstrapper.Awake() 在联机模式仍执行部分逻辑（CardUnit.PlayerIsLandlord），Start() 通过 yield break 跳过但依赖 Activate NetworkGameBootstrapper 兜底 | 联机模式初始化路径脆弱 |
 
 如果 Image Type 为 Simple，`fillAmount = 1` 时遮罩完全覆盖按钮，配合 `coolDownColor`（深灰 80%）会看起来全黑。
 
