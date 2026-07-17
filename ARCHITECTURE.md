@@ -522,6 +522,7 @@ Assets/Scripts/
 │   │   ├── DesyncDetector.cs         # ★ 失步检测器（Client/Host 状态偏差检测）
 │   │   ├── DesyncLogger.cs           # 失步日志（失步事件记录）
 │   │   ├── TickDisplay.cs            # Tick 显示（调试用，显示当前 Tick 号）
+│   │   ├── GameSceneSync.cs          # ★ Client 状态同步（每 0.5s 广播牌堆/手牌/金币，RPC 同步）
 │   │   ├── Identity/                  # 身份系统（IIdentityProvider 策略模式）
 │   │   │   ├── IIdentityProvider.cs    # 身份提供者接口（Offline/Online 统一抽象）
 │   │   │   ├── OfflineIdentityProvider.cs  # 单机身份提供者
