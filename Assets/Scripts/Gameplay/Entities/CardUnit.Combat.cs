@@ -455,7 +455,8 @@ namespace DoudizhuTower.Gameplay.Entities
             _attackTimer += Time.deltaTime;
             float t = interval > 0f ? _attackTimer / interval : 1f;
 
-            // 触发所有已到达的攻击帧
+            // 触发所有已到达的攻击帧（二次 null 检查，防御同帧清空）
+            if (_hitTimes == null) return;
             while (_nextHitIndex < _hitTimes.Length && t >= _hitTimes[_nextHitIndex])
             {
                 ExecuteHit(_nextHitIndex);
