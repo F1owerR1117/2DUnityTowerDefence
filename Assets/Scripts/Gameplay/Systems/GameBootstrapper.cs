@@ -142,10 +142,19 @@ namespace DoudizhuTower.Gameplay.Systems
             int seed = _isNetworkMode ? GameSession.NetworkSeed : System.Environment.TickCount;
             _mainDeck = new CardDeck(seed);
 
-            // 联机模式：核心层初始化由 NetworkGameBootstrapper 接管
+            // 联机模式：激活 NetworkGameBootstrapper 接管初始化
             if (_isNetworkMode)
             {
-                Debug.Log($"[Bootstrapper] 联机模式，跳过单机初始化步骤，由 NetworkGameBootstrapper 接管");
+                Debug.Log($"[Bootstrapper] 联机模式，激活 NetworkGameBootstrapper 接管");
+                var networkBootstrapper = FindFirstObjectByType<DoudizhuTower.Gameplay.Fusion.NetworkGameBootstrapper>();
+                if (networkBootstrapper != null)
+                {
+                    networkBootstrapper.gameObject.SetActive(true);
+                }
+                else
+                {
+                    Debug.LogError("[Bootstrapper] 未找到 NetworkGameBootstrapper！");
+                }
                 yield break;
             }
 
