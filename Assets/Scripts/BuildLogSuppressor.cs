@@ -11,7 +11,7 @@ public static class BuildLogSuppressor
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Init()
     {
-        Application.unityLogger = new QuietLogger();
+        Debug.unityLogger = new QuietLogger();
     }
 #endif
 
