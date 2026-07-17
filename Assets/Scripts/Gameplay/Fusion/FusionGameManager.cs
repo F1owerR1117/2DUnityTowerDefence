@@ -148,10 +148,41 @@ namespace DoudizhuTower.Gameplay.Fusion
                 Debug.Log($"[FusionGameManager] BattleManager 查找结果: {_battleManager != null}");
             }
 
-            // 只有 Host 初始化游戏状态
+            // Host：为已存在的玩家补分配 slot（Lobby 阶段 FusionGameManager 未 Spawn 导致遗漏）
             if (HasStateAuthority)
             {
+                AssignExistingPlayerSlots();
                 InitializeGamePhase();
+            }
+        }
+
+        /// <summary>
+        /// 为已在房间中的玩家补分配 slot。
+        /// OnlineLobby 阶段 FusionGameManager 未 Spawn，OnPlayerJoinedSlot 被跳过，
+        /// 此方法在 Spawned() 时补执行。
+        /// </summary>
+        private void AssignExistingPlayerSlots()
+        {
+            if (Runner == null) return;
+
+            // 收集所有已连接玩家，按 RawEncoded 排序确定性分配
+            var players = new System.Collections.Generic.List<PlayerRef>();
+            foreach (var p in Runner.ActivePlayers)
+                players.Add(p);
+            players.Sort((a, b) => a.RawEncoded.CompareTo(b.RawEncoded));
+
+            for (int i = 0; i < players.Count && i < 3; i++)
+            {
+                var player = players[i];
+                _playerToSlot[player] = i;
+                _slotToPlayer[i] = player;
+
+                if (LobbyIdentityService.Instance != null)
+                {
+                    LobbyIdentityService.Instance.AssignSlot(player);
+                }
+
+                Debug.Log($"[SlotAssign] (Spawned补分配) Player {player.RawEncoded} → Slot {i}");
             }
         }
 
@@ -503,12 +534,26 @@ namespace DoudizhuTower.Gameplay.Fusion
             }
 
             // Host 写入全部 PlayerRef → Slot 映射供 Client 读取
-            if (Runner != null && LobbyIdentityService.Instance != null)
+            // 优先 _slotToPlayer（Spawned 补分配已填充），回退 LobbyIdentityService
+            if (Runner != null)
             {
                 for (int slot = 0; slot < 3; slot++)
                 {
-                    var playerRef = LobbyIdentityService.Instance.GetPlayer(slot);
-                    if (playerRef.PlayerId != 0)
+                    PlayerRef playerRef = default;
+
+                    // 优先从 _slotToPlayer 查找
+                    if (_slotToPlayer.TryGetValue(slot, out var pr) && pr.PlayerId != 0)
+                        playerRef = pr;
+
+                    // 回退到 LobbyIdentityService
+                    if ((playerRef == null || playerRef.PlayerId == 0) && LobbyIdentityService.Instance != null)
+                        playerRef = LobbyIdentityService.Instance.GetPlayer(slot);
+
+                    // Host 自己兜底
+                    if (slot == 0 && (playerRef == null || playerRef.PlayerId == 0))
+                        playerRef = Runner.LocalPlayer;
+
+                    if (playerRef != null && playerRef.PlayerId != 0)
                     {
                         byte refByte = (byte)(playerRef.RawEncoded & 0xFF);
                         switch (slot)
@@ -520,12 +565,6 @@ namespace DoudizhuTower.Gameplay.Fusion
                     }
                 }
                 Debug.Log($"[FusionGameManager] Host slot mapping: S0={world.Game.Slot0PlayerRef} S1={world.Game.Slot1PlayerRef} S2={world.Game.Slot2PlayerRef}");
-            }
-            else if (Runner != null)
-            {
-                // 兜底：无 LobbyIdentityService 时只写 Host 自己
-                byte hostRef = (byte)(Runner.LocalPlayer.RawEncoded & 0xFF);
-                world.Game.Slot0PlayerRef = hostRef;
             }
 
             // 释放身份初始化锁

@@ -90,9 +90,17 @@ namespace DoudizhuTower.Gameplay.Systems
 
             Debug.Log($"[Bootstrapper] HasResult={GameSession.HasResult}, PlayerIsLandlord={GameSession.PlayerIsLandlord}, _playerIsLandlord={_playerIsLandlord}");
 
-            // 禁用所有预置 BuildingAI，防止在阵营纠正前出牌
-            // 跳过 BOSS（BOSS 的 BuildingAI 由 BossController 管理）
-            // 记录原本启用的 BuildingAI，后续只恢复这些
+            // 必须在 Awake 中设置，保证在所有 UnitHealthBar.Start() 之前生效
+            CardUnit.PlayerIsLandlord = _playerIsLandlord;
+
+            // 联机模式：跳过 BuildingAI 禁用，由 NetworkGameBootstrapper 接管
+            if (GameSession.IsNetworkMode)
+            {
+                Debug.Log($"[Bootstrapper] 联机模式，跳过 BuildingAI 禁用");
+                return;
+            }
+
+            // 单机模式：禁用所有预置 BuildingAI，防止在阵营纠正前出牌
             _buildingAIOriginallyEnabled.Clear();
             if (baseBuildings != null)
             {
@@ -108,9 +116,6 @@ namespace DoudizhuTower.Gameplay.Systems
                     ai.enabled = false;
                 }
             }
-
-            // 必须在 Awake 中设置，保证在所有 UnitHealthBar.Start() 之前生效
-            CardUnit.PlayerIsLandlord = _playerIsLandlord;
         }
 
         private IEnumerator Start()
