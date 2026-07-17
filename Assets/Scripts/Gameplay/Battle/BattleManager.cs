@@ -282,6 +282,14 @@ namespace DoudizhuTower.Gameplay.Battle
             var economy = new EconomySystem(initialGold, incomeRate);
             var hand = new CardHand(20);
             ai.Initialize(hand, economy, this, deck, maxSelection, drawInterval);
+
+            // 注册 BOSS 手牌到 DomainSystem（要不起领域封印依赖此注册）
+            var domainSystem = FindFirstObjectByType<DoudizhuTower.Gameplay.Battle.DomainSystem>();
+            if (domainSystem != null)
+            {
+                domainSystem.AddEnemyCardHand(hand);
+                Debug.Log("[BattleManager] BOSS CardHand 已注册到 DomainSystem");
+            }
         }
 
         private bool HasAliveEnemyBoss(bool playerIsLandlord)
