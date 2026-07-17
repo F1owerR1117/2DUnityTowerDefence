@@ -79,6 +79,49 @@ namespace DoudizhuTower.Gameplay.Fusion
             _playerIsLandlord = GameSession.PlayerIsLandlord;
             CardUnit.PlayerIsLandlord = _playerIsLandlord;
 
+            // ── 联机模式：注入 BattleManager 依赖（GameBootstrapper 联机模式 yield break 跳过了这些） ──
+
+            // 注入 baseBuildings 到 BattleManager
+            if (battleManager != null && baseBuildings != null)
+            {
+                battleManager.SetBaseBuildings(baseBuildings);
+                battleManager.Initialize();
+                Debug.Log("[NetworkGameBootstrapper] BattleManager 注入完成");
+            }
+
+            // 初始化建筑 HP + 恢复 BuildingAI
+            if (baseBuildings != null)
+            {
+                foreach (var bldg in baseBuildings)
+                {
+                    if (bldg == null) continue;
+                    var cu = bldg.GetComponent<CardUnit>();
+                    if (cu != null && cu._isBuilding)
+                    {
+                        cu.InitBuildingHP(cu.MaxHP > 0 ? cu.MaxHP : 1000f);
+                    }
+                    var ai = bldg.GetComponent<BuildingAI>();
+                    if (ai != null && !ai.enabled)
+                    {
+                        ai.enabled = true;
+                        Debug.Log($"[NetworkGameBootstrapper] 恢复 BuildingAI: {bldg.name}");
+                    }
+                }
+            }
+
+            // 演出系统
+            var presentationMgr = DoudizhuTower.Gameplay.Presentation.BattlePresentationManager.Instance;
+            if (presentationMgr != null && battleManager != null)
+            {
+                presentationMgr.OnPresentationStart += () => battleManager.IsPresentationActive = true;
+                presentationMgr.OnPresentationEnd += () => battleManager.IsPresentationActive = false;
+            }
+
+            // 静态状态清理
+            UnitAudio.ClearClipCounts();
+            DamageQueue.Clear();
+            CardUnit.SetBatchDamageEnabled(true);
+
             // 发牌
             int seed = GameSession.NetworkSeed;
             _mainDeck = new CardDeck(seed);
