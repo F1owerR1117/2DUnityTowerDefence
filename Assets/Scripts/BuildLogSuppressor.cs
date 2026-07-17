@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 /// <summary>
@@ -14,9 +15,6 @@ public static class BuildLogSuppressor
     }
 #endif
 
-    /// <summary>
-    /// 静默日志器：所有日志类型均不输出到 Console。
-    /// </summary>
     private class QuietLogger : ILogger
     {
         public LogType filterLogType { get; set; } = LogType.Exception;
@@ -30,14 +28,20 @@ public static class BuildLogSuppressor
         public void Log(object message) { }
         public void Log(string tag, object message) { }
         public void LogWarning(string tag, object message) { }
+        public void LogWarning(string tag, object message, Object context) { }
         public void LogError(string tag, object message) { }
+        public void LogError(string tag, object message, Object context) { }
+        public void LogFormat(LogType logType, string format, params object[] args) { }
+        public void LogFormat(LogType logType, Object context, string format, params object[] args) { }
+        public void LogException(Exception exception) { }
+        public void LogException(Exception exception, Object context) { }
         public bool IsLogTypeAllowed(LogType logType) => false;
+    }
 
-        private class NullHandler : ILogHandler
-        {
-            public static readonly NullHandler Instance = new NullHandler();
-            public void LogFormat(LogType logType, Object context, string format, params object[] args) { }
-            public void LogException(System.Exception exception, Object context) { }
-        }
+    private class NullHandler : ILogHandler
+    {
+        public static readonly NullHandler Instance = new NullHandler();
+        public void LogFormat(LogType logType, Object context, string format, params object[] args) { }
+        public void LogException(Exception exception, Object context) { }
     }
 }
