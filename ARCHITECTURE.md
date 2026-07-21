@@ -84,7 +84,7 @@
 | `EconomySystem` | 经济系统(逻辑) | Core/Economy | 纯 C#，零 MonoBehaviour |
 | `EconomyManager` | 经济系统(焊接) | Gameplay/Systems | 桥接 Core → UI 事件 + 骤死期双倍回金 |
 | `CardUnit` | 兵种/建筑实体 | Gameplay/Entities | MonoBehaviour 基类，同时实现 IBuildingTarget。`_isBuilding=true` 时为建筑。`SimulatesCombat` 控制是否参与战斗模拟（Master=true, Client=false） |
-| `UnitPassives` | 兵种被动 | Gameplay/Entities | 16 种通用被动（含召唤师），Inspector 勾选启用。溅射以 ClosestPoint 为圆心，召唤物继承召唤师 FollowPath |
+| `UnitPassives` | 兵种被动 | Gameplay/Entities | 17 种通用被动（含召唤师），Inspector 勾选启用。溅射以 ClosestPoint 为圆心，召唤物继承召唤师 FollowPath |
 | `BurnZone` | 燃烧区域 | Gameplay/Entities | UnitPassives 内嵌类（`public class BurnZone : MonoBehaviour`），UnitPassives 和 BattleManager 共用 |
 | `BattleManager` | 战场管理器 | Gameplay/Battle | 主循环 + 牌型生成 + 全局唯一 UnitId 分配（`_globalUnitId` + `Dictionary<int, CardUnit>` O(1) 查找）+ `TriggerDefeat()` internal |
 | `SpawnPool` | 出兵池 | Gameplay/Battle | 每基地独立预制体映射（8 组 ×13 槽，含 Tooltip 注释） |
