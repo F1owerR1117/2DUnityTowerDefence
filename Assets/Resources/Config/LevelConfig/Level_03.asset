@@ -16,6 +16,6 @@ MonoBehaviour:
   description: "\u7B2C\u4E09\u5173 \u68EE\u6797\u5165\u53E3\u7B80\u4ECB"
   difficulty: 3
   sceneName: Level_3
-  thumbnail: {fileID: -7316941622976464178, guid: bede9ac1af056de4ab0f82d57bfaf289, type: 3}
+  thumbnail: {fileID: -6417858749344724890, guid: d2cf1c78f4590c741ae450ef288bac3e, type: 3}
   isUnlocked: 1
   sortOrder: 3
