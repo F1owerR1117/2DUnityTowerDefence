@@ -7,7 +7,7 @@
 - **引擎**: Unity 2023.2.20f1c1
 - **语言**: C#
 - **分辨率**: 1920 x 1080
-- **架构文档**: `ARCHITECTURE.md`（v9.1）
+- **架构文档**: `ARCHITECTURE.md`（v9.2）
 
 ---
 
@@ -56,7 +56,7 @@
 - **Combat Gate System**: `IsValidCombatTarget()` 统一门禁，所有战斗判断通过单一入口
 - **AttackTimeline**: 时间驱动攻击帧，替代 Animation Event（确定性 + 联机安全）
 - **兵种类**: `CardUnit`（4 个 partial 文件：Core/Combat/Movement/Animation）
-- **被动技能**: `UnitPassives`（16 种通用被动，Inspector 勋选启用）
+- **被动技能**: `UnitPassives`（17 种通用被动，Inspector 勋选启用）
 - **对象池**: `UnitFactory` + `VFXManager`
 - **伤害结算**: `DamageQueue`（帧末批量结算，消除 Update 执行顺序影响）
 - **高度系统**: Ground/Air 双高度，支持运行时覆盖
@@ -115,6 +115,16 @@ Assets/
 ├── Scenes/                  # 场景文件
 ├── Resources/               # ScriptableObject 资产
 └── Prefabs/                 # 预制体
+    └── Army/ArmyPrefabs/    # 兵种预制体
+        ├── OneRank/         # 基础兵种（13个：3~2点数）
+        ├── Bomb/            # 炸弹兵种（SwordMan, Demon）
+        ├── Boss/            # BOSS 预制体（恶魔, 王国骑士, FlyKill）
+        ├── Bait/            # 诱饵兵种（Bait）
+        ├── Cavalry/         # 骑兵兵种（待实现）
+        ├── 坦克/            # 坦克兵种（Tank）
+        ├── 无人机/          # 无人机兵种（Plane66）
+        ├── 连对/            # 连对兵种（RedWolf）
+        └── 飞机/            # 飞机兵种（PlaneTest）
 ```
 
 ---
@@ -131,7 +141,7 @@ Assets/
 | `FusionGameManager` | Fusion 联机游戏管理器（Tick 状态机 + Host 权威同步） |
 | `FusionService` | Fusion 网络服务（Runner 生命周期 + 房间管理） |
 | `GameBootstrapper` | 自底向上初始化管线 |
-| `UnitPassives` | 16 种通用被动技能 |
+| `UnitPassives` | 17 种通用被动技能 |
 | `DomainSystem` | 要不起领域 + 反制护盾状态机 |
 
 ---
@@ -150,15 +160,24 @@ Assets/
 
 | 功能 | 状态 |
 |---|---|
-| 攻击特效 (P1) | 待实现 |
+| 攻击特效 (P1) | 待实现（UnitVFX 缺少 PlayAttackVFX 方法） |
 | 技能特效 (P1) | 待实现 |
-| 商店系统 | 按钮已预留，逻辑未实现 |
+| 商店系统 (P1) | 按钮已预留，需实现 ShopItemConfig/ShopDatabase/ShopManager/ShopUIController |
+| 索敌可视化标记 (P2) | 待实现 |
 | 图鉴内容化 (P2) | 待实现（V1 框架已完成） |
 | 新 Boss/新牌型/新建筑/新关卡 (P3) | 待实现 |
 
 ---
 
 ## 最近更新
+
+### 2026-07-22
+
+- **兵种预制体目录重组**: 新增诱饵(Bait)、骑兵(Cavalry)、坦克、无人机、连对、飞机兵种预制体目录
+- **PlaneTest 预制体移动**: 从根目录移动到飞机目录
+- **关卡配置调整**: Level_03 配置更新，Level_1/3/4 场景调整
+- **新增英雄配置**: NewHeroConfig ScriptableObject
+- **构建日志抑制器**: BuildLogSuppressor 脚本（编译时日志抑制）
 
 ### 2026-07-17
 
