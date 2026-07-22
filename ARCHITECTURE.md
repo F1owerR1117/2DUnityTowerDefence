@@ -678,8 +678,8 @@ MonoBehaviour.OnDestroy()  → 确保取消订阅（双重保险）
 ```
 读取 GameSession.HasResult → 设置 _playerIsLandlord 和 playerBaseIndex
 设置 CardUnit.PlayerIsLandlord（必须在 Awake 中，保证在所有 UnitHealthBar.Start() 之前生效）
-记录 _buildingAIOriginallyEnabled（哪些建筑的 BuildingAI 原本启用）
-禁用所有预置 BuildingAI（跳过 _isBoss 单位），防止阵营纠正前出牌
+联机模式：跳过 BuildingAI 禁用，由 NetworkGameBootstrapper 接管（直接 return）
+单机模式：记录 _buildingAIOriginallyEnabled → 禁用所有预置 BuildingAI（跳过 _isBoss 单位）
 ```
 
 **Start() 协程阶段：**
