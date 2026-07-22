@@ -463,7 +463,7 @@ Assets/Scripts/
 │   │   ├── CardUnit.Animation.cs      #   动画状态机 + 对象池生命周期 + Gizmo
 │   │   ├── UnitFactory.cs             # 对象池工厂（按预制体引用分池）
 │   │   ├── UnitHealthBar.cs           # §3.A.1 头顶血条（OnDisable 重置 _initialized）
-│   │   ├── UnitPassives.cs            # ★ 16 种通用被动（字段/生命周期/光环/战斗被动）
+│   │   ├── UnitPassives.cs            # ★ 17 种通用被动（字段/生命周期/光环/战斗被动）
 │   │   ├── UnitPassives.Summon.cs     #   召唤师被动（定时召唤 + 击杀召唤）
 │   │   ├── SimpleAnimator.cs          # 动画控制器（AnimatorOverrideController，18 种动画含 BOSS 技能）
 │   │   ├── Projectile.cs              # 子弹/投射物（线性+抛物线，ClosestPoint 瞄准/命中 + _explosionRadius 范围爆炸）
@@ -512,7 +512,7 @@ Assets/Scripts/
 │   │   ├── FusionGameState.cs          # ★ Fusion 世界状态（WorldState struct，[Networked] 同步）
 │   │   ├── FusionBattleManager.cs      # ★ Fusion 战场管理器（Host 权威战斗逻辑）
 │   │   ├── CombatSystem.cs            # ★ Fusion 战斗系统（FindTarget → AttackTick → ApplyDamage）
-│   │   ├── PassiveSystem.cs           # ★ Fusion 被动系统（16 种通用被动的 Fusion 实现）
+│   │   ├── PassiveSystem.cs           # ★ Fusion 被动系统（17 种通用被动的 Fusion 实现）
 │   │   ├── BossSkillSystem.cs         # Fusion 版 BOSS 技能系统（HP 阶段/定时/击杀触发）
 │   │   ├── CardUnitView.cs            # ★ Fusion 单位视图（Client 侧视觉表现，行军/动画/血条）
 │   │   ├── IntentBuffer.cs            # ★ 输入意图缓冲（Client 输入 → Host 处理的桥梁）
