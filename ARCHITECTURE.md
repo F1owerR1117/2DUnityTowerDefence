@@ -1,4 +1,4 @@
-# DoudizhuTower — 架构落地规范 v9.2
+# DoudizhuTower — 架构落地规范 v9.3
 
 > 本文档是《即时斗地主塔防》的编码宪法，**必须与代码实际状态保持一致**。
 
@@ -39,6 +39,7 @@
 | 21 | [叫分期系统](#21-叫分期系统biddingmanager--networkbiddingmanager--biddingconfig) |
 | 23 | [BOSS 系统（BossController + BuildingAI）](#23-boss-系统bosscontroller--buildingai) |
 | 28 | [Combat Gate System（战斗统一门禁）](#28-combat-gate-system战斗统一门禁) |
+| 29 | [对话系统（DialogueBox）](#29-对话系统dialoguebox) |
 
 ### 视觉与交互
 
@@ -181,6 +182,10 @@
 | `ShopDatabase` | 商品数据库 | Config | ScriptableObject，商品集合 |
 | `ShopManager` | 商店管理器 | Systems | 购买逻辑（余额检查/扣款/解锁，基于 SaveSystem 持久化） |
 | `ShopUIController` | 商店 UI | UI | 商品网格展示 + 购买确认 + 余额显示 |
+| `DialogueData` | 对话数据 | UI/Dialogue | ScriptableObject，定义对话序列（说话人/立绘/内容） |
+| `DialogueLine` | 单条对话 | UI/Dialogue | 单条对话数据（含立绘尺寸、打字速度、名称颜色） |
+| `DialogueBox` | 对话框控制器 | UI/Dialogue | 打字机效果 + 立绘展示 + 全区域点击继续 |
+| `DialogueTrigger` | 场景对话触发器 | UI/Dialogue | 场景进入后自动触发对话（支持延迟和单次触发） |
 
 ## 实施状态总览
 
@@ -195,6 +200,7 @@
 | 兵种特效系统 | UnitVFX + VFXManager 单例对象池 | Gameplay/Entities/ + Gameplay/Systems/ |
 | 兵种点选系统 | UnitSelector + UnitInfoPanel（世界空间信息面板） | Gameplay/Entities/ + UI/Panels/ |
 | 英雄配置重构 | HeroUnitConfig 组件挂载到英雄预制体，移除对全局 HeroConfig 的依赖 | Gameplay/Entities/ |
+| 对话系统 | DialogueBox（打字机+立绘+全区域点击）+ DialogueData + DialogueTrigger + LevelConfig 关联 | UI/Dialogue/ + Config/ |
 | 按钮音效/特效 | ButtonAudio + ButtonEffect + CoolDownEffect | UI/Audio/ + UI/Components/ |
 | 被动系统重构 | CardTypePassives 删除，全部功能移入 UnitPassives + SpawnPool | UnitPassives.cs |
 | 16 种通用被动 | 嘲讽/点杀/人海/冲锋/光环/盾墙/护盾/减速/眩晕/撕裂/震波/燃烧/溅射/死爆/骑兵追击/召唤师 | UnitPassives.cs |
@@ -582,6 +588,10 @@ Assets/Scripts/
 │   │   └── OnlineLobbyController.cs    # ★ 联机大厅（单排/创建房间/加入房间 + 匹配 + 房间管理）
 │   ├── Codex/                          # 图鉴系统
 │   │   └── CodexUIController.cs        # 图鉴 UI 控制器（分类浏览/搜索/详情展示）
+│   ├── Dialogue/                       # 对话系统
+│   │   ├── DialogueData.cs             # ★ 对话数据 ScriptableObject（定义对话序列）
+│   │   ├── DialogueBox.cs              # ★ 对话框控制器（打字机+立绘+全区域点击继续）
+│   │   └── DialogueTrigger.cs          # ★ 场景进入对话触发器（自动/手动触发）
 │   ├── Components/
 │   │   ├── CoolDownEffect.cs          # ★ 可复用钟表式冷却视觉（Image.fillAmount Radial 360）
 │   │   └── ButtonEffect.cs            # ★ 按钮悬停放大 + 按压缩小动画
@@ -3081,3 +3091,105 @@ if (_owner == null || !_owner.IsAlive) return;
 // 修复后
 if (_owner == null) return;
 ```
+
+---
+
+## 29. 对话系统（DialogueBox）
+
+### 29.1 设计目标
+
+提供关卡剧情对话能力，支持打字机效果、角色立绘展示、全区域点击继续。
+
+### 29.2 组件
+
+| 组件 | 位置 | 说明 |
+|:---|:---|:---|
+| `DialogueData` | UI/Dialogue | ScriptableObject，定义对话序列 |
+| `DialogueLine` | UI/Dialogue | 单条对话数据（说话人/立绘/内容/速度/颜色） |
+| `DialogueBox` | UI/Dialogue | 对话框 UI 控制器（打字机/点击/键盘） |
+| `DialogueTrigger` | UI/Dialogue | 场景进入触发器（自动/手动触发） |
+
+### 29.3 DialogueLine 数据结构
+
+```csharp
+[System.Serializable]
+public class DialogueLine
+{
+    public string speakerName;         // 说话人名称
+    public Sprite portrait;            // 角色立绘
+    public float portraitWidth;        // 立绘宽度（独立配置）
+    public float portraitHeight;       // 立绘高度（独立配置）
+    public float portraitOffsetX;      // 立绘水平偏移
+    public float portraitOffsetY;      // 立绘垂直偏移
+    public string content;             // 对话文本
+    public float typeSpeed;            // 打字速度（秒/字）
+    public Color speakerColor;         // 名称颜色
+}
+```
+
+### 29.4 触发时机
+
+| 触发点 | 实现方式 | 说明 |
+|:---|:---|:---|
+| 关卡开始 | `LevelConfig.enterDialogue` | 场景加载后自动播放 |
+| 关卡胜利 | `LevelConfig.victoryDialogue` | 胜利面板弹出前播放 |
+| 手动触发 | `dialogueBox.Show(data)` | 任意代码调用 |
+| 场景触发器 | `DialogueTrigger` 组件 | 挂在场景中，支持延迟和单次触发 |
+
+### 29.5 交互方式
+
+| 输入 | 行为 |
+|:---|:---|
+| 点击对话框任意区域 | 打字中 → 跳过显示全部；已完成 → 播放下一句 |
+| 空格键 / 回车 | 同上 |
+| 跳过按钮 | 同上 |
+
+### 29.6 DialogueBox API
+
+```csharp
+public class DialogueBox : MonoBehaviour
+{
+    // 播放对话序列
+    public void Show(DialogueData data, Action onComplete = null);
+
+    // 跳过当前打字或播放下一句
+    public void SkipOrAdvance();
+
+    // 强制关闭对话框
+    public void ForceClose();
+
+    // 状态查询
+    public bool IsActive { get; }   // 对话框是否显示
+    public bool IsTyping { get; }   // 是否正在打字
+
+    // 事件
+    public event Action OnDialogueStarted;
+    public event Action<int, DialogueLine> OnLineStarted;
+    public event Action<int, DialogueLine> OnLineCompleted;
+    public event Action OnDialogueCompleted;
+}
+```
+
+### 29.7 与现有系统的关系
+
+- **BossDialogueBubble**：战斗中 BOSS 气泡对话（轻量级），与 DialogueBox 独立不冲突
+- **BattlePresentationManager**：演出系统，可配合 DialogueBox 使用
+- **GameBootstrapper**：初始化完成后可触发 enterDialogue
+- **LevelConfig**：每个关卡配置可关联 `enterDialogue` 和 `victoryDialogue`
+
+### 29.8 目录结构
+
+```
+Assets/Scripts/UI/Dialogue/
+├── DialogueData.cs        # 对话数据 ScriptableObject
+├── DialogueLine.cs        # 单条对话数据（内嵌在 DialogueData.cs）
+├── DialogueBox.cs         # 对话框 UI 控制器
+└── DialogueTrigger.cs     # 场景进入触发器
+
+Assets/Config/Dialogues/   # 对话配置资产（可选）
+└── Level_01_Enter.asset
+```
+
+### 29.9 预览
+
+HTML 预览文件：`Preview/dialogue_preview.html`（打字机效果 + 立绘 + 全区域点击）

@@ -86,6 +86,14 @@
 - 费用公式: `C_n = 10 × 1.17^(n-3) × M_type`
 - 骤死期: 回金速度 ×2
 
+### 对话系统
+
+- **DialogueBox**: 打字机效果 + 角色立绘展示 + 全区域点击继续
+- **DialogueData**: ScriptableObject 定义对话序列（每行可独立配置立绘尺寸）
+- **触发时机**: 关卡开始（`enterDialogue`）、关卡胜利（`victoryDialogue`）、手动触发
+- **交互方式**: 点击任意位置 / 空格键 / 回车键 继续
+- **与 BOSS 气泡独立**: BossDialogueBubble 用于战斗中气泡，DialogueBox 用于剧情对话
+
 ### 联机系统
 
 - **Master 权威架构**: Master 计算，Client 纯投影
@@ -134,6 +142,7 @@ Assets/
 │       ├── Battlefield/     # DomainUIController, LaunchTubeUI, TempSlotUI
 │       ├── Bidding/         # BiddingManager, NetworkBiddingManager
 │       ├── Codex/           # CodexUIController（图鉴系统）
+│       ├── Dialogue/        # DialogueBox, DialogueData, DialogueTrigger（对话系统）
 │       ├── Hand/            # HandArea, CardWidget, SelectionValidator
 │       ├── LevelSelect/     # LevelSelectController, LevelCard
 │       ├── Online/          # OnlineLobbyController
@@ -173,6 +182,8 @@ Assets/
 | `GameBootstrapper` | 自底向上 12 步初始化管线 |
 | `DamageQueue` | 帧末批量伤害结算（消除 Update 执行顺序影响） |
 | `BuildingAI` | 建筑 AI（每 4s 判定出牌 + 领域决策 + 暂存槽取牌） |
+| `DialogueBox` | 对话框 UI（打字机效果 + 立绘 + 全区域点击继续） |
+| `DialogueData` | 对话数据 ScriptableObject（定义对话序列） |
 
 ---
 
@@ -228,6 +239,15 @@ Assets/
 ---
 
 ## 最近更新
+
+### 2026-07-26
+
+- **对话系统实现**: 新增 DialogueBox + DialogueData + DialogueTrigger
+  - 打字机效果（可配置速度）
+  - 角色立绘展示（每行可独立配置尺寸）
+  - 全区域点击继续 + 键盘快捷键
+  - LevelConfig 关联 enterDialogue / victoryDialogue
+- **ARCHITECTURE.md v9.3**: 新增 §29 对话系统规范
 
 ### 2026-07-24
 

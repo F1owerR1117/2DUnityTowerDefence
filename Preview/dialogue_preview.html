@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DoudizhuTower - 对话框预览 v2</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── 顶部标题栏 ── */
+  .top-bar {
+    background: #16213e;
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 2px solid #0f3460;
+    flex-shrink: 0;
+  }
+  .top-bar h1 { font-size: 18px; color: #e94560; }
+  .top-bar .subtitle { font-size: 13px; color: #888; }
+
+  /* ── 游戏画面 ── */
+  .game-area {
+    flex: 1;
+    position: relative;
+    background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 50%, #16213e 100%);
+    overflow: hidden;
+  }
+
+  .battlefield {
+    position: absolute; inset: 0; opacity: 0.1;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255,255,255,0.03) 40px, rgba(255,255,255,0.03) 41px),
+      repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255,255,255,0.03) 40px, rgba(255,255,255,0.03) 41px);
+  }
+
+  /* ── 对话框覆盖层 ── */
+  .dialogue-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0 20px 30px;
+    transition: opacity 0.4s;
+    cursor: pointer; /* 整个覆盖层可点击 */
+  }
+  .dialogue-overlay.hidden {
+    opacity: 0; pointer-events: none;
+  }
+
+  /* ── 对话框容器（立绘 + 文字并排） ── */
+  .dialogue-container {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    align-items: flex-end;
+    gap: 0;
+  }
+
+  /* ── 立绘区域 ── */
+  .portrait-area {
+    flex-shrink: 0;
+    width: var(--portrait-width, 220px);
+    height: var(--portrait-height, 360px);
+    position: relative;
+    margin-right: -20px; /* 与对话框重叠 */
+    z-index: 2;
+  }
+
+  .portrait-img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 0 20px rgba(233, 69, 96, 0.3));
+    transition: opacity 0.3s, transform 0.3s;
+  }
+
+  /* 立绘占位（无图片时） */
+  .portrait-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 80px;
+    background: linear-gradient(180deg, rgba(233,69,96,0.1) 0%, transparent 100%);
+    border-radius: 8px;
+    border: 1px solid rgba(233,69,96,0.2);
+  }
+
+  /* ── 对话框主体 ── */
+  .dialogue-box {
+    flex: 1;
+    background: linear-gradient(180deg, #1e2a3a 0%, #141e2b 100%);
+    border: 2px solid #3a506b;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    box-shadow:
+      0 0 40px rgba(0,0,0,0.5),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    z-index: 1;
+  }
+
+  .dialogue-box::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #e94560, transparent);
+  }
+
+  .dialogue-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 24px 0;
+  }
+
+  .speaker-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #e94560;
+    letter-spacing: 2px;
+    padding-bottom: 2px;
+    border-bottom: 2px solid #e94560;
+  }
+
+  .dialogue-body {
+    padding: 14px 24px 8px;
+    min-height: 70px;
+  }
+
+  .dialogue-text {
+    font-size: 18px;
+    line-height: 1.8;
+    color: #e0e0e0;
+    letter-spacing: 1px;
+  }
+
+  .dialogue-text .cursor {
+    display: inline-block;
+    width: 2px; height: 20px;
+    background: #e94560;
+    margin-left: 2px;
+    animation: blink 0.8s infinite;
+    vertical-align: middle;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .dialogue-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 24px 14px;
+  }
+
+  .hint-text {
+    font-size: 12px;
+    color: #555;
+    transition: color 0.3s;
+  }
+  .dialogue-overlay:hover .hint-text {
+    color: #888;
+  }
+
+  .btn {
+    padding: 6px 20px;
+    border: 1px solid #3a506b;
+    border-radius: 6px;
+    background: transparent;
+    color: #aaa;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .btn:hover { background: #e94560; color: #fff; border-color: #e94560; }
+  .btn.primary { background: #e94560; color: #fff; border-color: #e94560; }
+  .btn.primary:hover { background: #c73550; }
+
+  /* ── 底部控制栏 ── */
+  .controls {
+    background: #16213e;
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-top: 2px solid #0f3460;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .controls label { font-size: 13px; color: #888; white-space: nowrap; }
+
+  .controls select,
+  .controls input[type=range] {
+    background: #1a1a2e; color: #eee;
+    border: 1px solid #3a506b; border-radius: 4px;
+    padding: 4px 8px; font-size: 13px; font-family: inherit;
+  }
+  .controls input[type=range] { width: 80px; accent-color: #e94560; }
+  .controls input[type=number] {
+    background: #1a1a2e; color: #eee;
+    border: 1px solid #3a506b; border-radius: 4px;
+    padding: 4px 6px; font-size: 13px; width: 60px;
+    font-family: inherit;
+  }
+  .controls .sep { width: 1px; height: 20px; background: #3a506b; }
+
+  .progress { display: flex; gap: 6px; align-items: center; }
+  .progress .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #3a506b; transition: background 0.3s;
+  }
+  .progress .dot.active { background: #e94560; box-shadow: 0 0 6px #e94560; }
+  .progress .dot.done { background: #4a9; }
+
+  .end-overlay {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 20px;
+    opacity: 0; pointer-events: none; transition: opacity 0.5s;
+  }
+  .end-overlay.show { opacity: 1; pointer-events: auto; }
+  .end-overlay h2 { font-size: 28px; color: #e94560; }
+  .end-overlay p { color: #888; font-size: 14px; }
+
+  /* ── 点击涟漪效果 ── */
+  .ripple {
+    position: absolute;
+    width: 40px; height: 40px;
+    border: 2px solid rgba(233, 69, 96, 0.6);
+    border-radius: 50%;
+    pointer-events: none;
+    animation: rippleAnim 0.5s ease-out forwards;
+  }
+  @keyframes rippleAnim {
+    0% { transform: scale(0); opacity: 1; }
+    100% { transform: scale(3); opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>DoudizhuTower</h1>
+  <span class="subtitle">对话框系统预览 v2 — 立绘 + 全区域点击</span>
+</div>
+
+<div class="game-area">
+  <div class="battlefield"></div>
+
+  <!-- 对话框 -->
+  <div class="dialogue-overlay" id="dialogueOverlay" onclick="handleOverlayClick(event)">
+    <div class="dialogue-container">
+      <!-- 立绘 -->
+      <div class="portrait-area" id="portraitArea">
+        <div class="portrait-placeholder" id="portraitPlaceholder"> </div>
+        <img class="portrait-img" id="portraitImg" style="display:none" />
+      </div>
+
+      <!-- 对话框 -->
+      <div class="dialogue-box">
+        <div class="dialogue-header">
+          <div class="speaker-name" id="speakerName">神秘老者</div>
+        </div>
+        <div class="dialogue-body">
+          <div class="dialogue-text" id="dialogueText"></div>
+        </div>
+        <div class="dialogue-footer">
+          <div class="hint-text" id="hintText">按 空格 / 点击任意位置 继续</div>
+          <div style="display:flex;gap:10px">
+            <button class="btn" onclick="event.stopPropagation(); skipTypewriter()">跳过</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="end-overlay" id="endOverlay">
+    <h2>对话结束</h2>
+    <p>游戏继续...</p>
+    <button class="btn primary" onclick="restartDemo()" style="margin-top:10px">重新播放</button>
+  </div>
+</div>
+
+<div class="controls">
+  <label>预设：</label>
+  <select id="presetSelect" onchange="loadPreset(this.value)">
+    <option value="0">第一关 - 初始剧情</option>
+    <option value="1">第二关 - BOSS 登场</option>
+    <option value="2">第三关 - 胜利结算</option>
+  </select>
+
+  <div class="sep"></div>
+
+  <label>打字速度：</label>
+  <input type="range" id="speedRange" min="10" max="80" value="35" oninput="updateSpeed(this.value)">
+  <span id="speedLabel" style="font-size:12px;color:#888">35ms</span>
+
+  <div class="sep"></div>
+
+  <label>立绘尺寸 W：</label>
+  <input type="number" id="portraitW" value="220" min="80" max="500" onchange="updatePortraitSize()">
+
+  <label>H：</label>
+  <input type="number" id="portraitH" value="360" min="100" max="700" onchange="updatePortraitSize()">
+
+  <div class="sep"></div>
+
+  <label>进度：</label>
+  <div class="progress" id="progressDots"></div>
+
+  <div class="sep"></div>
+
+  <button class="btn" onclick="restartDemo()">重置</button>
+</div>
+
+<script>
+// ── 对话数据 ──
+const presets = [
+  [
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "欢迎来到斗地主塔防的世界。在这里，扑克牌就是你的军队。" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "每出一张牌，就会召唤对应的士兵为你作战。单张召唤步兵，对子召唤双枪手，三条...则是精锐小队。" },
+    { speaker: "玩家", portrait: "⚔️", portraitW: 200, portraitH: 320, content: "那如果我出顺子呢？" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "顺子会召唤一整条兵线，每张牌一个士兵，链式加速前进。但要注意费用——点数越大，花费越高。" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "去吧，用你的牌技征服这片战场。记住，炸弹可以打破一切封锁！" },
+  ],
+  [
+    { speaker: "旁白", portrait: "⚔️", portraitW: 180, portraitH: 300, content: "第二关 —— 暗影来袭" },
+    { speaker: "敌方将领", portrait: " ", portraitW: 240, portraitH: 380, content: "哈哈哈...区区农民，也敢阻挡我的铁骑？" },
+    { speaker: "玩家", portrait: "⚔️", portraitW: 200, portraitH: 320, content: "你的炸弹吓不倒我。看我的——王炸！" },
+    { speaker: "敌方将领", portrait: " ", portraitW: 240, portraitH: 380, content: "什...什么！？双王齐出！这不可能！" },
+    { speaker: "旁白", portrait: "⚔️", portraitW: 180, portraitH: 300, content: "英雄觉醒！战场局势逆转——" },
+  ],
+  [
+    { speaker: "系统", portrait: " ", portraitW: 180, portraitH: 300, content: "战斗胜利！" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "做得好。你已经掌握了牌阵的精髓。" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "但真正的考验才刚刚开始...后面的敌人会越来越强。" },
+    { speaker: "神秘老者", portrait: " ", portraitW: 220, portraitH: 360, content: "善用你的金币，合理出牌，农民之间的配合也很重要。" },
+    { speaker: "系统", portrait: " ", portraitW: 180, portraitH: 300, content: "下一关即将解锁——" },
+  ]
+];
+
+let currentPreset = 0;
+let currentLine = 0;
+let typeSpeed = 35;
+let typewriterTimer = null;
+let isTyping = false;
+let fullText = '';
+
+const $overlay = document.getElementById('dialogueOverlay');
+const $text = document.getElementById('dialogueText');
+const $speaker = document.getElementById('speakerName');
+const $portraitArea = document.getElementById('portraitArea');
+const $portraitPlaceholder = document.getElementById('portraitPlaceholder');
+const $portraitImg = document.getElementById('portraitImg');
+const $hint = document.getElementById('hintText');
+const $progress = document.getElementById('progressDots');
+const $endOverlay = document.getElementById('endOverlay');
+
+function init() {
+  renderProgress();
+  startDialogue();
+}
+
+function renderProgress() {
+  const lines = presets[currentPreset];
+  $progress.innerHTML = '';
+  for (let i = 0; i < lines.length; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i < currentLine ? ' done' : '') + (i === currentLine ? ' active' : '');
+    $progress.appendChild(dot);
+  }
+}
+
+function startDialogue() {
+  currentLine = 0;
+  $endOverlay.classList.remove('show');
+  $overlay.classList.remove('hidden');
+  renderProgress();
+  showLine();
+}
+
+function showLine() {
+  const lines = presets[currentPreset];
+  if (currentLine >= lines.length) {
+    $overlay.classList.add('hidden');
+    setTimeout(() => $endOverlay.classList.add('show'), 500);
+    return;
+  }
+
+  const line = lines[currentLine];
+  $speaker.textContent = line.speaker;
+  fullText = line.content;
+
+  // 立绘尺寸
+  const w = line.portraitW || 220;
+  const h = line.portraitH || 360;
+  $portraitArea.style.setProperty('--portrait-width', w + 'px');
+  $portraitArea.style.setProperty('--portrait-height', h + 'px');
+
+  // 立绘内容（实际项目中用 <img src="...">）
+  $portraitPlaceholder.textContent = line.portrait;
+  $portraitPlaceholder.style.display = 'flex';
+  $portraitImg.style.display = 'none';
+
+  // 同步更新控制栏数值
+  document.getElementById('portraitW').value = w;
+  document.getElementById('portraitH').value = h;
+
+  renderProgress();
+  typewriter(fullText);
+}
+
+function typewriter(text) {
+  isTyping = true;
+  $text.innerHTML = '';
+  let i = 0;
+
+  clearInterval(typewriterTimer);
+  typewriterTimer = setInterval(() => {
+    if (i < text.length) {
+      $text.innerHTML = text.substring(0, i + 1) + '<span class="cursor"></span>';
+      i++;
+    } else {
+      clearInterval(typewriterTimer);
+      isTyping = false;
+      $text.innerHTML = text + '<span class="cursor"></span>';
+    }
+  }, typeSpeed);
+}
+
+function skipTypewriter() {
+  if (isTyping) {
+    clearInterval(typewriterTimer);
+    isTyping = false;
+    $text.innerHTML = fullText + '<span class="cursor"></span>';
+  } else {
+    nextLine();
+  }
+}
+
+function nextLine() {
+  if (isTyping) {
+    skipTypewriter();
+    return;
+  }
+  currentLine++;
+  showLine();
+}
+
+// ── 全区域点击事件 ──
+function handleOverlayClick(event) {
+  // 如果点击的是按钮，不处理（按钮有自己的 onclick + stopPropagation）
+  if (event.target.closest('.btn')) return;
+
+  // 涟漪效果
+  createRipple(event.clientX, event.clientY);
+
+  // 执行继续逻辑
+  nextLine();
+}
+
+function createRipple(x, y) {
+  const ripple = document.createElement('div');
+  ripple.className = 'ripple';
+  // 相对于 game-area 定位
+  const gameArea = document.querySelector('.game-area');
+  const rect = gameArea.getBoundingClientRect();
+  ripple.style.left = (x - rect.left - 20) + 'px';
+  ripple.style.top = (y - rect.top - 20) + 'px';
+  gameArea.appendChild(ripple);
+  setTimeout(() => ripple.remove(), 600);
+}
+
+function loadPreset(index) {
+  currentPreset = parseInt(index);
+  startDialogue();
+}
+
+function updateSpeed(val) {
+  typeSpeed = parseInt(val);
+  document.getElementById('speedLabel').textContent = val + 'ms';
+}
+
+function updatePortraitSize() {
+  const w = document.getElementById('portraitW').value;
+  const h = document.getElementById('portraitH').value;
+  $portraitArea.style.setProperty('--portrait-width', w + 'px');
+  $portraitArea.style.setProperty('--portrait-height', h + 'px');
+}
+
+function restartDemo() {
+  currentPreset = parseInt(document.getElementById('presetSelect').value);
+  startDialogue();
+}
+
+// ── 键盘监听 ──
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'Enter') {
+    e.preventDefault();
+    nextLine();
+  }
+});
+
+init();
+</script>
+</body>
+</html>

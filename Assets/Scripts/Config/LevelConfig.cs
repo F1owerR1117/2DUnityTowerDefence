@@ -1,4 +1,5 @@
 using UnityEngine;
+using DoudizhuTower.UI.Dialogue;
 
 namespace DoudizhuTower.Config
 {
@@ -25,6 +26,13 @@ namespace DoudizhuTower.Config
         [Header("场景")]
         [Tooltip("关卡场景名称（需在 Build Settings 中注册）")]
         public string sceneName = "DoudizhuTower_Game";
+
+        [Header("对话")]
+        [Tooltip("关卡进入时播放的对话数据（留空则不播放）")]
+        public DialogueData enterDialogue;
+
+        [Tooltip("关卡胜利时播放的对话数据（留空则不播放）")]
+        public DialogueData victoryDialogue;
 
         [Header("显示")]
         [Tooltip("关卡缩略图")]
