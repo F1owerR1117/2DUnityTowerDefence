@@ -36,11 +36,11 @@ namespace DoudizhuTower.Gameplay.Battle
 
         [Header("英雄")]
         [SerializeField] private CardUnit heroPrefab;
-        [SerializeField] private HeroType _selectedHero = HeroType.Blademaster;
-        [Tooltip("英雄配置（优先使用，替代硬编码属性）")]
-        [SerializeField] private DoudizhuTower.Config.HeroConfig _heroConfig;
-        [Tooltip("是否使用预制体的自定义属性（否则使用 HeroConfig/HeroStats 属性）")]
-        [SerializeField] private bool _useHeroPrefabStats = true;
+        
+        // [已废弃] 英雄配置现在由预制体上的 HeroUnitConfig 组件提供
+        // [SerializeField] private HeroType _selectedHero = HeroType.Blademaster;
+        // [SerializeField] private DoudizhuTower.Config.HeroConfig _heroConfig;
+        // [SerializeField] private bool _useHeroPrefabStats = true;
 
         [Header("状态机")]
         [SerializeField] private GameStateMachine _gameStateMachine;

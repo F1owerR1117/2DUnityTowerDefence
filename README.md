@@ -98,7 +98,7 @@ Assets/
 ├── Scripts/
 │   ├── Config/              # ScriptableObject 配置表
 │   ├── Core/                # 纯逻辑层（零 Unity 依赖）
-│   │   ├── Battle/          # SoldierStats, HeroType
+│   │   ├── Battle/          # SoldierStats
 │   │   ├── Card/            # Card, CardDeck, CardHand, CardTypeDetector
 │   │   └── Economy/         # EconomySystem, CardCostCalculator
 │   ├── Gameplay/            # 运行时管理层
@@ -176,7 +176,7 @@ Assets/
 - **兵种预制体目录重组**: 新增诱饵(Bait)、骑兵(Cavalry)、坦克、无人机、连对、飞机兵种预制体目录
 - **PlaneTest 预制体移动**: 从根目录移动到飞机目录
 - **关卡配置调整**: Level_03 配置更新，Level_1/3/4 场景调整
-- **新增英雄配置**: NewHeroConfig ScriptableObject
+- **英雄系统重构**: 英雄配置现在由预制体上的 HeroUnitConfig 组件提供
 - **构建日志抑制器**: BuildLogSuppressor 脚本（编译时日志抑制）
 
 ### 2026-07-17

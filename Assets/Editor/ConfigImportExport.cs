@@ -187,55 +187,57 @@ namespace DoudizhuTower.Editor
         }
 
         // ═══════════════════════════════════════════════════
-        //  英雄配置
+        //  英雄配置（HeroUnitConfig 组件）
         // ═══════════════════════════════════════════════════
 
         private void ExportHeroes()
         {
-            var assets = FindAssets<HeroConfig>();
+            // 查找所有包含 HeroUnitConfig 组件的预制体
+            var guids = AssetDatabase.FindAssets("t:Prefab");
+            var heroConfigs = new List<HeroUnitConfig>();
+            
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+                if (prefab == null) continue;
+                
+                var config = prefab.GetComponent<HeroUnitConfig>();
+                if (config != null)
+                {
+                    heroConfigs.Add(config);
+                }
+            }
+
             var headers = new List<string>
             {
-                "HeroType", "HeroName", "HP", "ATK", "AttackInterval", "MoveSpeed", "Range",
-                "AwakenHP", "AwakenATK", "AwakenMoveSpeed", "AwakenRange",
-                "BlademasterProcChance", "BlademasterDamageMultiplier",
-                "GuardianDamageReduction",
-                "WarlockSplashRadius", "WarlockSplashDamageMultiplier",
-                "SpiritRiderAuraRadius", "SpiritRiderAttackSpeedBonus", "SpiritRiderMoveSpeedBonus"
+                "PrefabPath", "HeroName",
+                "AwakenHP", "AwakenATK", "AwakenMoveSpeed", "AwakenRange", "AwakenCollisionRadius"
             };
 
             var rows = new List<Dictionary<string, string>>();
-            foreach (var asset in assets)
+            foreach (var config in heroConfigs)
             {
-                var so = new SerializedObject(asset);
+                // 获取预制体路径
+                var prefabPath = AssetDatabase.GetAssetPath(config.gameObject);
+                
                 var row = new Dictionary<string, string>
                 {
-                    ["HeroType"] = asset.heroType.ToString(),
-                    ["HeroName"] = asset.heroName,
-                    ["HP"] = F(asset.hp),
-                    ["ATK"] = F(asset.atk),
-                    ["AttackInterval"] = F(asset.attackInterval),
-                    ["MoveSpeed"] = F(asset.moveSpeed),
-                    ["Range"] = F(asset.range),
-                    ["AwakenHP"] = F(asset.awakenHpMultiplier),
-                    ["AwakenATK"] = F(asset.awakenAtkMultiplier),
-                    ["AwakenMoveSpeed"] = F(asset.awakenMoveSpeedMultiplier),
-                    ["AwakenRange"] = F(asset.awakenRangeMultiplier),
-                    ["BlademasterProcChance"] = F(asset.blademasterProcChance),
-                    ["BlademasterDamageMultiplier"] = F(asset.blademasterDamageMultiplier),
-                    ["GuardianDamageReduction"] = F(asset.guardianDamageReduction),
-                    ["WarlockSplashRadius"] = F(asset.warlockSplashRadius),
-                    ["WarlockSplashDamageMultiplier"] = F(asset.warlockSplashDamageMultiplier),
-                    ["SpiritRiderAuraRadius"] = F(asset.spiritRiderAuraRadius),
-                    ["SpiritRiderAttackSpeedBonus"] = F(asset.spiritRiderAttackSpeedBonus),
-                    ["SpiritRiderMoveSpeedBonus"] = F(asset.spiritRiderMoveSpeedBonus),
+                    ["PrefabPath"] = prefabPath,
+                    ["HeroName"] = config.heroName,
+                    ["AwakenHP"] = F(config.awakenHpMultiplier),
+                    ["AwakenATK"] = F(config.awakenAtkMultiplier),
+                    ["AwakenMoveSpeed"] = F(config.awakenMoveSpeedMultiplier),
+                    ["AwakenRange"] = F(config.awakenRangeMultiplier),
+                    ["AwakenCollisionRadius"] = F(config.awakenCollisionRadiusMultiplier),
                 };
                 rows.Add(row);
             }
 
-            var path = Path.Combine(CsvDir, "Heroes.csv");
-            CsvIO.WriteCsv(path, headers, rows);
+            var csvPath = Path.Combine(CsvDir, "Heroes.csv");
+            CsvIO.WriteCsv(csvPath, headers, rows);
             AssetDatabase.Refresh();
-            _log += $"✓ 英雄配置已导出: {path} ({rows.Count} 条)\n";
+            _log += $"✓ 英雄配置已导出: {csvPath} ({rows.Count} 条)\n";
         }
 
         private void ImportHeroes()
@@ -244,37 +246,37 @@ namespace DoudizhuTower.Editor
             if (!File.Exists(path)) { _log += $"✗ 文件不存在: {path}\n"; return; }
 
             var rows = CsvIO.ReadCsv(path);
-            var assets = FindAssets<HeroConfig>();
-            var lookup = assets.ToDictionary(a => a.heroType.ToString(), a => a);
-
             int count = 0;
+            
             foreach (var row in rows)
             {
-                if (!row.TryGetValue("HeroType", out var heroType)) continue;
-                if (!lookup.TryGetValue(heroType, out var asset)) { _log += $"  ⚠ 找不到英雄配置: {heroType}\n"; continue; }
-
-                var so = new SerializedObject(asset);
+                if (!row.TryGetValue("PrefabPath", out var prefabPath)) continue;
+                
+                // 加载预制体
+                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+                if (prefab == null)
+                {
+                    _log += $"  ⚠ 找不到预制体: {prefabPath}\n";
+                    continue;
+                }
+                
+                var config = prefab.GetComponent<HeroUnitConfig>();
+                if (config == null)
+                {
+                    _log += $"  ⚠ 预制体缺少 HeroUnitConfig: {prefabPath}\n";
+                    continue;
+                }
+                
+                var so = new SerializedObject(config);
                 SetStr(so, "heroName", row, "HeroName");
-                SetFloat(so, "hp", row, "HP");
-                SetFloat(so, "atk", row, "ATK");
-                SetFloat(so, "attackInterval", row, "AttackInterval");
-                SetFloat(so, "moveSpeed", row, "MoveSpeed");
-                SetFloat(so, "range", row, "Range");
                 SetFloat(so, "awakenHpMultiplier", row, "AwakenHP");
                 SetFloat(so, "awakenAtkMultiplier", row, "AwakenATK");
                 SetFloat(so, "awakenMoveSpeedMultiplier", row, "AwakenMoveSpeed");
                 SetFloat(so, "awakenRangeMultiplier", row, "AwakenRange");
-                SetFloat(so, "blademasterProcChance", row, "BlademasterProcChance");
-                SetFloat(so, "blademasterDamageMultiplier", row, "BlademasterDamageMultiplier");
-                SetFloat(so, "guardianDamageReduction", row, "GuardianDamageReduction");
-                SetFloat(so, "warlockSplashRadius", row, "WarlockSplashRadius");
-                SetFloat(so, "warlockSplashDamageMultiplier", row, "WarlockSplashDamageMultiplier");
-                SetFloat(so, "spiritRiderAuraRadius", row, "SpiritRiderAuraRadius");
-                SetFloat(so, "spiritRiderAttackSpeedBonus", row, "SpiritRiderAttackSpeedBonus");
-                SetFloat(so, "spiritRiderMoveSpeedBonus", row, "SpiritRiderMoveSpeedBonus");
+                SetFloat(so, "awakenCollisionRadiusMultiplier", row, "AwakenCollisionRadius");
 
                 so.ApplyModifiedProperties();
-                EditorUtility.SetDirty(asset);
+                EditorUtility.SetDirty(prefab);
                 count++;
             }
 

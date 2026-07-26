@@ -94,7 +94,6 @@
 | `Identity` | 阵营身份枚举 | Core/Battle | SoldierStats.cs 内嵌枚举（FarmerA/FarmerB/Landlord），取代原 FactionTag |
 | `UnitHeight` | 单位高度枚举 | Gameplay/Entities | CardUnit.cs 内嵌 `[Flags]` 枚举（Ground/Air），用于高度系统判定（CanAttackHeight/CanBlockHeight） |
 | `DamageType` | 伤害类型枚举 | Core/Battle | SoldierStats.cs 内嵌枚举（Physical/Special/Bomb/Burn/True） |
-| `HeroType` | 英雄类型 | Core/Battle | 战前 5 选 1 |
 | `DamageFloatText` | 伤害飘字 | UI/Floating | 世界空间 TMP 飘字组件 |
 | `FloatingTextPool` | 飘字对象池 | UI/Floating | 自动订阅 BattleManager.OnUnitSpawned |
 | `GetUnitEdgeDistance` | 单位间边缘距离 | Gameplay/Entities | bounds.Intersects + ClosestPoint 退化兜底 |
@@ -114,7 +113,13 @@
 | `SceneLoader` | 场景加载器 | Gameplay/Systems | 场景切换工具（RestartGame/LoadMainMenu/QuitGame） |
 | `UnitFlipper` | 朝向翻转 | Gameplay/Entities | 根据移动/攻击方向翻转 SpriteRenderer |
 | `AttackEventRelay` | 攻击事件中继 | Gameplay/Entities | 子物体 Animator Event → 父物体 CardUnit.OnAttackHitFrame |
-| `HeroConfig` | 英雄配置 | Config | ScriptableObject，可配参数取代硬编码 HeroStats |
+| `HeroUnitConfig` | 英雄单位配置 | Gameplay/Entities | MonoBehaviour，挂载到英雄预制体，包含英雄所有配置（属性/觉醒倍率/被动技能） |
+| `HeroPassiveBase` | 英雄被动技能基类 | Gameplay/Entities | 抽象基类，所有英雄被动技能继承自此 |
+| `BlademasterPassive` | 剑圣被动 | Gameplay/Entities/Passives | 攻击时概率造成额外伤害 |
+| `GuardianPassive` | 铁卫被动 | Gameplay/Entities/Passives | 嘲讽源 + 伤害减免 |
+| `SharpshooterPassive` | 神射被动 | Gameplay/Entities/Passives | 优先攻击血量最低的敌人 |
+| `WarlockPassive` | 术士被动 | Gameplay/Entities/Passives | 攻击时溅射范围伤害 |
+| `SpiritRiderPassive` | 灵骑被动 | Gameplay/Entities/Passives | 友军光环（攻速 + 移速加成） |
 | `DomainUIController` | 领域 UI 统一控制器 | UI/Battlefield | 合并覆盖层 + 反击按钮 + 按钮视觉状态 + 冷却效果，单一入口管理所有领域 UI |
 | `ButtonAudio` | 按钮音效 | UI/Audio | 自动为 Button 添加点击/悬停音效（走 UI 优先级通道） |
 | `ButtonEffect` | 按钮特效 | UI/Components | 悬停放大 + 按压缩小动画 |
@@ -189,7 +194,7 @@
 | 兵种音频系统 | UnitAudio + AudioManager 单例（4 通道优先级音效 + BGM） | Gameplay/Entities/ + Gameplay/Systems/ |
 | 兵种特效系统 | UnitVFX + VFXManager 单例对象池 | Gameplay/Entities/ + Gameplay/Systems/ |
 | 兵种点选系统 | UnitSelector + UnitInfoPanel（世界空间信息面板） | Gameplay/Entities/ + UI/Panels/ |
-| 英雄配置外置 | HeroConfig ScriptableObject 可配参数取代硬编码 HeroStats | Config/ |
+| 英雄配置重构 | HeroUnitConfig 组件挂载到英雄预制体，移除对全局 HeroConfig 的依赖 | Gameplay/Entities/ |
 | 按钮音效/特效 | ButtonAudio + ButtonEffect + CoolDownEffect | UI/Audio/ + UI/Components/ |
 | 被动系统重构 | CardTypePassives 删除，全部功能移入 UnitPassives + SpawnPool | UnitPassives.cs |
 | 16 种通用被动 | 嘲讽/点杀/人海/冲锋/光环/盾墙/护盾/减速/眩晕/撕裂/震波/燃烧/溅射/死爆/骑兵追击/召唤师 | UnitPassives.cs |
@@ -198,7 +203,7 @@
 | 坦克硬编码 Buff 移除 | BuffBomb/BuffConsecutivePair/BuffFourWithTwoTank 全部删除 | BattleManager.cs |
 | 飞机轰炸重做 | 只轰炸同路线，参数可调，CalcBombType 删除 | BattleManager.cs |
 | 弹型效果 | 从 BattleManager 移入 Projectile 作为子弹通用特效（爆炸以命中点为圆心，全额伤害） | Projectile.cs |
-| 英雄独特被动 | 剑圣/铁卫/神射/术士/灵骑全部实现 | BattleManager.cs |
+| 英雄独特被动 | 剑圣/铁卫/神射/术士/灵骑全部实现（模块化被动技能组件） | Gameplay/Entities/Passives/ |
 | 战斗飘字（伤害数字） | DamageFloatText + FloatingTextPool 对象池 | UI/Floating/ |
 | IBuildingTarget 接口 | CardUnit(_isBuilding) 实现，统一攻击目标接口 | Gameplay/Battle/ |
 | 动态基地列表 | 任意数量建筑拖入 baseBuildings 数组 | BattleManager + GameBootstrapper |
@@ -322,7 +327,7 @@
 | Heal 方法 | `CardUnit.Heal(amount)` 治疗方法，不超过 MaxHP | CardUnit.cs |
 | 嘲讽多目标修复 | 攻击中嘲讽打断仅在嘲讽目标变化时生效，防止多个嘲讽光环导致无法攻击 | CardUnit.cs |
 | 攻击超时安全阀 | `_attackStateTimer` 计时，`AttackInterval×3` 秒未完成强制重置，防止攻击状态卡死 | CardUnit.cs |
-| BOSS 技能动画 | SimpleAnimator 新增 dashClip/bossSkill1-3Clip，Animator Controller 新增 Dash/BossSkill1-3 Trigger 状态，更新菜单 `Tools → 更新兵种 Animator Controller` | SimpleAnimator.cs + CardUnit.Animation.cs + CreateUnitAnimatorController.cs |
+| BOSS 技能动画 | SimpleAnimator 新增 dashClip/bossSkill1-3Clip，Animator Controller 新增 Dash/BossSkill1-3 Trigger 状态，更新菜单 `Tools → 生成兵种 Animator Controller` | SimpleAnimator.cs + CardUnit.Animation.cs + CreateUnitAnimatorController.cs |
 | 动画优先级文档 | Any State Trigger 内部顺序：Death > Shockwave > Splash > StunHit > KingAura > DeathExplosion > Burn > Summon > Dash > BossSkill1-3 | ARCHITECTURE.md |
 | 骤死期双倍金币 | `EconomyManager` 订阅 `OnPhaseChanged`，骤死期回金速度 × `suddenDeathMultiplier`，GameOver 恢复基础值 | EconomyManager.cs + GameBootstrapper.cs |
 | VisualCenter 使用基准 | 全项目统一圆心地图（碰撞箱中心 vs transform.position），编辑器预览差异说明 | ARCHITECTURE.md §9.7 |
@@ -425,6 +430,7 @@
 
 ```
 Assets/Scripts/
+├── BuildLogSuppressor.cs              # Build 日志抑制（Editor 中不受影响，Build 中禁用 Console 弹窗）
 ├── Core/                              # 纯 C# 逻辑层（零 Unity 依赖）
 │   ├── Card/
 │   │   ├── CardSuit.cs                # 花色枚举 ♠♥♣♦
@@ -436,8 +442,7 @@ Assets/Scripts/
 │   │   ├── CardTypeResult.cs          # 牌型检测结果（类型 + 主体点数 + 长度 + 挂件）
 │   │   └── CardTypeDetector.cs        # ★ 核心算法：合规牌型判定
 │   ├── Battle/
-│   │   ├── SoldierStats.cs            # §3.1 兵种属性表（struct）+ 枚举（Lane/Identity/DamageType）
-│   │   └── HeroType.cs                # 英雄 5 选 1 + HeroStats 属性数据
+│   │   └── SoldierStats.cs            # §3.1 兵种属性表（struct）+ 枚举（Lane/Identity/DamageType）
 │   ├── Economy/
 │   │   ├── EconomySystem.cs           # 金币增减 + 回金速度成长曲线
 │   │   └── CardCostCalculator.cs      # §2.3 Cost = ΣC_n × M_type 公式
@@ -471,11 +476,19 @@ Assets/Scripts/
 │   │   ├── UnitSelector.cs            # ★ 兵种点选器（Physics2D.OverlapPoint 左键选中/取消）
 │   │   ├── UnitAudio.cs              # ★ 兵种音频组件（优先级通道 + 按 Clip 并发限制 + 屏幕可见性裁剪）
 │   │   ├── UnitVFX.cs                # ★ 兵种特效组件（调用 VFXManager 对象池）
-│   │   └── UnitFlipper.cs            # 兵种朝向翻转（根据移动/攻击方向翻转 Sprite）
+│   │   ├── UnitFlipper.cs            # 兵种朝向翻转（根据移动/攻击方向翻转 Sprite）
+│   │   ├── HeroUnitConfig.cs         # ★ 英雄单位配置组件（挂载到英雄预制体）
+│   │   ├── HeroPassiveBase.cs        # ★ 英雄被动技能基类
+│   │   └── Passives/                 # 英雄被动技能组件
+│   │       ├── BlademasterPassive.cs #   剑圣被动（攻击时概率造成额外伤害）
+│   │       ├── GuardianPassive.cs    #   铁卫被动（嘲讽源 + 伤害减免）
+│   │       ├── SharpshooterPassive.cs#   神射被动（优先攻击血量最低的敌人）
+│   │       ├── WarlockPassive.cs     #   术士被动（攻击时溅射范围伤害）
+│   │       └── SpiritRiderPassive.cs #   灵骑被动（友军光环：攻速 + 移速加成）
 │   ├── Battle/
 │   │   ├── BattleManager.cs           # ★ 战场管理器（核心字段/初始化/主循环/胜负判定）
 │   │   ├── BattleManager.Spawning.cs  #   牌型生成（12种）+ 通用生成 + 召唤物 + 伤害分担
-│   │   ├── BattleManager.Heroes.cs    #   英雄生成 + 被动注入 + 灵骑光环
+│   │   ├── BattleManager.Heroes.cs    #   英雄生成（使用 HeroUnitConfig 组件）
 │   │   ├── DamageQueue.cs             # ★ 伤害批量结算队列（同帧入队，帧末统一结算 HP + 死亡）
 │   │   ├── IBuildingTarget.cs         # 可攻击目标接口（CardUnit _isBuilding 唯一实现）
 │   │   ├── RoutePath.cs               # 路径定义 + Scene 视图 Gizmo + `_cachePositions` 缓存开关 + `_locked` 路线锁定
@@ -587,16 +600,12 @@ Assets/Scripts/
 │
 ├── Config/                             # ScriptableObject 数据源
 │   ├── EconomyConfig.cs               # 经济曲线配置
-│   ├── HeroConfig.cs                  # ★ 英雄配置（可配参数取代硬编码 HeroStats）
 │   ├── BiddingConfig.cs               # ★ 叫分配置（叫分时长/AI 策略/超时处理）
 │   ├── LevelConfig.cs                 # ★ 关卡配置（关卡名称/描述/缩略图/场景名/难度）
 │   ├── UnitStatsConfig.cs             # ★ 兵种数值汇总（CSV 管线中间层，预制体引用+属性）
 │   ├── CardSpriteDB.cs                # 卡牌精灵图数据库
 │   ├── CodexEntry.cs                  # 图鉴条目 ScriptableObject（Id/DisplayName/Category/Icon/Description）
 │   └── CodexDatabase.cs              # 图鉴数据库 ScriptableObject（按分类组织条目，支持运行时查询）
-│
-└── _DisabledTests/                     # 已禁用的测试目录
-    └── CardTypeDetectorTests.cs
 
 Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下）
 ├── CreateUnitAnimatorController.cs     # 生成兵种 Animator Controller（12 状态）
@@ -607,6 +616,9 @@ Assets/Editor/                          # 编辑器工具（不在 Scripts/ 下�
 ├── ConfigImportExport.cs             # ★ CSV 配置数据导入导出窗口（Tools → 配置数据管理）
 ├── UnitDebugToolWindow.cs            # ★ 兵种综合调试工具（属性编辑/被动配置/音效预览/批量应用）
 └── LocalTestLauncher.cs              # ★ 本地联机测试启动器（Tools → 本地联机测试，单进程多玩家）
+
+_DisabledTests/                         # 已禁用的测试（项目根目录）
+└── CardTypeDetectorTests.cs
 ```
 
 ---
@@ -686,7 +698,7 @@ MonoBehaviour.OnDestroy()  → 确保取消订阅（双重保险）
 ```
 Step 0:  确保 UI_Scene 已加载（UIManager.WaitForReady）
 Step 0b: 加载存档（SaveSystem.Load）
-Step 1:  加载 Config（EconomyConfig, HeroConfig）
+Step 1:  加载 Config（EconomyConfig）
 Step 2:  实例化 Core 层（CardDeck, EconomySystem）+ 启用批量伤害结算
 Step 3:  发初始手牌（玩家手牌 + AI 手牌，单机按基地遍历 / 联机按 AISlots）
 Step 4:  初始化建筑 CardUnit（InitBuildingHP + 注册战场）
@@ -744,14 +756,14 @@ foreach (var baseBldg in baseBuildings)
 ### 索敌判定
 
 - **检测方式**：`Physics2D.OverlapCircle(point, radius, filter, buffer)`，非分配，预缓存 64 槽
-- **距离计算**：统一使用两套边缘距离方法，逻辑一致：
-  - `GetEdgeDistance(IBuildingTarget)`：用于建筑目标（兼容 IBuildingTarget 接口）
-  - `GetUnitEdgeDistance(CardUnit)`：用于单位间距离（避免 IBuildingTarget 装箱）
-  - 两者共同逻辑：
+- **距离计算**：两套边缘距离方法：
+  - `GetEdgeDistance(IBuildingTarget)`：用于建筑目标（bounds.Intersects + 双向 ClosestPoint）
+  - `GetUnitEdgeDistance(CardUnit)`：用于单位间距离（bounds.Intersects + 双向 ClosestPoint + ClosestPoint 退化兜底）
+  - 共同逻辑：
     1. `bounds.Intersects` 安全阀：碰撞箱重叠时直接返回 0
     2. 双向 `ClosestPoint` 计算真正边缘距
-    3. ClosestPoint 退化兜底：查询点在碰撞箱内部时改用中心距减双半径
-    4. 无碰撞箱时回退 `VisualCenter` / `LogicCenter`
+    3. 无碰撞箱时回退 `VisualCenter` / `LogicCenter`
+  - `GetUnitEdgeDistance` 额外逻辑：ClosestPoint 退化兜底（查询点在碰撞箱内部时改用中心距减双半径）
 - **GetWorldRadius() 已删除**：不再使用圆形近似补偿建筑碰撞半径
 - **嘲讽优先级**：`IsTauntSource=true` 且在 `TauntRange` 内的敌方单位最高优先级（嘲讽索敌同样使用 `bounds.Intersects` + ClosestPoint 边缘检测）
 - **本路优先**：同 `Lane` 的敌人最高优先级（`Lane.None` 匹配任何路线）
@@ -802,7 +814,6 @@ fillTransform.localPosition = new Vector3(_initFillLocalX + _halfWorldWidth * (1
 
 | 参数 | 值 | 说明 |
 |:---|:---|:---|
-| Rigidbody2D | **已移除** | 全面转型纯数学步进 |
 | Is Trigger | true | 碰撞箱仅用于 OverlapBox/OverlapCircle 检测 |
 | 用途 | 范围检测 + 阻挡判定 | ClosestPoint 边缘距离、bounds.Intersects 重叠判定、IsBlockedAt 阻挡 |
 
@@ -812,7 +823,10 @@ fillTransform.localPosition = new Vector3(_initFillLocalX + _halfWorldWidth * (1
 
 所有并发定时器统一由 `TimerQueue` 管理，禁止 `Invoke()` 或 `StartCoroutine()`。
 
-**例外**：`DomainSystem` 使用自身 `Update()` 驱动的 float 计时器（`UpdateDomainTimer`/`UpdateCounterShieldTimer`/`UpdateCooldowns`），因其状态机复杂度不适合 TimerQueue 的回调模式。
+**例外**：
+- `DomainSystem` 使用自身 `Update()` 驱动的 float 计时器（`UpdateDomainTimer`/`UpdateCounterShieldTimer`/`UpdateCooldowns`），因其状态机复杂度不适合 TimerQueue 的回调模式。
+- `BossController` 在 TimerQueue 不可用时回退到 `Invoke()`（TimerQueue 可用时优先使用 TimerQueue）。
+- 演出系统（`BattlePresentationManager`/`CameraDirector`/`BossDialogueBubble`）和视觉效果（`UnitPassives` 击退/`SpiritRiderPassive` 光环）使用 `StartCoroutine()`，因其需要协程的流程控制能力（等待、并行、取消）。
 
 ### 全局计时器汇总
 
@@ -1021,7 +1035,7 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
 
 ### 9.4 兵种被动系统（UnitPassives）
 
-所有被动在预制体 Inspector 中勾选启用，`Awake()` 中完成事件订阅。共 16 种：
+所有被动在预制体 Inspector 中勾选启用，`Awake()` 中完成事件订阅。共 17 种：
 
 | 被动 | 开关字段 | 触发方式 | 说明 |
 |:---|:---|:---|:---|
@@ -1040,7 +1054,7 @@ public Vector2 VisualCenter => _collider != null ? _collider.bounds.center : (Ve
 | 死亡燃烧 | `enableBurnOnDeath` | `OnDeathEvent` | 死亡留下火海（BurnZone）持续伤害 |
 | 溅射攻击 | `enableSplash` | `OnAttackEvent` + `OnPerTargetAttackEvent` | 攻击时以 `Collider2D.ClosestPoint`（攻击者→目标碰撞箱最近点）为圆心扩散范围伤害，支持大型建筑边缘溅射；多目标模式下每个目标独立触发溅射 |
 | 骑兵追击 | `enableCavalryChase` | `OverrideFindTarget` | 优先锁定远程（IsRanged）敌方单位 |
-| 召唤师 | `enableSummoner` | Update 定时 + `OnKillEvent` | 定时召唤（Animation Event 驱动）+ 击杀召唤（从尸体位置立刻生成），召唤物直接继承召唤师的 `FollowPath`（而非基地 `RouteGroup.CurrentRoute`），击杀归属到召唤师 |
+| 召唤师 | `enableSummoner` | Update 定时 + `OnKillEvent` | 定时召唤（Animation Event 驱动）+ 击杀召唤（从尸体位置立刻生成），召唤物直接继承召唤师的 `FollowPath`（而非基地 `RouteGroup.CurrentRoute`），击杀归属到召唤师。击杀召唤物不会触发新召唤（防止无限循环） |
 | 快速连击 | `enableBurstAttack` | `OnAttackEvent` + `OnPerTargetAttackEvent` | 连续攻击 N 次后自我眩晕进入冷却（`burstHitCount`/`burstCooldown`），多目标模式下每个命中计数 |
 
 **召唤师可配参数**：`summonPrefab`（召唤物预制体）、`summonInterval`（定时召唤间隔）、`maxSummons`（最大召唤物数量）、`summonOnKill`（击杀时是否额外召唤）
@@ -1067,7 +1081,7 @@ public System.Func<CardUnit, float> OverrideAttackRange;      // 自定义攻击
 | 炸弹 | 炸弹预制体（SpawnPool._bombPrefabs）| 预制体自身 |
 | 四带二 | 坦克预制体 + 无人机预制体（SpawnPool._tankPrefabs/_dronePrefabs）| 预制体自身 |
 | 飞机 | 轰炸机预制体（SpawnPool._bomberPrefabs）+ 同路线地毯轰炸 | BattleManager 参数 |
-| 王炸 | 英雄 5 选 1，属性覆盖 | BattleManager |
+| 王炸 | 英雄 5 选 1，属性覆盖（预制体自包含） | BattleManager + HeroUnitConfig |
 
 `CardTypePassives.cs` 已删除，其所有功能已迁移至 `UnitPassives.cs`（16 种通用被动）和 `SpawnPool.cs`（预制体映射）。
 
@@ -1080,6 +1094,9 @@ public System.Func<CardUnit, float> OverrideAttackRange;      // 自定义攻击
 //   → gameObject.SetActive(false) → UnitHealthBar.OnDisable() 解绑 + 重置
 // OnPoolSpawn() → gameObject.SetActive(true) → 血条重新绑定
 ```
+
+**OnPoolDespawn 动画重置**：对象池回收时重置所有 Trigger 和 Bool 参数，
+强制回到 Idle 状态，防止状态残留导致动画异常。
 
 ### 9.7 VisualCenter 使用基准地图
 
@@ -1378,32 +1395,70 @@ public float farmerBaseIncome = 5f;
 public float landlordBonusIncome = 2f;
 public float incomeStepPerMinute = 1f;
 public float suddenDeathMultiplier = 2f;
+public float baseCostC3 = 10f;           // 点数3的基础市值
+public float costGrowthRate = 1.17f;     // Cost 增长系数
 ```
 
-### 12.2 基地配置（BaseConfig）
+### 12.2 基地配置（CardUnit 建筑模式）
+
+基地现在是挂载了 `CardUnit(_isBuilding=true)` 的实体，不再有独立的 BaseConfig。
+
+| 字段 | 说明 |
+|:---|:---|
+| `_isBuilding` | 标识是否为建筑 |
+| `_hp` | 生命值（预制体 Inspector 配置） |
+| `_regenPerSecond` | 建筑每秒回血量 |
+| `_baseScale` | 基础缩放 |
+
+**初始化**：`InitBuildingHP(float hp)` 方法，从 `MaxHP`（即 `_hp`）读取血量。
+**阵营身份**：通过 `CardUnit.IsLandlord` 属性判断。
+**默认血量**：如果 `_hp` 未设置（≤0），默认 1000f。
+
+### 12.3 英雄配置（HeroUnitConfig）
+
+**v2.0 架构（预制体自包含）**：
+
+英雄的生成完全取决于其预制体，不再依赖外部 HeroConfig ScriptableObject。
 
 ```csharp
-public Identity owner;                    // 阵营身份
-public float maxHealth = 100f;            // 原型测试血量
-public Vector3 baseScale = Vector3.one;   // 基地缩放
-// 联机模式自动切换: farmer=10000, landlord=12000
-public float GetMaxHealth(bool isPrototype);
-```
+// 挂载到英雄预制体上
+public class HeroUnitConfig : MonoBehaviour {
+    public string heroName;
+    
+    // 觉醒属性倍率
+    public float awakenHpMultiplier = 2.0f;
+    public float awakenAtkMultiplier = 2.0f;
+    public float awakenMoveSpeedMultiplier = 1.2f;
+    public float awakenRangeMultiplier = 1.3f;
+    
+    // 被动技能组件
+    public HeroPassiveBase[] passives;
+}
 
-### 12.3 英雄配置（HeroConfig）
-
-```csharp
-public class HeroConfig : ScriptableObject {
-    // heroType 存储在 ScriptableObject 自身字段中
-    public HeroType heroType;
-    // 基础属性 + 觉醒倍率（无参数，从自身字段读取 heroType）
-    public HeroStats GetBaseStats();
-    public HeroStats GetAwakenedStats();
-    // 可配参数：剑圣触发概率、铁卫减伤比例、术士溅射半径、灵骑光环范围等
+// 被动技能基类
+public abstract class HeroPassiveBase : MonoBehaviour {
+    public abstract void Apply(CardUnit unit, bool awakened);
+    public abstract void Remove(CardUnit unit);
 }
 ```
 
-取代原先 `HeroStats` 中的硬编码查找表，所有英雄数值可在 Inspector 中调整。
+**优势**：
+- 每个英雄预制体自包含所有配置
+- 被动技能模块化，易于扩展
+- 联机模式下支持多玩家选择不同英雄
+- 移除对全局 HeroConfig 的依赖
+
+**已实现的被动技能组件**：
+- `BlademasterPassive`：剑圣被动（攻击时概率造成额外伤害）
+- `GuardianPassive`：铁卫被动（嘲讽源 + 伤害减免）
+- `SharpshooterPassive`：神射被动（优先攻击血量最低的敌人）
+- `WarlockPassive`：术士被动（攻击时溅射范围伤害）
+- `SpiritRiderPassive`：灵骑被动（友军光环：攻速 + 移速加成）
+
+**使用方法**：
+1. 在英雄预制体上添加 `HeroUnitConfig` 组件
+2. 在 `passives` 数组中添加需要的被动技能组件
+3. 在 Inspector 中配置被动技能参数
 
 ### 12.4 兵种配置
 
@@ -1434,7 +1489,7 @@ _bomberPrefabs[13]:   飞机轰炸机
 | 文件 | 内容 | 数据来源 |
 |:---|:---|:---|
 | `Units.csv` | 兵种数值（HP/ATK/移速/攻速/射程等） | 各预制体 CardUnit 的 [SerializeField] 字段 |
-| `Heroes.csv` | 英雄配置（基础属性+觉醒倍率+技能参数） | HeroConfig ScriptableObject |
+| `Heroes.csv` | 英雄配置（觉醒倍率） | HeroUnitConfig 组件（挂载到英雄预制体） |
 | `Economy.csv` | 经济参数（初始金币/回金速度/费用公式） | EconomyConfig ScriptableObject |
 | `Bidding.csv` | 叫分参数（时长/AI策略/超时处理） | BiddingConfig ScriptableObject |
 | `Levels.csv` | 关卡配置（名称/场景/难度/解锁状态） | LevelConfig ScriptableObject |
@@ -1715,8 +1770,8 @@ OnPlayerLeft(playerName)
 | 层 | 参数名 | 类型 | 用途 | 互斥？ |
 |:---|:---|:---|:---|:---|
 | 基础状态 | `State` | int | 0=Idle, 1=Walk, 2=Attack | 是 |
-| 一次性触发 | 各 Trigger 名 | Trigger | 9 种特效（见下表） | 否，叠加触发 |
-| 持续开关 | 各 Bool 名 | bool | 2 种持续状态（见下表） | 否，开关切换 |
+| 一次性触发 | 各 Trigger 名 | Trigger | 12 种特效（见下表） | 否，叠加触发 |
+| 持续开关 | 各 Bool 名 | bool | 3 种持续状态（见下表） | 否，开关切换 |
 
 ### 14.2 动画播放优先级
 
@@ -1741,11 +1796,10 @@ SimpleAnimator 组件支持 18 种动画片段配置（含 4 种 BOSS 技能）�
 | `walkClip` | 行走动画 | walk |
 | `attackClip` | 攻击动画 | attack |
 
-**Trigger 特效动画（13 种）：**
+**Trigger 特效动画（12 种）：**
 | 字段 | 说明 | 匹配关键词 | 对应系统 |
 |:---|:---|:---|:---|
 | `deathClip` | 死亡 | death | —（始终可用，由 PlayDeathAnimCoroutine 触发） |
-| `chargeClip` | 冲锋 | charge | UnitPassives `enableCharge` |
 | `shockwaveClip` | 震波 | shockwave | UnitPassives `enableShockwave` |
 | `splashClip` | 溅射 | splash | UnitPassives `enableSplash` |
 | `stunHitClip` | 眩晕命中 | stunhit | UnitPassives `enableStunOnHit` |
@@ -1758,9 +1812,10 @@ SimpleAnimator 组件支持 18 种动画片段配置（含 4 种 BOSS 技能）�
 | `bossSkill2Clip` | BOSS 技能 2 | bossskill2 | BossSkillSystem `animTrigger="BossSkill2"` |
 | `bossSkill3Clip` | BOSS 技能 3 | bossskill3 | BossSkillSystem `animTrigger="BossSkill3"` |
 
-**Bool 特效动画（2 种）：**
+**Bool 特效动画（3 种）：**
 | 字段 | 说明 | 匹配关键词 | 对应 UnitPassives 开关 |
 |:---|:---|:---|:---|
+| `chargeClip` | 冲锋 | charge | `enableCharge` |
 | `tauntClip` | 嘲讽 | taunt | `enableTaunt` |
 | `shieldWallClip` | 盾墙 | shieldwall | `enableShieldWall` |
 
@@ -1807,6 +1862,9 @@ TriggerAnim("Burn");
 SetAnimBool("Taunt", true);      // 开启嘲讽
 SetAnimBool("Taunt", false);     // 关闭嘲讽
 SetAnimBool("ShieldWall", true); // 开启盾墙
+
+// 动画播放速度控制
+SetAnimSpeed(float speed);       // 1=正常，>1=加速，<1=减速
 ```
 
 ### 14.6 被动→动画映射
@@ -1825,14 +1883,14 @@ SetAnimBool("ShieldWall", true); // 开启盾墙
 
 ### 14.7 Animator Controller 生成
 
-使用菜单 `Tools → 创建兵种 Animator Controller`（新建）或 `Tools → 更新兵种 Animator Controller`（重建）生成，包含：
+使用菜单 `Tools → 生成兵种 Animator Controller` 生成，包含：
 - 3 个基础状态：Idle、Walk、Attack
-- 13 个 Trigger 特效状态：Death、Shockwave、Splash、StunHit、KingAura、DeathExplosion、Burn、Summon、**Dash、BossSkill1、BossSkill2、BossSkill3**
+- 12 个 Trigger 特效状态：Death、Shockwave、Splash、StunHit、KingAura、DeathExplosion、Burn、Summon、Dash、BossSkill1、BossSkill2、BossSkill3
 - 3 个 Bool 特效状态：Charge、Taunt、ShieldWall
 - 所有 Transition 已配置条件和退出时间
 
 **Boss 技能动画配置流程**：
-1. 运行 `Tools → 更新兵种 Animator Controller`
+1. 运行 `Tools → 生成兵种 Animator Controller`
 2. 在 Boss prefab 的 Visual 子物体上 SimpleAnimator 组件拖入 Clip（dashClip/bossSkill1Clip 等）
 3. 在 BossSkillSystem 的 `animTrigger` 字段填入对应 Trigger 名（"Dash"/"BossSkill1" 等）
 4. 留空 `animTrigger` 则不播放动画，只执行效果
@@ -1887,6 +1945,17 @@ SetAnimBool("ShieldWall", true); // 开启盾墙
 
 **兼容接口**：`PlaySFX()` 和 `PlaySFXAtPosition()` 保留为包装方法，走 `combatSource`。
 
+**SfxChannel 枚举**：用于指定音效播放通道
+- `UI` → uiSource (priority=0)
+- `CombatHigh` → combatHighSource (priority=64)
+- `Combat` → combatSource (priority=128)
+- `CombatLow` → combatLowSource (priority=200)
+
+**BGM 系统**：
+- `PlayBGM(AudioClip clip)` - 播放背景音乐
+- `PlayBGMForScene(string sceneName)` - 根据场景名自动切换 BGM（`sceneBGMPairs` 配置）
+- `StopBGM()` - 停止背景音乐
+
 ### 16.2 UnitAudio 并发限制
 
 **按 Clip 分组计数**：`Dictionary<AudioClip, int> _clipCounts`（静态共享），每种音效独立计数，不同兵种互不干扰。
@@ -1914,6 +1983,10 @@ if (clipCount >= maxPerClipConcurrent) return;
 | 攻击音效 | `UnitAudio.OnAttack` → `PlayCombatLow` | CombatLow | 立即 |
 | 受击音效 | `UnitAudio.OnTakeDamage` → `PlayCombat` | Combat | 立即（入队前触发） |
 | 死亡音效 | `UnitAudio.OnDeath` → `PlayCombatHigh` | CombatHigh | 批量结算时 |
+| 背景音乐 | `PlayBGM()` / `PlayBGMForScene()` | BGM | 按场景自动切换 |
+| 网络攻击音效 | `PlayAttackNetwork()` | CombatLow | 立即（Client 端） |
+| 网络受击音效 | `PlayHitNetwork()` | Combat | 立即（Client 端） |
+| 网络死亡音效 | `PlayDeathNetwork()` | CombatHigh | 批量结算时（Client 端） |
 
 ---
 
@@ -1943,6 +2016,8 @@ Frame N:
 |:---|:---|:---|
 | `DamageQueue.Enqueue(target, finalDamage)` | DamageQueue.cs | 入队一条伤害 |
 | `DamageQueue.ProcessAll()` | DamageQueue.cs | 帧末结算所有伤害，支持级联 |
+| `DamageQueue.HasPending` | DamageQueue.cs | 检查当前帧是否有待结算的伤害 |
+| `DamageQueue.Clear()` | DamageQueue.cs | 清空队列（场景切换时调用，防止残留引用） |
 | `CardUnit.SetBatchDamageEnabled(bool)` | CardUnit.Combat.cs | 启用/禁用批量模式 |
 | `CardUnit.TakeDamage(rawDamage, type)` | CardUnit.Combat.cs | 批量模式下入队，非批量模式下直接扣血 |
 | `CardUnit.ApplyDamage(finalDamage)` | CardUnit.Combat.cs | 实际 HP 扣除 + 死亡判定，仅由 DamageQueue 调用 |
@@ -2056,6 +2131,15 @@ Idle → Pending（点击按钮）→ Active（出牌触发）→ Cooldown（到
 | `counterShieldDuration` | 2s | 反制护盾持续时间 |
 | `counterShieldCooldown` | 45s | 反制护盾冷却 |
 
+**动态配置方法**：
+- `SetDomainDuration(float)` / `SetDomainCooldown(float)` - 动态修改领域参数
+- `SetCounterShieldDuration(float)` / `SetCounterShieldCooldown(float)` - 动态修改反制护盾参数
+- `ResetDomainCooldown()` / `ResetCounterShieldCooldown()` / `ResetAllCooldowns()` - 重置冷却（调试/测试用，当前无调用方）
+
+**冷却剩余时间查询**：
+- `DomainCooldownRemaining` - 领域冷却剩余时间（只读）
+- `CounterShieldCooldownRemaining` - 反制护盾冷却剩余时间（只读）
+
 ---
 
 ## 附录 A：Prefab 结构清单
@@ -2066,7 +2150,7 @@ Assets/Prefabs/
 │   ├── Warrior.prefab              # 近战战士
 │   ├── Archer.prefab               # 远程弓箭手
 │   ├── Lancer.prefab               # 长枪兵
-│   ├── Hero.prefab                 # 英雄（5 种类型通过 HeroConfig 切换）
+│   ├── Hero.prefab                 # 英雄（5 种类型，每个预制体挂载 HeroUnitConfig + 被动技能组件）
 │   ├── King.prefab                 # 君王
 │   ├── CrazyWolf.prefab            # 狼骑兵
 │   ├── Wizard.prefab               # 法师
